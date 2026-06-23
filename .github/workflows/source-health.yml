@@ -1,0 +1,29 @@
+name: Weekly Source Link Check
+
+on:
+  schedule:
+    - cron: '17 10 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-links:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check public source links
+        run: python scripts/grantlink_3po.py
+      - name: Upload source health report
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-health-report
+          path: |
+            source-health-report.json
+            source-health-report.md

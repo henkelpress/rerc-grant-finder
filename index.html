@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EPA RERC Grant Finder</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-block">
+      <p class="eyebrow">EPA Recreation Economy for Rural Communities</p>
+      <h1>Find grants for your town</h1>
+      <p class="brand-note">A plain-language funding finder for outdoor recreation, Main Street, and rural community projects.</p>
+    </div>
+    <div class="topstats" aria-label="Dataset status">
+      <span><strong id="statGrantCount">0</strong> grants in the finder</span>
+      <span>Every grant includes a source link</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="controls" aria-label="Community profile controls">
+      <section class="control-block">
+        <h2>Your Community</h2>
+        <label for="communityName">Town, county, or region</label>
+        <input id="communityName" type="text" autocomplete="off" placeholder="Example: Damascus, Virginia">
+
+        <label for="stateSelect">State</label>
+        <select id="stateSelect"></select>
+
+        <label for="keywordSearch">Keyword</label>
+        <input id="keywordSearch" type="search" placeholder="trail, downtown, brownfield, arts">
+      </section>
+
+      <section class="control-block">
+        <h2>Who Can Apply?</h2>
+        <div id="applicantOptions" class="checkgrid"></div>
+      </section>
+
+      <section class="control-block">
+        <h2>What Are You Working On?</h2>
+        <div id="focusOptions" class="checkgrid"></div>
+      </section>
+
+      <section class="control-block">
+        <h2>Funding Details</h2>
+        <label for="stageSelect">Project step</label>
+        <select id="stageSelect"></select>
+
+        <label for="fundingTypeSelect">Type of help</label>
+        <select id="fundingTypeSelect"></select>
+
+        <fieldset>
+          <legend>Can you provide matching funds?</legend>
+          <label class="radio"><input type="radio" name="matchCapacity" value="any" checked> Not sure yet</label>
+          <label class="radio"><input type="radio" name="matchCapacity" value="limited"> Little or no match</label>
+          <label class="radio"><input type="radio" name="matchCapacity" value="available"> Match is available</label>
+        </fieldset>
+      </section>
+
+      <section class="control-block">
+        <h2>Local Needs</h2>
+        <div id="factorOptions" class="checkgrid"></div>
+      </section>
+
+      <div class="control-actions">
+        <button id="resetButton" type="button">Reset</button>
+      </div>
+    </aside>
+
+    <section class="workspace">
+      <section class="overview" aria-label="Recommendation summary">
+        <div class="summary-copy">
+          <p class="eyebrow">Grant Match List</p>
+          <h2 id="communityTitle">Start with your community</h2>
+          <p id="communitySummary">Pick a state and answer a few questions. The tool will show grants that may fit your project.</p>
+        </div>
+        <canvas id="profileCanvas" width="420" height="180" aria-label="Community profile chart"></canvas>
+      </section>
+
+      <section class="metric-row" aria-label="Current results">
+        <div><span id="metricMatches">0</span><label>matches</label></div>
+        <div><span id="metricTopScore">0</span><label>top score</label></div>
+        <div><span id="metricState">All</span><label>state view</label></div>
+        <div><span id="metricExport">Ready</span><label>export status</label></div>
+      </section>
+
+      <section class="toolbar" aria-label="Result controls">
+        <label for="sortSelect">Sort</label>
+        <select id="sortSelect">
+          <option value="score">Best fit</option>
+          <option value="state">State then score</option>
+          <option value="type">Funding type</option>
+          <option value="deadline">Deadline or cycle</option>
+        </select>
+        <label for="limitSelect">Show</label>
+        <select id="limitSelect">
+          <option value="25">25</option>
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+          <option value="all">All</option>
+        </select>
+        <button id="exportCsv" type="button">Export CSV</button>
+        <button id="exportWord" type="button">Export Word</button>
+      </section>
+
+      <section class="llm-note" aria-label="Application narrative recommendation">
+        <h2>Grant Writing Help</h2>
+        <p>This page helps pick grants. A separate writing tool can use the selected grants, your project notes, and the source links to write application text for review.</p>
+      </section>
+
+      <section id="results" class="results" aria-live="polite"></section>
+    </section>
+  </main>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
