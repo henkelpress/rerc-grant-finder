@@ -37,7 +37,7 @@ def probe(url: str) -> dict:
                 result.update({"ok": status < 400, "status": status, "error": ""})
                 break
         except urllib.error.HTTPError as exc:
-            if method == "HEAD" and exc.code in {403, 405, 406, 429, 500, 501}:
+            if method == "HEAD":
                 continue
             result.update({"ok": False, "status": exc.code, "error": str(exc)})
             break
