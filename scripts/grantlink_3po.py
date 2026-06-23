@@ -27,7 +27,7 @@ def load_urls() -> list[str]:
 def probe(url: str) -> dict:
     start = time.time()
     result = {"url": url, "ok": False, "status": None, "error": "", "elapsed_seconds": None}
-    headers = {"User-Agent": "RERC Grant Finder source health check"}
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36", "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf,*/*;q=0.8", "Accept-Language": "en-US,en;q=0.9"}
     context = ssl.create_default_context()
     for method in ("HEAD", "GET"):
         try:
