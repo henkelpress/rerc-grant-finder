@@ -50,25 +50,55 @@ def probe(url: str) -> dict:
     return result
 
 
+def is_hard_failure(item: dict) -> bool:
+    status = item.get("status")
+    return isinstance(status, int) and status not in {403} and status >= 400
+
+
+def needs_manual_review(item: dict) -> bool:
+    return not item["ok"] and not is_hard_failure(item)
+
+
 def main() -> int:
     urls = load_urls()
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
         results = list(pool.map(probe, urls))
-    failed = [item for item in results if not item["ok"]]
+    failed = [item for item in results if is_hard_failure(item)]
+    manual_review = [item for item in results if needs_manual_review(item)]
+    bot_blocked = [item for item in manual_review if item.get("status") == 403]
     report = {
         "status": "PASS" if not failed else "REVIEW",
         "unique_urls_checked": len(urls),
         "failed_urls": len(failed),
+        "manual_review_urls": len(manual_review),
+        "bot_blocked_urls": len(bot_blocked),
         "results": results,
     }
     (ROOT / "source-health-report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
-    lines = ["# Source Health Report", "", f"Unique source links checked: {len(urls)}", f"Links needing review: {len(failed)}", ""]
+    lines = [
+        "# Source Health Report",
+        "",
+        f"Unique source links checked: {len(urls)}",
+        f"Hard failures: {len(failed)}",
+        f"Manual review URLs: {len(manual_review)}",
+        f"Bot-blocked URLs: {len(bot_blocked)}",
+        "",
+    ]
     if failed:
-        lines.append("## Links Needing Review")
+        lines.append("## Hard Failures")
         for item in failed[:100]:
             lines.append(f"- {item['status'] or 'error'}: {item['url']} ({item['error']})")
+    if manual_review:
+        lines.append("## Manual Review")
+        for item in manual_review[:100]:
+            lines.append(f"- {item['status'] or 'error'}: {item['url']} ({item['error']})")
     (ROOT / "source-health-report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(json.dumps({"unique_urls_checked": len(urls), "failed_urls": len(failed)}, indent=2))
+    print(json.dumps({
+        "unique_urls_checked": len(urls),
+        "failed_urls": len(failed),
+        "manual_review_urls": len(manual_review),
+        "bot_blocked_urls": len(bot_blocked),
+    }, indent=2))
     return 0
 
 
