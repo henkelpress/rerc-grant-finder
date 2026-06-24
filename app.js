@@ -1,13 +1,14 @@
 const DATA = window.GRANT_EXPLORER_DATA;
 const grants = DATA.grants || [];
 
-const STATES = [
-  "Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut","Delaware","Florida","Georgia",
-  "Hawaii","Idaho","Illinois","Indiana","Iowa","Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts",
-  "Michigan","Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada","New Hampshire","New Jersey",
-  "New Mexico","New York","North Carolina","North Dakota","Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island",
-  "South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont","Virginia","Washington","West Virginia",
-  "Wisconsin","Wyoming"
+const STATES = DATA.coverage?.statesAndTerritories || [
+  "Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut","Delaware","District of Columbia",
+  "Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa","Kansas","Kentucky","Louisiana","Maine",
+  "Maryland","Massachusetts","Michigan","Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada",
+  "New Hampshire","New Jersey","New Mexico","New York","North Carolina","North Dakota","Ohio","Oklahoma","Oregon",
+  "Pennsylvania","Rhode Island","South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont","Virginia",
+  "Washington","West Virginia","Wisconsin","Wyoming","American Samoa","Guam","Northern Mariana Islands","Puerto Rico",
+  "U.S. Virgin Islands"
 ];
 
 const ABBR = {
@@ -17,7 +18,9 @@ const ABBR = {
   MN:"Minnesota", MS:"Mississippi", MO:"Missouri", MT:"Montana", NE:"Nebraska", NV:"Nevada", NH:"New Hampshire",
   NJ:"New Jersey", NM:"New Mexico", NY:"New York", NC:"North Carolina", ND:"North Dakota", OH:"Ohio", OK:"Oklahoma",
   OR:"Oregon", PA:"Pennsylvania", RI:"Rhode Island", SC:"South Carolina", SD:"South Dakota", TN:"Tennessee",
-  TX:"Texas", UT:"Utah", VT:"Vermont", VA:"Virginia", WA:"Washington", WV:"West Virginia", WI:"Wisconsin", WY:"Wyoming"
+  TX:"Texas", UT:"Utah", VT:"Vermont", VA:"Virginia", WA:"Washington", WV:"West Virginia", WI:"Wisconsin", WY:"Wyoming",
+  DC:"District of Columbia", AS:"American Samoa", GU:"Guam", MP:"Northern Mariana Islands", CNMI:"Northern Mariana Islands",
+  PR:"Puerto Rico", VI:"U.S. Virgin Islands", USVI:"U.S. Virgin Islands"
 };
 
 const applicantOptions = [
@@ -172,7 +175,7 @@ function scoreGrant(grant, p) {
     if (grant.state === p.state) add(28, `State-specific resource for ${p.state}`);
     else add(14, "National, regional, or multi-state resource");
   } else {
-    add(grant.state ? 4 : 8, "Select a state to sharpen geography matching");
+    add(grant.state ? 4 : 8, "Select a state or territory to sharpen geography matching");
   }
 
   for (const applicant of p.applicants) {
@@ -266,7 +269,7 @@ function sortResults(results, mode) {
 
 function renderSummary(p, results) {
   const name = p.community || "Selected community";
-  const state = p.state || "all states";
+  const state = p.state || "all states and territories";
   els.communityTitle.textContent = `${name} grant matches`; 
   els.communitySummary.textContent = `${results.length} grants may fit ${state}. Change the answers on the left to narrow the list.`;
   els.metricMatches.textContent = results.length;
@@ -277,7 +280,7 @@ function renderSummary(p, results) {
 
 function renderResults(results) {
   if (!results.length) {
-    els.results.innerHTML = `<div class="empty">No grants match the current profile. Widen the state, funding type, or project focus filters.</div>`;
+    els.results.innerHTML = `<div class="empty">No grants match the current profile. Widen the state/territory, funding type, or project focus filters.</div>`;
     return;
   }
   els.results.innerHTML = results.map((item, index) => grantCard(item, index + 1)).join("");
@@ -387,7 +390,7 @@ function exportWord(results) {
     </style></head><body>
       <h1>Grant Recommendation Packet</h1>
       <p><strong>Community:</strong> ${escapeHtml(p.community || "Not specified")}</p>
-      <p><strong>State:</strong> ${escapeHtml(p.state || "All states")}</p>
+      <p><strong>State or territory:</strong> ${escapeHtml(p.state || "All states and territories")}</p>
       <p><strong>Profile factors:</strong> ${escapeHtml([...p.applicants, ...p.focuses, ...p.factors].join(", ") || "Basic grant search")}</p>
       <p><strong>Generated:</strong> ${new Date().toLocaleDateString()}</p>
       <h2>Grant Matches</h2>
