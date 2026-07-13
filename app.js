@@ -42,7 +42,7 @@ const stages = ["Any step", "Planning", "Early Design", "Engineering", "Construc
 const elements = Object.fromEntries([
   "communityName","stateSelect","keywordSearch","applicantOptions","topicOptions","stageSelect","includeClosed",
   "resetButton","sortSelect","limitSelect","exportWord","exportCsv","communityTitle","communitySummary","matchCount",
-  "fundingMatchCount","resourceMatchCount","geographyLabel","activeFilters","results","fundingCount","resourceCount"
+  "fundingMatchCount","resourceMatchCount","geographyLabel","matchAnnouncement","activeFilters","results","fundingCount","resourceCount"
 ].map((id) => [id, document.getElementById(id)]));
 
 let mode = "Both";
@@ -70,8 +70,8 @@ function publicSummary(item) {
 }
 
 function matchLabel(score) {
-  if (score >= 80) return "High";
-  if (score >= 65) return "Medium";
+  if (score >= 80) return "Strong";
+  if (score >= 65) return "Some";
   return "Broad";
 }
 
@@ -169,7 +169,7 @@ function renderCard(item) {
       <p class="details"><strong>Where:</strong> ${escapeHtml(item.geography)} &nbsp; <strong>Who:</strong> ${escapeHtml(item.eligible_users || "See official page")}</p>
       <p class="details"><strong>Timing or amount:</strong> ${escapeHtml(timing)} &nbsp; <strong>Checked:</strong> ${escapeHtml(item.last_checked)}</p>
     </div>
-    <div class="score" aria-label="Match level: ${matchLabel(item.score)}"><strong>${matchLabel(item.score)}</strong><span>match level</span></div>
+    <div class="score" aria-label="${matchLabel(item.score)} match based on your answers"><strong>${matchLabel(item.score)}</strong><span>based on answers</span></div>
   </article>`;
 }
 
@@ -204,6 +204,7 @@ function render() {
   elements.fundingMatchCount.textContent = fundingMatches.toLocaleString();
   elements.resourceMatchCount.textContent = resourceMatches.toLocaleString();
   elements.geographyLabel.textContent = place || "U.S.";
+  elements.matchAnnouncement.textContent = `${currentMatches.length.toLocaleString()} matches: ${fundingMatches.toLocaleString()} funding and ${resourceMatches.toLocaleString()} resources for ${place || "the U.S."}.`;
   elements.activeFilters.textContent = activeFilterSummary();
   elements.results.innerHTML = visible.length
     ? visible.map(renderCard).join("")
@@ -227,6 +228,17 @@ function downloadBlob(contents, mimeType, filename) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function filenamePart(value, fallback) {
+  const cleaned = cleanText(value).normalize("NFKD").replace(/[^\w -]/g, "").trim().replace(/\s+/g, "_").slice(0, 60);
+  return cleaned || fallback;
+}
+
+function publicExportFilename(kind, extension) {
+  const community = filenamePart(elements.communityName.value, "Community");
+  const date = new Date().toISOString().slice(0, 10);
+  return `RERC_${community}_${kind}_${date}.${extension}`;
+}
+
 function exportCsv() {
   const headers = ["Item Type","Title","Organization","Status","Geography","Who Can Use It","Project Step","Topics","Type of Help","Timing or Amount","Summary","Official Page"];
   const lines = [headers.map(csvCell).join(",")];
@@ -234,7 +246,7 @@ function exportCsv() {
     item.item_type, item.title, item.organization, item.status, item.geography, item.eligible_users, item.project_stage,
     item.topic_tags, item.support_type, item.deadline_or_availability || item.amount_or_cost, publicSummary(item), item.source_url
   ].map(csvCell).join(",")));
-  downloadBlob(`\ufeff${lines.join("\r\n")}`, "text/csv;charset=utf-8", "RERC-community-funding-and-resources.csv");
+  downloadBlob(`\ufeff${lines.join("\r\n")}`, "text/csv;charset=utf-8", publicExportFilename("Funding_and_Resources", "csv"));
 }
 
 function xmlEscape(value) {
@@ -353,11 +365,11 @@ async function exportWord() {
   const now = new Date().toISOString();
   const coreXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
-    "<dc:title>RERC Community Funding and Resources Appendix</dc:title><dc:creator>Recreation Economy for Rural Communities</dc:creator><cp:lastModifiedBy>RERC Funding and Resource Finder</cp:lastModifiedBy>" +
+    "<dc:title>RERC Community Funding and Resources Appendix</dc:title><dc:creator>Recreation Economy for Rural Communities</dc:creator><cp:lastModifiedBy>RERC Funding and Resource Explorer</cp:lastModifiedBy>" +
     '<dcterms:created xsi:type="dcterms:W3CDTF">' + now + '</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">' + now + "</dcterms:modified></cp:coreProperties>";
   const appXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">' +
-    "<Application>RERC Funding and Resource Finder</Application><AppVersion>1.0</AppVersion></Properties>";
+    "<Application>RERC Funding and Resource Explorer</Application><AppVersion>1.0</AppVersion></Properties>";
 
   const zip = new JSZip();
   zip.file("[Content_Types].xml", contentTypes);
@@ -368,7 +380,7 @@ async function exportWord() {
   zip.file("word/styles.xml", stylesXml);
   zip.file("word/_rels/document.xml.rels", documentRelationships);
   const docx = await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
-  downloadBlob(docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "RERC-community-appendix.docx");
+  downloadBlob(docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", publicExportFilename("Appendix", "docx"));
 }
 
 function buildCheckList(container, options, groupName) {
@@ -382,7 +394,7 @@ function reset() {
   elements.stageSelect.value = "Any step";
   elements.includeClosed.checked = false;
   elements.sortSelect.value = "score";
-  elements.limitSelect.value = "50";
+  elements.limitSelect.value = "15";
   document.querySelectorAll(".filters input[type=checkbox]").forEach((input) => { input.checked = false; });
   mode = "Both";
   document.querySelectorAll("[data-mode]").forEach((button) => {

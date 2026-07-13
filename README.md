@@ -1,4 +1,4 @@
-# RERC Funding and Resource Finder
+# RERC Funding and Resource Explorer
 
 Public GitHub Pages site for the Recreation Economy *for* Rural Communities funding and resource catalog.
 
@@ -17,25 +17,28 @@ People can name a community for the appendix, choose its state or territory, sel
 
 - `index.html`
 - `styles.css`
-- `grant-at-arms.css`
+- `rercie.css`
 - `app.js`
 - `data.js`
+- `assets/`
 - `downloads/`
 
-## Local Grant Writer
+## Meet RERCie
 
-Grant-at-Arms is an optional Windows writing companion. It runs separately from the public site with a local Gemma 3 1B model through `llama.cpp`.
+RERCie Local Grant-Writing Guide is an optional Windows app. It helps people review likely funding matches and turn project notes into a first draft.
 
-- No separate Python or Ollama installation
-- Retrieves Microsoft's signed x64 runtime installer only if Windows is missing the standard runtime
+- Friendly Windows setup wizard
+- No command-line setup for the person installing it
+- Start Menu shortcut and optional desktop shortcut
 - No account or API key required for local writing
-- One start shortcut after extraction
-- First run downloads the verified local model, about 806 MB
+- First use downloads a verified Qwen 2.5 1.5B model, about 1.12 GB
 - Real Word `.docx` and Markdown export
 
-[Download Grant-at-Arms for Windows](https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/grant-at-arms-local-writer.zip)
+[Download RERCie for Windows](https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Setup.exe)
 
-The reviewed source is in `grant-writer-master/`. Model weights are not stored in this repository or release ZIP.
+RERCie is a community-built tool. It is not an EPA grant program, does not decide eligibility, and does not submit applications. The installer is not yet digitally signed, so Windows may show a safety notice. Download it only from this repository's release page.
+
+The reviewed source is in `rercie/`. Model weights are not stored in this repository or installer.
 
 ## Automated Checks
 

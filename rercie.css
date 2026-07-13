@@ -1,0 +1,102 @@
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+.secondary-hero-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 11px 18px;
+  border: 2px solid #ffffff;
+  border-radius: 6px;
+  color: #ffffff;
+  background: rgba(0, 43, 31, 0.72);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.primary-action:hover,
+.primary-action:focus,
+.secondary-hero-action:hover,
+.secondary-hero-action:focus,
+.writer-actions a:hover,
+.writer-actions a:focus {
+  outline: 3px solid #ffffff;
+  outline-offset: 3px;
+}
+
+.writer-band {
+  grid-template-columns: 170px minmax(300px, 1fr) minmax(220px, 300px);
+  gap: 30px;
+}
+
+.rercie-mascot {
+  width: 170px;
+  height: 250px;
+  object-fit: contain;
+  border: 4px solid #ffffff;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.rercie-copy h2 { max-width: 620px; }
+.rercie-copy p { max-width: 700px; margin: 8px 0; }
+.writer-note { color: #dce9e3; font-size: 1rem; }
+
+.writer-actions {
+  display: grid;
+  gap: 9px;
+  align-content: center;
+  justify-items: stretch;
+}
+
+.writer-actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 11px 18px;
+  border: 2px solid #f2c14e;
+  border-radius: 6px;
+  color: #17251f;
+  background: #f2c14e;
+  font-weight: 800;
+  text-align: center;
+  text-decoration: none;
+}
+
+.writer-actions span { color: #dce9e3; font-size: 1rem; line-height: 1.35; }
+.writer-actions .signing-note { color: #fff0bd; }
+
+@media (max-width: 980px) {
+  .writer-band { grid-template-columns: 145px minmax(0, 1fr); }
+  .rercie-mascot { width: 145px; height: 214px; }
+  .writer-actions { grid-column: 1 / -1; max-width: 480px; }
+}
+
+@media (max-width: 680px) {
+  .hero-actions { display: grid; justify-content: stretch; }
+  .hero-actions a { width: 100%; }
+  .writer-band { grid-template-columns: 1fr; }
+  .rercie-mascot { width: 138px; height: 204px; }
+  .writer-actions { grid-column: auto; }
+}
+
+.score { min-width: 88px; }
+.score strong { font-size: 1rem; line-height: 1.1; }
+
+.tool-disclosure {
+  max-width: 700px;
+  margin: 14px auto 0;
+  color: #ffffff;
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 680px) {
+  .tool-disclosure { margin-left: 0; margin-right: 0; }
+}

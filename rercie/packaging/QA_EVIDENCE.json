@@ -1,0 +1,108 @@
+{
+    "app_version":  "0.3.0",
+    "status":  "PASS",
+    "tested_date":  "2026-07-13",
+    "checks":  {
+                   "source_smoke":  {
+                                        "status":  "PASS",
+                                        "catalog_formats":  2,
+                                        "territories":  5,
+                                        "docx_created":  true
+                                    },
+                   "native_launcher":  {
+                                           "status":  "PASS",
+                                           "powershell_required":  false,
+                                           "first_run_notice":  true,
+                                           "model_progress_ui":  true,
+                                           "verified_process_shutdown":  true,
+                                           "screen_reader_download_milestone_percent":  10
+                                       },
+                   "display_scaling":  {
+                                           "status":  "PASS",
+                                           "tested_scales":  [
+                                                                 "100%",
+                                                                 "150%",
+                                                                 "200%"
+                                                             ],
+                                           "clipped_text_controls":  0
+                                       },
+                   "installer_wizard":  {
+                                            "status":  "PASS",
+                                            "per_user_install":  true,
+                                            "start_menu_shortcut":  true,
+                                            "optional_desktop_shortcut":  true,
+                                            "uninstall_entry":  true,
+                                            "isolated_install_completed":  true
+                                        },
+                   "package_integrity":  {
+                                             "status":  "PASS",
+                                             "integrity_checked_binaries":  0,
+                                             "model_rechecked_on_start":  true,
+                                             "tampered_binary_rejected":  true
+                                         },
+                   "live_catalog":  {
+                                        "status":  "PASS",
+                                        "total_items":  718,
+                                        "funding_items":  653,
+                                        "resource_items":  65,
+                                        "territory_filter_checked":  true
+                                    },
+                   "local_generation":  {
+                                            "status":  "PASS",
+                                            "model":  "Qwen2.5 1.5B Instruct Q4_K_M",
+                                            "required_sections":  8,
+                                            "fact_check_markers":  true
+                                        },
+                   "docx_export":  {
+                                       "status":  "PASS",
+                                       "valid_zip_container":  true
+                                   },
+                   "api_privacy_regression":  {
+                                                  "status":  "PASS",
+                                                  "private_local_knowledge_sentinel_sent":  false,
+                                                  "local_generation_used_loopback_only":  true
+                                              },
+                   "service_identity_checks":  {
+                                                   "status":  "PASS",
+                                                   "authenticated_health":  true,
+                                                   "missing_token_rejected":  true,
+                                                   "foreign_host_rejected":  true,
+                                                   "foreign_origin_rejected":  true,
+                                                   "wrong_content_type_rejected":  true,
+                                                   "unrelated_service_rejected":  true,
+                                                   "full_process_tree_shutdown":  true
+                                               },
+                   "model":  {
+                                 "name":  "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+                                 "bytes":  1117320736,
+                                 "sha256":  "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
+                                 "source":  "official Qwen Hugging Face repository"
+                             },
+                   "licensing_and_runtime":  {
+                                                 "status":  "PASS",
+                                                 "qwen_apache_license_included":  true,
+                                                 "llama_cpp_mit_license_included":  true,
+                                                 "full_python_license_included":  true,
+                                                 "microsoft_runtime_dlls_redistributed":  false,
+                                                 "microsoft_runtime_installer_signature_required":  true,
+                                                 "asset_provenance_included":  true
+                                             }
+               },
+    "disclosed_limits":  [
+                             "No clean Windows virtual-machine test has been completed for this version.",
+                             "The public installer is not code-signed, so Windows may show a safety notice.",
+                             "Microsoft Defender scanning may be unavailable when that Windows feature is disabled on the build machine.",
+                             "Users must review every generated draft and verify current funding rules at the official source."
+                         ],
+    "release_binding":  {
+                            "source_commit":  "injected by build_installer.ps1",
+                            "integrity_manifest_sha256":  "injected by build_installer.ps1",
+                            "installer_sha256":  "published with the GitHub release asset"
+                        },
+    "verification_commands":  [
+                                  "python rercie.py --smoke",
+                                  "python -m py_compile rercie.py rercie_core.py rercie_quality.py",
+                                  "RERCie.exe --smoke-output launcher-smoke.json",
+                                  "build_installer.ps1 -AcceptRuntimeDownload"
+                              ]
+}

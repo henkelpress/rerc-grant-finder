@@ -1,0 +1,14 @@
+RERCie Local Grant-Writing Guide is an optional app for rural communities.
+
+What happens after installation
+
+- RERCie opens with a friendly setup screen. You do not need to run a command.
+- On first use, RERCie downloads the Qwen 2.5 1.5B writing model after you select Download and start. The download is about 1.12 GB.
+- The model and local writing stay on this computer. If you choose Online API mode, RERCie sends the text you enter or upload, selected funding details, and any Census profile to the provider you choose.
+- Public funding and Census lookups use public websites.
+
+Important limits
+
+RERCie is a community-built tool. It is not an EPA grant program. It does not decide who can apply, promise funding, or submit an application. Check the funder's page and have a person review every draft.
+
+This installer is not yet digitally signed. Windows may show a safety notice. Download RERCie only from the henkelpress/rerc-grant-finder GitHub release page.

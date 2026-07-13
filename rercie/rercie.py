@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import re
 
-import grant_at_arms_quality as quality
+import rercie_quality as quality
 
 
 app = quality.app
-app.APP_VERSION = "0.2.3"
+app.APP_VERSION = "0.3.0"
 _build_draft = app.build_draft
 
 

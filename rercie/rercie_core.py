@@ -6,6 +6,7 @@ import io
 import json
 import os
 import re
+import secrets
 import sys
 import time
 import urllib.parse
@@ -17,15 +18,21 @@ from typing import Any
 from xml.sax.saxutils import escape
 
 
-APP_VERSION = "0.2.3"
-APP_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
+APP_VERSION = "0.3.0"
+APP_DIR = Path(os.environ.get("RERCIE_APP_ROOT") or (Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent))
+ASSET_DIR = APP_DIR / "assets"
+if not ASSET_DIR.is_dir() and not getattr(sys, "frozen", False):
+    ASSET_DIR = Path(__file__).resolve().parent.parent / "assets"
 LOCAL_KNOWLEDGE_DIR = APP_DIR / "local_knowledge"
 PUBLIC_CATALOG_URL = "https://henkelpress.github.io/rerc-grant-finder/data.js"
 CATALOG_PREFIXES = ("window.RERC_CATALOG = ", "window.GRANT_EXPLORER_DATA = ")
-DEFAULT_MODEL = "gemma-3-1b-it-Q4_K_M.gguf"
-LOCAL_CHAT_URL = os.environ.get("GRANT_AT_ARMS_LOCAL_CHAT_URL", "http://127.0.0.1:8788/v1/chat/completions")
-LOCAL_HEALTH_URL = os.environ.get("GRANT_AT_ARMS_LOCAL_HEALTH_URL", "http://127.0.0.1:8788/health")
-LOCAL_MODELS_URL = os.environ.get("GRANT_AT_ARMS_LOCAL_MODELS_URL", "http://127.0.0.1:8788/v1/models")
+DEFAULT_MODEL = "qwen2.5-1.5b-instruct-q4_k_m.gguf"
+LOCAL_CHAT_URL = os.environ.get("RERCIE_LOCAL_CHAT_URL", "http://127.0.0.1:8788/v1/chat/completions")
+LOCAL_HEALTH_URL = os.environ.get("RERCIE_LOCAL_HEALTH_URL", "http://127.0.0.1:8788/health")
+LOCAL_MODELS_URL = os.environ.get("RERCIE_LOCAL_MODELS_URL", "http://127.0.0.1:8788/v1/models")
+SESSION_TOKEN = os.environ.get("RERCIE_SESSION_TOKEN", "")
+EXPECTED_HOST = os.environ.get("RERCIE_EXPECTED_HOST", "127.0.0.1:8789").lower()
+EXPECTED_ORIGIN = f"http://{EXPECTED_HOST}"
 CENSUS_YEAR = "2023"
 MAX_REQUEST_BYTES = 6 * 1024 * 1024
 
@@ -45,7 +52,7 @@ STATE_FIPS = {
     "U.S. Virgin Islands": "78",
 }
 
-SYSTEM_PROMPT = """You are Grant-at-Arms, a careful grant-writing assistant for rural communities.
+SYSTEM_PROMPT = """You are RERCie, a careful grant-writing assistant for rural communities.
 
 Use only the facts supplied by the user, the selected funding record, public data returned by the app, and local reference files. Never invent eligibility, deadlines, award amounts, match rules, partners, budgets, letters, or local statistics. Write clear, natural public-facing language with short paragraphs. Mark missing facts as [add local fact] and anything that must be verified as [check official source]. A person must review the draft before submission.
 """
@@ -53,7 +60,7 @@ Use only the facts supplied by the user, the selected funding record, public dat
 
 def request_json(url: str, payload: dict[str, Any] | None = None, headers: dict[str, str] | None = None, timeout: int = 30) -> Any:
     body = None if payload is None else json.dumps(payload).encode("utf-8")
-    request_headers = {"Accept": "application/json", "User-Agent": f"Grant-at-Arms/{APP_VERSION}"}
+    request_headers = {"Accept": "application/json", "User-Agent": f"RERCie/{APP_VERSION}"}
     if body is not None:
         request_headers["Content-Type"] = "application/json"
     if headers:
@@ -85,7 +92,7 @@ def parse_public_catalog(raw: str) -> dict[str, Any]:
 def fetch_public_catalog() -> dict[str, Any]:
     request = urllib.request.Request(
         PUBLIC_CATALOG_URL,
-        headers={"Accept": "application/javascript,text/plain,*/*", "User-Agent": f"Grant-at-Arms/{APP_VERSION}"},
+        headers={"Accept": "application/javascript,text/plain,*/*", "User-Agent": f"RERCie/{APP_VERSION}"},
     )
     with urllib.request.urlopen(request, timeout=30) as response:
         return parse_public_catalog(response.read().decode("utf-8"))
@@ -178,7 +185,7 @@ Return Markdown with these sections: Fit Summary; Project Need; Proposed Work; C
 """.strip()
 
 
-def call_local_gemma(prompt: str, model: str) -> str:
+def call_local_writer(prompt: str, model: str) -> str:
     payload = {
         "model": model or DEFAULT_MODEL,
         "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
@@ -275,17 +282,17 @@ def build_draft(payload: dict[str, Any]) -> dict[str, Any]:
     warnings: list[str] = []
     try:
         if provider == "local":
-            draft = call_local_gemma(prompt, model)
+            draft = call_local_writer(prompt, model)
         elif provider == "api":
             draft = call_openai_compatible(prompt, str(payload.get("apiEndpoint") or ""), str(payload.get("apiKey") or ""), str(payload.get("apiModel") or ""))
         else:
             draft = deterministic_scaffold(payload, public_profile)
-    except Exception as exc:
-        label = "The local model" if provider == "local" else "The online API"
-        warnings.append(f"{label} was not available. A structured outline was created instead. Technical detail: {type(exc).__name__}.")
+    except Exception:
+        label = "The local writer" if provider == "local" else "The online writer"
+        warnings.append(f"{label} could not finish, so RERCie made a fill-in outline instead.")
         draft = deterministic_scaffold(payload, public_profile)
     if not draft.strip():
-        warnings.append("The writing engine returned no text. A structured outline was created instead.")
+        warnings.append("RERCie could not make a full draft, so it made a fill-in outline instead.")
         draft = deterministic_scaffold(payload, public_profile)
     return {
         "draft": draft,
@@ -304,7 +311,7 @@ def _paragraph_xml(text: str, style: str | None = None) -> str:
     return f'<w:p>{properties}<w:r><w:t xml:space="preserve">{safe}</w:t></w:r></w:p>'
 
 
-def build_docx(draft: str, title: str = "Grant-at-Arms Draft") -> bytes:
+def build_docx(draft: str, title: str = "RERCie Draft") -> bytes:
     paragraphs: list[str] = []
     for raw_line in (draft or "").replace("\r\n", "\n").split("\n"):
         line = raw_line.strip()
@@ -317,7 +324,7 @@ def build_docx(draft: str, title: str = "Grant-at-Arms Draft") -> bytes:
         elif line.startswith("# "):
             paragraphs.append(_paragraph_xml(line[2:], "Title"))
         elif re.match(r"^[-*]\s+", line):
-            paragraphs.append(_paragraph_xml("• " + re.sub(r"^[-*]\s+", "", line)))
+            paragraphs.append(_paragraph_xml("- " + re.sub(r"^[-*]\s+", "", line)))
         else:
             paragraphs.append(_paragraph_xml(line))
     document_xml = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -327,8 +334,8 @@ def build_docx(draft: str, title: str = "Grant-at-Arms Draft") -> bytes:
     content_types = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>'''
     root_rels = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>'''
     document_rels = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'''
-    core_xml = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>{escape(title)}</dc:title><dc:creator>Grant-at-Arms</dc:creator></cp:coreProperties>'''
-    app_xml = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Grant-at-Arms</Application></Properties>'''
+    core_xml = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>{escape(title)}</dc:title><dc:creator>RERCie</dc:creator></cp:coreProperties>'''
+    app_xml = '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>RERCie</Application></Properties>'''
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as package:
         package.writestr("[Content_Types].xml", content_types)
@@ -346,7 +353,8 @@ HTML_PAGE = r'''<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Grant-at-Arms Local Grant Writer</title>
+  <title>RERCie Local Grant-Writing Guide</title>
+  <link rel="icon" type="image/jpeg" href="/assets/rercie-otter.jpg">
   <style>
     :root { --green:#00573f; --forest:#173f35; --leaf:#3e7c59; --river:#1b6a8f; --sky:#dceef5; --sun:#f2c14e; --ink:#20312b; --muted:#5d6b66; --line:#d8e0dc; --paper:#fff; --mist:#f3f7f4; --danger:#8b1e1e; }
     * { box-sizing:border-box; }
@@ -354,15 +362,18 @@ HTML_PAGE = r'''<!doctype html>
     a { color:var(--river); }
     header { padding:24px max(20px,calc((100vw - 1280px)/2)); color:#fff; background:var(--green); border-bottom:5px solid var(--sun); }
     header .brand { display:flex; justify-content:space-between; gap:20px; align-items:center; }
+    header .welcome { display:grid; grid-template-columns:minmax(0,1fr) 120px; gap:24px; align-items:center; }
+    header .mascot { width:120px; height:168px; object-fit:contain; border:4px solid rgba(255,255,255,.82); border-radius:6px; background:#fff; }
     header h1 { margin:12px 0 6px; font-size:2.25rem; line-height:1.05; }
     header p { max-width:760px; margin:0; color:#e4f1eb; }
     header a { color:#fff; font-weight:700; }
-    .privacy { padding:10px max(20px,calc((100vw - 1280px)/2)); color:var(--forest); background:var(--sky); font-size:.9rem; }
+    .privacy { padding:10px max(20px,calc((100vw - 1280px)/2)); color:var(--forest); background:var(--sky); font-size:1rem; }
+    .notice { padding:10px max(20px,calc((100vw - 1280px)/2)); color:var(--ink); background:#fff8df; border-bottom:1px solid #e6cf82; font-size:1rem; }
     main { display:grid; grid-template-columns:minmax(300px,430px) minmax(0,1fr); gap:16px; width:min(1320px,100%); margin:0 auto; padding:16px; }
     .panel { padding:18px; border:1px solid var(--line); background:var(--paper); }
     h2 { margin:0 0 8px; font-size:1.12rem; }
-    .section-note { margin:0 0 12px; color:var(--muted); font-size:.9rem; }
-    label { display:block; margin:12px 0 5px; color:var(--forest); font-size:.86rem; font-weight:700; }
+    .section-note { margin:0 0 12px; color:var(--muted); font-size:1rem; }
+    label { display:block; margin:12px 0 5px; color:var(--forest); font-size:1rem; font-weight:700; }
     input, select, textarea { width:100%; min-height:42px; padding:9px 10px; border:1px solid #aebdb5; border-radius:4px; color:var(--ink); background:#fff; font:inherit; letter-spacing:0; }
     textarea { min-height:96px; resize:vertical; }
     .small { min-height:72px; }
@@ -375,24 +386,25 @@ HTML_PAGE = r'''<!doctype html>
     button:disabled { cursor:wait; opacity:.7; }
     .engine { display:grid; grid-template-columns:minmax(220px,1fr) auto; gap:12px; align-items:end; padding:12px; border-left:5px solid var(--leaf); background:var(--mist); }
     .engine label { margin-top:0; }
-    .runtime { align-self:center; padding:7px 10px; border-radius:4px; color:var(--forest); background:#e1eee5; font-size:.82rem; font-weight:700; }
+    .runtime { align-self:center; padding:7px 10px; border-radius:4px; color:var(--forest); background:#e1eee5; font-size:1rem; font-weight:700; }
     .runtime.offline { color:var(--danger); background:#fdeaea; }
     .advanced { display:none; margin-top:10px; padding:12px; border:1px solid var(--line); background:#fafcfb; }
     .advanced.visible { display:block; }
-    .status { margin:12px 0; color:var(--muted); font-size:.9rem; }
+    .status { margin:12px 0; color:var(--muted); font-size:1rem; }
     .status.warning { color:var(--danger); }
-    .output { min-height:570px; padding:18px; border:1px solid var(--line); white-space:pre-wrap; background:#fff; font-family:Consolas,"Courier New",monospace; font-size:.93rem; overflow-wrap:anywhere; }
+    .output { min-height:570px; padding:18px; border:1px solid var(--line); white-space:pre-wrap; background:#fff; font-family:Consolas,"Courier New",monospace; font-size:1rem; overflow-wrap:anywhere; }
     @media (max-width:900px) { main { grid-template-columns:1fr; } .output { min-height:420px; } }
-    @media (max-width:560px) { header .brand,.engine { grid-template-columns:1fr; display:grid; } main { padding:10px; } .panel { padding:14px; } .actions button { flex:1 1 145px; } }
+    @media (max-width:560px) { header .brand,.engine { grid-template-columns:1fr; display:grid; } header .welcome { grid-template-columns:minmax(0,1fr) 88px; gap:12px; } header .mascot { width:88px; height:124px; } main { padding:10px; } .panel { padding:14px; } .actions button { flex:1 1 145px; } }
   </style>
 </head>
 <body>
   <header>
-    <div class="brand"><strong>Recreation Economy <em>for</em> Rural Communities</strong><a href="https://henkelpress.github.io/rerc-grant-finder/" target="_blank" rel="noopener">Open the public finder</a></div>
-    <h1>Grant-at-Arms</h1>
-    <p>Turn your project notes and a funding match into a first draft. Review every fact before you submit it.</p>
+    <div class="brand"><strong>Recreation Economy <em>for</em> Rural Communities</strong><a href="https://henkelpress.github.io/rerc-grant-finder/" target="_blank" rel="noopener">Open the public explorer</a></div>
+    <div class="welcome"><div><h1>Meet RERCie</h1><p>RERCie helps you turn a grant match and your project notes into a first draft. Check every fact before you apply.</p></div><img class="mascot" src="/assets/rercie-otter.jpg" alt="RERCie, a river otter holding a field notebook"></div>
+
   </header>
-  <div class="privacy"><strong>Private by default:</strong> local Gemma writing stays on this computer. Census and catalog lookups use public websites. Online API mode sends typed or uploaded project text, selected funding details, and any public Census profile to the provider you choose. It does not read or send files from <code>local_knowledge</code>.</div>
+  <div class="privacy"><strong>Private by default:</strong> local writing stays on this computer. Census and catalog lookups use public websites. Online API mode sends typed or uploaded project text, selected funding details, and any public Census profile to the provider you choose. It does not read or send files from <code>local_knowledge</code>.</div>
+  <div class="notice"><strong>Keep in mind:</strong> RERCie is a community-built grant-writing guide. It is not an EPA grant program. It does not decide who can apply or submit an application for you.</div>
   <main>
     <section class="panel">
       <h2>Tell us about the project</h2>
@@ -412,7 +424,7 @@ HTML_PAGE = r'''<!doctype html>
     </section>
     <section class="panel">
       <div class="engine">
-        <div><label for="provider">Writing method</label><select id="provider"><option value="local">Local Gemma writer</option><option value="fallback">Structured outline only</option><option value="api">Online API</option></select></div>
+        <div><label for="provider">Writing method</label><select id="provider"><option value="local">Local writing model</option><option value="fallback">Structured outline only</option><option value="api">Online API</option></select></div>
         <span id="runtime" class="runtime">Checking local writer...</span>
       </div>
       <div id="advanced" class="advanced">
@@ -428,7 +440,7 @@ HTML_PAGE = r'''<!doctype html>
         <button id="copyDraft" class="quiet" type="button">Copy</button>
       </div>
       <p id="status" class="status" aria-live="polite">Ready.</p>
-      <div id="output" class="output" aria-live="polite">Your first draft will appear here.</div>
+      <div id="output" class="output" role="region" aria-label="Draft output" tabindex="0">Your first draft will appear here.</div>
     </section>
   </main>
   <script>
@@ -437,18 +449,21 @@ HTML_PAGE = r'''<!doctype html>
     states.forEach((state) => { const option=document.createElement("option"); option.value=state; option.textContent=state||"Choose a state or territory"; stateSelect.appendChild(option); });
     let lastDraft="";
     const status=document.getElementById("status"); const output=document.getElementById("output");
+    const sessionToken=new URLSearchParams(location.hash.slice(1)).get("token")||""; history.replaceState(null,"",location.pathname+location.search);
+    function apiFetch(url,options={}){ const headers=new Headers(options.headers||{}); headers.set("X-RERCie-Token",sessionToken); return fetch(url,{...options,headers}); }
     function setStatus(message,warning=false){ status.textContent=message; status.className=warning?"status warning":"status"; }
-    function collectPayload(){ return {community:document.getElementById("community").value,state:stateSelect.value,projectTitle:document.getElementById("projectTitle").value,projectSummary:document.getElementById("projectSummary").value,selectedGrant:document.getElementById("selectedGrant").value,matchCapacity:document.getElementById("matchCapacity").value,sourceNotes:document.getElementById("sourceNotes").value,projectNotes:document.getElementById("projectNotes").value,usePublicData:document.getElementById("usePublicData").checked,provider:document.getElementById("provider").value,model:"gemma-3-1b-it-Q4_K_M.gguf",apiEndpoint:document.getElementById("apiEndpoint").value,apiModel:document.getElementById("apiModel").value,apiKey:document.getElementById("apiKey").value}; }
-    async function checkRuntime(){ const badge=document.getElementById("runtime"); try{ const response=await fetch("/api/runtime"); const data=await response.json(); badge.textContent=data.ready?"Local Gemma ready":"Local Gemma is starting"; badge.className=data.ready?"runtime":"runtime offline"; }catch{ badge.textContent="Could not check local writer"; badge.className="runtime offline"; } }
-    async function loadGrants(){ setStatus("Loading the public funding list..."); const response=await fetch("/api/grants"); if(!response.ok) throw new Error((await response.json()).error||"The list could not be loaded."); const data=await response.json(); const select=document.getElementById("grantSelect"); select.innerHTML='<option value="">Choose a funding match</option>'; data.grants.forEach((grant,index)=>{ const option=document.createElement("option"); option.value=String(index); option.textContent=`${grant.title||grant.program||"Untitled"} - ${grant.organization||grant.agency||"Organization not listed"}`; option.dataset.grant=JSON.stringify(grant,null,2); select.appendChild(option); }); setStatus(`Loaded ${data.grants.length} funding options. Updated ${data.updated||"date not listed"}.`); }
+    function collectPayload(){ return {community:document.getElementById("community").value,state:stateSelect.value,projectTitle:document.getElementById("projectTitle").value,projectSummary:document.getElementById("projectSummary").value,selectedGrant:document.getElementById("selectedGrant").value,matchCapacity:document.getElementById("matchCapacity").value,sourceNotes:document.getElementById("sourceNotes").value,projectNotes:document.getElementById("projectNotes").value,usePublicData:document.getElementById("usePublicData").checked,provider:document.getElementById("provider").value,model:"qwen2.5-1.5b-instruct-q4_k_m.gguf",apiEndpoint:document.getElementById("apiEndpoint").value,apiModel:document.getElementById("apiModel").value,apiKey:document.getElementById("apiKey").value}; }
+    async function checkRuntime(){ const badge=document.getElementById("runtime"); try{ const response=await apiFetch("/api/runtime"); const data=await response.json(); badge.textContent=data.ready?"Local model ready":"Local model is starting"; badge.className=data.ready?"runtime":"runtime offline"; }catch{ badge.textContent="Could not check local writer"; badge.className="runtime offline"; } }
+    async function loadGrants(){ setStatus("Loading the public funding list..."); const response=await apiFetch("/api/grants"); if(!response.ok) throw new Error((await response.json()).error||"The list could not be loaded."); const data=await response.json(); const select=document.getElementById("grantSelect"); select.innerHTML='<option value="">Choose a funding match</option>'; data.grants.forEach((grant,index)=>{ const option=document.createElement("option"); option.value=String(index); option.textContent=`${grant.title||grant.program||"Untitled"} - ${grant.organization||grant.agency||"Organization not listed"}`; option.dataset.grant=JSON.stringify(grant,null,2); select.appendChild(option); }); setStatus(`Loaded ${data.grants.length} funding options. Updated ${data.updated||"date not listed"}.`); }
     document.getElementById("loadGrants").addEventListener("click",()=>loadGrants().catch((error)=>setStatus(`Could not load funding: ${error.message}`,true)));
     document.getElementById("grantSelect").addEventListener("change",(event)=>{ document.getElementById("selectedGrant").value=event.target.selectedOptions[0]?.dataset?.grant||""; });
     document.getElementById("fileInput").addEventListener("change",async(event)=>{ const parts=[]; for(const file of event.target.files){ if(file.size>2000000){ setStatus(`${file.name} is too large. Use a text file under 2 MB.`,true); continue; } parts.push(`\n--- File: ${file.name} ---\n${await file.text()}`); } const notes=document.getElementById("projectNotes"); notes.value=`${notes.value}\n${parts.join("\n")}`.trim(); if(parts.length) setStatus(`Read ${parts.length} file(s).`); });
     document.getElementById("provider").addEventListener("change",(event)=>{ document.getElementById("advanced").classList.toggle("visible",event.target.value==="api"); });
-    document.getElementById("draftButton").addEventListener("click",async()=>{ const button=document.getElementById("draftButton"); button.disabled=true; setStatus("Creating a first draft..."); try{ const response=await fetch("/api/draft",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(collectPayload())}); const data=await response.json(); if(!response.ok) throw new Error(data.error||"Draft failed."); lastDraft=data.draft; output.textContent=data.draft; setStatus(data.warnings?.length?data.warnings.join(" "):`Draft ready. ${data.localKnowledgeChars} characters of local reference text were used.`,Boolean(data.warnings?.length)); }catch(error){ setStatus(`Draft failed: ${error.message}`,true); }finally{ button.disabled=false; } });
+    document.getElementById("draftButton").addEventListener("click",async()=>{ const button=document.getElementById("draftButton"); button.disabled=true; setStatus("Creating a first draft..."); try{ const response=await apiFetch("/api/draft",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(collectPayload())}); const data=await response.json(); if(!response.ok) throw new Error(data.error||"Draft failed."); lastDraft=data.draft; output.textContent=data.draft; setStatus(data.warnings?.length?data.warnings.join(" "):(data.localKnowledgeChars?"Draft ready. Local reference files were used.":"Draft ready."),Boolean(data.warnings?.length)); }catch(error){ setStatus(`Draft failed: ${error.message}`,true); }finally{ button.disabled=false; } });
     function downloadBlob(blob,filename){ const link=document.createElement("a"); link.href=URL.createObjectURL(blob); link.download=filename; link.click(); setTimeout(()=>URL.revokeObjectURL(link.href),1000); }
-    document.getElementById("downloadMd").addEventListener("click",()=>{ if(!lastDraft){setStatus("Create a draft first.",true);return;} downloadBlob(new Blob([lastDraft],{type:"text/markdown"}),"grant-at-arms-draft.md"); });
-    document.getElementById("downloadDocx").addEventListener("click",async()=>{ if(!lastDraft){setStatus("Create a draft first.",true);return;} setStatus("Building the Word file..."); const response=await fetch("/api/export-docx",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({draft:lastDraft,title:document.getElementById("projectTitle").value||"Grant-at-Arms Draft"})}); if(!response.ok){setStatus("The Word file could not be created.",true);return;} downloadBlob(await response.blob(),"grant-at-arms-draft.docx"); setStatus("Word file ready."); });
+    function draftFilename(extension){ const raw=document.getElementById("projectTitle").value||"Project"; const safe=raw.normalize("NFKD").replace(/[^\w -]/g,"").trim().replace(/\s+/g,"_").slice(0,60)||"Project"; const date=new Date().toISOString().slice(0,10); return `RERCie_${safe}_Draft_${date}.${extension}`; }
+    document.getElementById("downloadMd").addEventListener("click",()=>{ if(!lastDraft){setStatus("Create a draft first.",true);return;} downloadBlob(new Blob([lastDraft],{type:"text/markdown"}),draftFilename("md")); });
+    document.getElementById("downloadDocx").addEventListener("click",async()=>{ if(!lastDraft){setStatus("Create a draft first.",true);return;} setStatus("Building the Word file..."); const response=await apiFetch("/api/export-docx",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({draft:lastDraft,title:document.getElementById("projectTitle").value||"RERCie Draft"})}); if(!response.ok){setStatus("The Word file could not be created.",true);return;} downloadBlob(await response.blob(),draftFilename("docx")); setStatus("Word file ready."); });
     document.getElementById("copyDraft").addEventListener("click",async()=>{ if(!lastDraft){setStatus("Create a draft first.",true);return;} await navigator.clipboard.writeText(lastDraft); setStatus("Draft copied."); });
     checkRuntime(); loadGrants().catch(()=>setStatus("The public funding list is not available right now. You can paste funding details instead.",true));
   </script>
@@ -456,11 +471,31 @@ HTML_PAGE = r'''<!doctype html>
 </html>'''.replace("__STATE_OPTIONS__", json.dumps([""] + list(STATE_FIPS.keys())))
 
 
-class GrantAtArmsHandler(BaseHTTPRequestHandler):
-    server_version = f"GrantAtArms/{APP_VERSION}"
+class RERCieHandler(BaseHTTPRequestHandler):
+    server_version = f"RERCie/{APP_VERSION}"
 
     def log_message(self, format: str, *args: Any) -> None:
-        sys.stderr.write("%s - - [%s] %s\n" % (self.client_address[0], self.log_date_time_string(), format % args))
+        stream = getattr(sys, "stderr", None)
+        if stream and hasattr(stream, "write"):
+            try:
+                stream.write("%s - - [%s] %s\n" % (self.client_address[0], self.log_date_time_string(), format % args))
+            except (OSError, ValueError):
+                pass
+
+    def _authorize(self, require_token: bool = False) -> bool:
+        if self.headers.get("Host", "").lower() != EXPECTED_HOST:
+            self.send_json({"error": "Local request rejected."}, status=421)
+            return False
+        if require_token:
+            origin = self.headers.get("Origin", "")
+            if origin and origin.lower() != EXPECTED_ORIGIN:
+                self.send_json({"error": "Local request rejected."}, status=403)
+                return False
+            provided = self.headers.get("X-RERCie-Token", "")
+            if not SESSION_TOKEN or not secrets.compare_digest(provided, SESSION_TOKEN):
+                self.send_json({"error": "Local session not authorized."}, status=403)
+                return False
+        return True
 
     def _headers(self, status: int, content_type: str, length: int, disposition: str | None = None) -> None:
         self.send_response(status)
@@ -497,10 +532,21 @@ class GrantAtArmsHandler(BaseHTTPRequestHandler):
         return payload
 
     def do_GET(self) -> None:
+        require_token = self.path == "/health" or self.path.startswith("/api/")
+        if not self._authorize(require_token=require_token):
+            return
         if self.path in {"/", "/index.html"}:
             self.send_text(HTML_PAGE)
+        elif self.path == "/assets/rercie-otter.jpg":
+            asset_path = ASSET_DIR / "rercie-otter.jpg"
+            if not asset_path.is_file():
+                self.send_json({"error": "Not found"}, status=404)
+                return
+            body = asset_path.read_bytes()
+            self._headers(200, "image/jpeg", len(body))
+            self.wfile.write(body)
         elif self.path == "/health":
-            self.send_json({"status": "ok", "app": "Grant-at-Arms", "version": APP_VERSION})
+            self.send_json({"status": "ok", "app": "RERCie", "version": APP_VERSION})
         elif self.path == "/api/runtime":
             try:
                 health = request_json(LOCAL_HEALTH_URL, timeout=3)
@@ -519,13 +565,18 @@ class GrantAtArmsHandler(BaseHTTPRequestHandler):
             self.send_json({"error": "Not found"}, status=404)
 
     def do_POST(self) -> None:
+        if not self._authorize(require_token=True):
+            return
+        if self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower() != "application/json":
+            self.send_json({"error": "Use application/json for local requests."}, status=415)
+            return
         try:
             payload = self.read_payload()
             if self.path == "/api/draft":
                 self.send_json(build_draft(payload))
             elif self.path == "/api/export-docx":
-                document = build_docx(str(payload.get("draft") or ""), str(payload.get("title") or "Grant-at-Arms Draft"))
-                self.send_bytes(document, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "grant-at-arms-draft.docx")
+                document = build_docx(str(payload.get("draft") or ""), str(payload.get("title") or "RERCie Draft"))
+                self.send_bytes(document, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "RERCie_Draft.docx")
             else:
                 self.send_json({"error": "Not found"}, status=404)
         except Exception as exc:
@@ -533,8 +584,11 @@ class GrantAtArmsHandler(BaseHTTPRequestHandler):
 
 
 def serve(host: str, port: int) -> int:
-    server = ThreadingHTTPServer((host, port), GrantAtArmsHandler)
-    print(f"Grant-at-Arms {APP_VERSION} is running at http://{host}:{port}")
+    if host not in {"127.0.0.1", "localhost"}:
+        raise ValueError("RERCie can run only on this computer.")
+    if not SESSION_TOKEN:
+        raise RuntimeError("RERCie needs a local session token.")
+    server = ThreadingHTTPServer((host, port), RERCieHandler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -561,7 +615,7 @@ def smoke() -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Grant-at-Arms local grant writer")
+    parser = argparse.ArgumentParser(description="RERCie Local Grant-Writing Guide")
     parser.add_argument("--serve", action="store_true", help="start the local web interface")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8789)

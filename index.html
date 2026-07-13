@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Find funding and planning resources for rural recreation economies.">
-  <title>RERC Funding and Resource Finder</title>
+  <title>RERC Funding and Resource Explorer</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="grant-at-arms.css">
+  <link rel="stylesheet" href="rercie.css">
 </head>
 <body>
-  <a class="skip-link" href="#finder">Skip to the finder</a>
+  <a class="skip-link" href="#finder">Skip to the explorer</a>
   <header class="hero">
     <div class="hero-photo" aria-hidden="true"></div>
     <div class="hero-shade" aria-hidden="true"></div>
@@ -19,21 +19,22 @@
       <a href="https://www.epa.gov/smartgrowth/recreation-economy-rural-communities" target="_blank" rel="noopener">EPA program page</a>
     </div>
     <div class="hero-inner">
-      <p class="eyebrow">RERC community planning tool</p>
+      <p class="eyebrow">RERC community funding and resource tool</p>
       <h1>Find funding and help for your community.</h1>
-      <p class="hero-copy">Tell us about your place and project. Get a clear list of funding to watch and resources you can use.</p>
+      <p class="hero-copy">Tell us about your place and project. Get a list of funding and resources to review.</p>
       <div class="hero-actions">
         <a class="primary-action" href="#finder">Build your list</a>
-        <a class="secondary-hero-action" href="https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/grant-at-arms-local-writer.zip">Download local grant writer</a>
+        <a class="secondary-hero-action" href="https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Setup.exe">Download RERCie</a>
       </div>
+      <p class="tool-disclosure">RERCie is a community-built companion. It is not an EPA grant program, does not determine eligibility, and does not submit applications.</p>
     </div>
-    <p class="photo-credit">Outdoor recreation photo: National Park Service</p>
+    <p class="photo-credit">Outdoor recreation photo: <a href="https://www.nps.gov/aboutus/disclaimer.htm" target="_blank" rel="noopener">National Park Service</a></p>
   </header>
 
   <section class="intro-band" aria-label="About this tool">
     <div>
       <strong>RERC is free planning help.</strong>
-      <span>It is not a grant program. This finder helps communities plan their next steps.</span>
+      <span>This explorer is not run by EPA and is not a grant program. It helps communities plan their next steps.</span>
     </div>
     <dl class="catalog-counts">
       <div><dt id="fundingCount">0</dt><dd>funding options</dd></div>
@@ -93,12 +94,13 @@
         </div>
       </div>
 
-      <div class="result-stats" aria-live="polite">
+      <div class="result-stats">
         <div><strong id="matchCount">0</strong><span>matches</span></div>
         <div><strong id="fundingMatchCount">0</strong><span>funding</span></div>
         <div><strong id="resourceMatchCount">0</strong><span>resources</span></div>
         <div><strong id="geographyLabel">U.S.</strong><span>area</span></div>
       </div>
+      <p id="matchAnnouncement" class="sr-only" aria-live="polite" aria-atomic="true"></p>
 
       <div class="toolbar">
         <label for="sortSelect">Sort</label>
@@ -110,8 +112,8 @@
         </select>
         <label for="limitSelect">Show</label>
         <select id="limitSelect">
-          <option value="25">25</option>
-          <option value="50" selected>50</option>
+          <option value="15" selected>15</option>
+          <option value="50">50</option>
           <option value="100">100</option>
           <option value="all">All</option>
         </select>
@@ -119,8 +121,8 @@
         <button id="exportCsv" type="button">Export CSV</button>
       </div>
 
-      <div id="activeFilters" class="active-filters" aria-live="polite"></div>
-      <section id="results" class="results" aria-live="polite"></section>
+      <div id="activeFilters" class="active-filters"></div>
+      <section id="results" class="results"></section>
     </section>
   </main>
 
@@ -137,14 +139,21 @@
     </div>
   </section>
 
-  <section class="writer-band" aria-label="Local grant writing tool">
-    <div>
+  <section class="writer-band" aria-label="RERCie Local Grant-Writing Guide">
+    <img class="rercie-mascot" src="assets/rercie-otter.jpg" alt="RERCie, a river otter holding a field notebook and trail map">
+    <div class="rercie-copy">
       <p class="eyebrow">Optional Windows tool</p>
-      <h2>Draft an application on your own computer.</h2>
-      <p>Grant-at-Arms uses a local Gemma model and your project notes. No separate Python or Ollama installation, account, or API key is needed.</p>
-      <p class="writer-note">The first run downloads the local model, about 806 MB. Drafts still need a person to check every fact and funding rule.</p>
+      <h2>Meet RERCie, your local grant-writing guide.</h2>
+      <p>RERCie helps you review likely matches and start a grant draft with your own notes.</p>
+      <p>The setup guide walks you through each step. You do not need a command line, account, or key.</p>
+      <p>RERCie is a community-built companion. It is not an EPA grant program, does not determine eligibility, and does not submit applications.</p>
+      <p class="writer-note">First use downloads the local model, about 1.12 GB. Check every fact and funding rule before you apply.</p>
     </div>
-    <a href="https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/grant-at-arms-local-writer.zip">Download Grant-at-Arms for Windows</a>
+    <div class="writer-actions">
+      <a href="https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Setup.exe">Download RERCie for Windows</a>
+      <span>Windows 10 or 11, 64-bit. No command line.</span>
+      <span class="signing-note">This community-built installer is not yet digitally signed, so Windows may show a safety notice.</span>
+    </div>
   </section>
 
   <footer>
