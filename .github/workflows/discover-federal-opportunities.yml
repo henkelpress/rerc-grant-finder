@@ -1,0 +1,31 @@
+name: Monthly Federal Opportunity Discovery
+
+on:
+  schedule:
+    - cron: '23 11 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build human review queue from Grants.gov
+        run: python scripts/discover_federal_opportunities.py
+      - name: Add summary
+        run: cat federal-opportunity-review-queue.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload review queue
+        uses: actions/upload-artifact@v4
+        with:
+          name: federal-opportunity-review-queue
+          path: |
+            federal-opportunity-review-queue.csv
+            federal-opportunity-review-queue.md

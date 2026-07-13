@@ -3,109 +3,105 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>EPA RERC Grant Finder</title>
+  <meta name="description" content="Find funding and planning resources for rural recreation economies.">
+  <title>RERC Funding and Resource Finder</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="topbar">
+  <a class="skip-link" href="#finder">Skip to the finder</a>
+  <header class="hero">
     <div class="hero-photo" aria-hidden="true"></div>
     <div class="hero-shade" aria-hidden="true"></div>
-    <div class="epa-ribbon">
-      <span>EPA Recreation Economy for Rural Communities</span>
-      <span>Rural outdoor recreation funding finder</span>
+    <div class="agency-bar">
+      <span>Recreation Economy for Rural Communities</span>
+      <a href="https://www.epa.gov/smartgrowth/recreation-economy-rural-communities" target="_blank" rel="noopener">EPA program page</a>
     </div>
-    <div class="hero-content">
-      <p class="eyebrow">Recreation Economy for Rural Communities</p>
-      <h1>Find funding for trails, downtowns, and rural places.</h1>
-      <p class="brand-note">Answer a few questions and build a grant shortlist for outdoor recreation, Main Street, conservation, tourism, and local business projects.</p>
-      <div class="hero-actions">
-        <a class="hero-button" href="#communityName">Start matching</a>
-        <span class="hero-stat"><strong id="statGrantCount">0</strong> grant options</span>
-      </div>
+    <div class="hero-inner">
+      <p class="eyebrow">RERC community planning tool</p>
+      <h1>Find funding and help for your community.</h1>
+      <p class="hero-copy">Tell us about your place and project. Get a clear list of funding to watch and resources you can use.</p>
+      <a class="primary-action" href="#finder">Build your list</a>
     </div>
     <p class="photo-credit">Outdoor recreation photo: National Park Service</p>
   </header>
 
-  <section class="photo-ribbon" aria-label="RERC project themes">
-    <div class="photo-panel photo-panel-trail"><span>Trail access</span></div>
-    <div class="photo-panel photo-panel-stewardship"><span>Public lands</span></div>
-    <div class="photo-panel photo-panel-community"><span>Visitor readiness</span></div>
+  <section class="intro-band" aria-label="About this tool">
+    <div>
+      <strong>RERC is free planning help.</strong>
+      <span>It is not a grant program. This finder helps communities plan their next steps.</span>
+    </div>
+    <dl class="catalog-counts">
+      <div><dt id="fundingCount">0</dt><dd>funding options</dd></div>
+      <div><dt id="resourceCount">0</dt><dd>resources</dd></div>
+      <div><dt>50 states + 5 territories</dt><dd>included</dd></div>
+    </dl>
   </section>
 
-  <main class="layout">
-    <aside class="controls" aria-label="Community profile controls">
-      <section class="control-block">
-        <h2>Your Community</h2>
-        <label for="communityName">Town, county, or region</label>
-        <input id="communityName" type="text" autocomplete="off" placeholder="Example: Damascus, Virginia">
-
-        <label for="stateSelect">State or territory</label>
-        <select id="stateSelect"></select>
-
-        <label for="keywordSearch">Keyword</label>
-        <input id="keywordSearch" type="search" placeholder="trail, downtown, brownfield, arts">
-      </section>
-
-      <section class="control-block">
-        <h2>Who Can Apply?</h2>
-        <div id="applicantOptions" class="checkgrid"></div>
-      </section>
-
-      <section class="control-block">
-        <h2>What Are You Working On?</h2>
-        <div id="focusOptions" class="checkgrid"></div>
-      </section>
-
-      <section class="control-block">
-        <h2>Funding Details</h2>
-        <label for="stageSelect">Project step</label>
-        <select id="stageSelect"></select>
-
-        <label for="fundingTypeSelect">Type of help</label>
-        <select id="fundingTypeSelect"></select>
-
-        <fieldset>
-          <legend>Can you provide matching funds?</legend>
-          <label class="radio"><input type="radio" name="matchCapacity" value="any" checked> Not sure yet</label>
-          <label class="radio"><input type="radio" name="matchCapacity" value="limited"> Little or no match</label>
-          <label class="radio"><input type="radio" name="matchCapacity" value="available"> Match is available</label>
-        </fieldset>
-      </section>
-
-      <section class="control-block">
-        <h2>Local Needs</h2>
-        <div id="factorOptions" class="checkgrid"></div>
-      </section>
-
-      <div class="control-actions">
-        <button id="resetButton" type="button">Reset</button>
+  <main id="finder" class="finder-layout">
+    <aside class="filters" aria-label="Community questions">
+      <div class="filter-heading">
+        <p class="eyebrow">Your community</p>
+        <h2>What do you need?</h2>
       </div>
+
+      <label for="communityName">Community name</label>
+      <input id="communityName" type="text" autocomplete="address-level2" placeholder="Example: Taos, New Mexico">
+
+      <label for="stateSelect">State or territory</label>
+      <select id="stateSelect"></select>
+
+      <label for="keywordSearch">Search words</label>
+      <input id="keywordSearch" type="search" placeholder="trail, downtown, business, water">
+
+      <fieldset>
+        <legend>Who will lead the work?</legend>
+        <div id="applicantOptions" class="check-list"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>What are you working on?</legend>
+        <div id="topicOptions" class="check-list"></div>
+      </fieldset>
+
+      <label for="stageSelect">What step are you on?</label>
+      <select id="stageSelect"></select>
+
+      <label class="toggle-row" for="includeClosed">
+        <input id="includeClosed" type="checkbox">
+        <span>Show closed rounds to plan ahead</span>
+      </label>
+
+      <button id="resetButton" class="secondary-action" type="button">Reset answers</button>
     </aside>
 
-    <section class="workspace">
-      <section class="overview" aria-label="Recommendation summary">
-        <div class="summary-copy">
-          <p class="eyebrow">Grant Match List</p>
-          <h2 id="communityTitle">Start with your community</h2>
-          <p id="communitySummary">Pick a state and answer a few questions. The tool will show grants that may fit your project.</p>
+    <section class="results-workspace" aria-label="Matched funding and resources">
+      <div class="results-heading">
+        <div>
+          <p class="eyebrow">Your matched list</p>
+          <h2 id="communityTitle">Funding and resources for rural communities</h2>
+          <p id="communitySummary">Choose a place and answer the questions. Your list will update as you go.</p>
         </div>
-        <canvas id="profileCanvas" width="420" height="180" aria-label="Community profile chart"></canvas>
-      </section>
+        <div class="mode-tabs" role="group" aria-label="Choose what to show">
+          <button type="button" data-mode="Both" class="active" aria-pressed="true">Both</button>
+          <button type="button" data-mode="Funding" aria-pressed="false">Funding</button>
+          <button type="button" data-mode="Resource" aria-pressed="false">Resources</button>
+        </div>
+      </div>
 
-      <section class="metric-row" aria-label="Current results">
-        <div><span id="metricMatches">0</span><label>matches</label></div>
-        <div><span id="metricTopScore">0</span><label>top score</label></div>
-        <div><span id="metricState">All</span><label>geography</label></div>
-        <div><span id="metricExport">Ready</span><label>export status</label></div>
-      </section>
+      <div class="result-stats" aria-live="polite">
+        <div><strong id="matchCount">0</strong><span>matches</span></div>
+        <div><strong id="fundingMatchCount">0</strong><span>funding</span></div>
+        <div><strong id="resourceMatchCount">0</strong><span>resources</span></div>
+        <div><strong id="geographyLabel">U.S.</strong><span>area</span></div>
+      </div>
 
-      <section class="toolbar" aria-label="Result controls">
+      <div class="toolbar">
         <label for="sortSelect">Sort</label>
         <select id="sortSelect">
           <option value="score">Best fit</option>
-          <option value="state">State then score</option>
-          <option value="type">Funding type</option>
-          <option value="deadline">Deadline or cycle</option>
+          <option value="title">Name</option>
+          <option value="status">Status</option>
+          <option value="type">Funding or resource</option>
         </select>
         <label for="limitSelect">Show</label>
         <select id="limitSelect">
@@ -114,22 +110,42 @@
           <option value="100">100</option>
           <option value="all">All</option>
         </select>
+        <button id="exportWord" type="button">Export Word appendix</button>
         <button id="exportCsv" type="button">Export CSV</button>
-        <button id="exportWord" type="button">Export Word</button>
-      </section>
+      </div>
 
-      <section class="llm-note" aria-label="Application narrative recommendation">
-        <h2>Grant Writing Help</h2>
-        <p>Use the optional local writer to prepare application text from your selected grants and project notes. It runs on your computer and keeps the public website simple.</p>
-        <div class="llm-actions">
-          <a class="llm-button" href="https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/grant-at-arms-local-writer.zip">Download local writer</a>
-          <a class="llm-link" href="https://github.com/henkelpress/rerc-grant-finder/tree/main/grant-writer-master" target="_blank" rel="noopener">Setup notes</a>
-        </div>
-      </section>
-
+      <div id="activeFilters" class="active-filters" aria-live="polite"></div>
       <section id="results" class="results" aria-live="polite"></section>
     </section>
   </main>
+
+  <section class="download-band" aria-label="Full catalog downloads">
+    <div>
+      <p class="eyebrow">Use the full list</p>
+      <h2>Download every public item.</h2>
+      <p>Use these files for research, review, or an action-plan appendix.</p>
+    </div>
+    <div class="download-actions">
+      <a href="downloads/RERC_Funding_and_Resource_Appendix_2026-07-13.docx" download>Full Word appendix</a>
+      <a href="downloads/RERC_Funding_and_Resource_Master_2026-07-13.xlsx" download>Full Excel workbook</a>
+      <a href="downloads/RERC_Funding_and_Resource_Master_2026-07-13.csv" download>Full CSV</a>
+    </div>
+  </section>
+
+  <section class="writer-band" aria-label="Local grant writing tool">
+    <div>
+      <p class="eyebrow">Optional local tool</p>
+      <h2>Draft an application on your own computer.</h2>
+      <p>Grant-at-Arms is separate from this public finder. It can use a local language model and your project files.</p>
+    </div>
+    <a href="https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/grant-at-arms-local-writer.zip">Download Grant-at-Arms</a>
+  </section>
+
+  <footer>
+    <p><strong>Recreation Economy for Rural Communities</strong></p>
+    <p>Program rules and dates can change. Open the official page before you apply or make a decision.</p>
+    <p><a href="https://www.epa.gov/smartgrowth/recreation-economy-rural-communities">Learn about RERC at EPA.gov</a></p>
+  </footer>
 
   <script src="data.js"></script>
   <script src="app.js"></script>
