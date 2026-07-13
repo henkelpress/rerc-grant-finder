@@ -7,6 +7,7 @@
   <title>RERC Funding and Resource Finder</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="grant-at-arms.css">
 </head>
 <body>
   <a class="skip-link" href="#finder">Skip to the finder</a>
@@ -14,14 +15,17 @@
     <div class="hero-photo" aria-hidden="true"></div>
     <div class="hero-shade" aria-hidden="true"></div>
     <div class="agency-bar">
-      <span>Recreation Economy for Rural Communities</span>
+      <span>Recreation Economy <em>for</em> Rural Communities</span>
       <a href="https://www.epa.gov/smartgrowth/recreation-economy-rural-communities" target="_blank" rel="noopener">EPA program page</a>
     </div>
     <div class="hero-inner">
       <p class="eyebrow">RERC community planning tool</p>
       <h1>Find funding and help for your community.</h1>
       <p class="hero-copy">Tell us about your place and project. Get a clear list of funding to watch and resources you can use.</p>
-      <a class="primary-action" href="#finder">Build your list</a>
+      <div class="hero-actions">
+        <a class="primary-action" href="#finder">Build your list</a>
+        <a class="secondary-hero-action" href="https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/grant-at-arms-local-writer.zip">Download local grant writer</a>
+      </div>
     </div>
     <p class="photo-credit">Outdoor recreation photo: National Park Service</p>
   </header>
@@ -34,7 +38,7 @@
     <dl class="catalog-counts">
       <div><dt id="fundingCount">0</dt><dd>funding options</dd></div>
       <div><dt id="resourceCount">0</dt><dd>resources</dd></div>
-      <div><dt>50 states + 5 territories</dt><dd>included</dd></div>
+      <div><dt>U.S.-wide</dt><dd>50 states, D.C. + 5 territories</dd></div>
     </dl>
   </section>
 
@@ -45,10 +49,10 @@
         <h2>What do you need?</h2>
       </div>
 
-      <label for="communityName">Community name</label>
+      <label for="communityName">Community name for your appendix</label>
       <input id="communityName" type="text" autocomplete="address-level2" placeholder="Example: Taos, New Mexico">
 
-      <label for="stateSelect">State or territory</label>
+      <label for="stateSelect">State, D.C., or U.S. territory</label>
       <select id="stateSelect"></select>
 
       <label for="keywordSearch">Search words</label>
@@ -99,7 +103,7 @@
       <div class="toolbar">
         <label for="sortSelect">Sort</label>
         <select id="sortSelect">
-          <option value="score">Best fit</option>
+          <option value="score">Most relevant</option>
           <option value="title">Name</option>
           <option value="status">Status</option>
           <option value="type">Funding or resource</option>
@@ -135,19 +139,21 @@
 
   <section class="writer-band" aria-label="Local grant writing tool">
     <div>
-      <p class="eyebrow">Optional local tool</p>
+      <p class="eyebrow">Optional Windows tool</p>
       <h2>Draft an application on your own computer.</h2>
-      <p>Grant-at-Arms is separate from this public finder. It can use a local language model and your project files.</p>
+      <p>Grant-at-Arms uses a local Gemma model and your project notes. No separate Python or Ollama installation, account, or API key is needed.</p>
+      <p class="writer-note">The first run downloads the local model, about 806 MB. Drafts still need a person to check every fact and funding rule.</p>
     </div>
-    <a href="https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/grant-at-arms-local-writer.zip">Download Grant-at-Arms</a>
+    <a href="https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/grant-at-arms-local-writer.zip">Download Grant-at-Arms for Windows</a>
   </section>
 
   <footer>
-    <p><strong>Recreation Economy for Rural Communities</strong></p>
+    <p><strong>Recreation Economy <em>for</em> Rural Communities</strong></p>
     <p>Program rules and dates can change. Open the official page before you apply or make a decision.</p>
     <p><a href="https://www.epa.gov/smartgrowth/recreation-economy-rural-communities">Learn about RERC at EPA.gov</a></p>
   </footer>
 
+  <script src="vendor/jszip.min.js"></script>
   <script src="data.js"></script>
   <script src="app.js"></script>
 </body>

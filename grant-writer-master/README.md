@@ -1,85 +1,71 @@
 # Grant-at-Arms Local Grant Writer
 
-Grant-at-Arms is the optional local writing companion for the EPA RERC Grant Finder.
+Grant-at-Arms is an optional writing companion for the Recreation Economy *for* Rural Communities funding and resource finder.
 
-It is separate from the public website. The website helps people find likely grant matches. This local tool helps draft grant narratives from the selected grant, project notes, public data, and local reference files.
+The downloaded Windows release uses the Gemma 3 1B model through `llama.cpp`. It does not require a separate Python or Ollama installation, an account, or an API key.
+
+## Start the downloaded release
+
+1. Extract the full ZIP.
+2. Double-click `Start-Grant-at-Arms.cmd`.
+3. Read the first-run notice and type `Y` to download Gemma.
+4. The tool opens at `http://127.0.0.1:8789`.
+
+The first run downloads the local model, about 806 MB. If Windows is missing the standard Microsoft Visual C++ runtime, the launcher verifies and runs Microsoft's official installer first. Later runs use the copy in the `models` folder.
+
+Double-click `Stop-Grant-at-Arms.cmd` when you are finished.
 
 ## What It Does
 
-1. Runs a private web interface at `http://127.0.0.1:8789`.
-2. Uses a local Ollama model by default, such as `gemma3:4b`.
-3. Can use an OpenAI-compatible API endpoint if the user enters an API key.
-4. Reads selected text files in the browser before drafting.
-5. Reads local reference files from `local_knowledge\`.
-6. Pulls a basic Census place profile when a community and state are provided.
-7. Exports draft text as Markdown or Word-readable `.doc`.
+- Loads the current public RERC funding list.
+- Accepts project notes and selected text files.
+- Can look up a basic Census place profile.
+- Creates a first-draft grant narrative with clear fact-check markers.
+- Exports a real Word `.docx` file or Markdown.
+- Includes all 50 states, the District of Columbia, and five U.S. territories.
 
-## Setup On Windows
+## Privacy
 
-Run these commands from this folder:
+Local Gemma writing stays on this computer. The public funding lookup and optional Census lookup use public websites. Online API mode sends typed or uploaded project text, selected funding details, and any public Census profile to the API provider selected by the user. It does not read or send files from `local_knowledge`. API keys are used for one request and are not saved by Grant-at-Arms.
 
-```powershell
-.\install.ps1
-.\run.ps1
-```
+Do not add private files to a public copy of this project. Local reference files belong in `local_knowledge`.
 
-Then open:
+## Human Review Required
 
-```text
-http://127.0.0.1:8789
-```
+Grant-at-Arms does not decide final eligibility or submit an application. Before using a draft:
 
-## Model Choice
+1. Open the official funding page.
+2. Confirm the deadline, applicant rules, match, award size, and allowed work.
+3. Replace every bracketed note with a checked local fact.
+4. Have a person review the full application.
 
-The default local model is:
+## Source Checkout
 
-```text
-gemma3:4b
-```
+The source tree does not contain the generated EXE or the `llama.cpp` runtime. The files under `packaging\` are copied to the root of the downloadable release ZIP during the release build. `build_portable.ps1` builds the EXE from the published module names, checks the pinned runtime archive, adds the complete Python license notice, creates the file-integrity manifest, and builds the release ZIP.
 
-To use a smaller model:
+Run the source smoke test with Python:
 
 ```powershell
-$env:GRANT_AT_ARMS_MODEL = "gemma3:1b"
-.\run.ps1
+python .\grant_at_arms.py --smoke
 ```
 
-To use a larger model:
+Build the portable package from Windows PowerShell with Python 3.11 or newer:
 
 ```powershell
-$env:GRANT_AT_ARMS_MODEL = "gemma3:12b"
-.\run.ps1
+python -m pip install -r .\requirements-build.txt
+.\build_portable.ps1 -AcceptRuntimeDownload
 ```
 
-Do not add model weights to this repository. `install.ps1` asks Ollama to download the model on the user's machine.
+The release does not redistribute Microsoft runtime DLLs. On a computer where they are missing, the launcher retrieves the current signed x64 installer directly from Microsoft.
 
-## Add Local Reference Material
+## Troubleshooting
 
-Put plain text reference files here:
+Logs are stored in `runtime\logs`.
 
-```text
-local_knowledge\
+Run this check in PowerShell from the extracted release folder:
+
+```powershell
+.\Start-Grant-at-Arms.ps1 -DryRun
 ```
 
-Supported file types:
-
-1. `.md`
-2. `.txt`
-3. `.csv`
-4. `.json`
-
-Do not put private files in a public fork of this repository. The local app reads files from `local_knowledge\` only when it runs on the user's computer.
-
-## Drafting Rules
-
-Grant-at-Arms is a drafting tool. It does not submit applications. It does not make final eligibility decisions.
-
-Before using any draft in a real application:
-
-1. Check the current grant source.
-2. Confirm the deadline.
-3. Confirm applicant eligibility.
-4. Confirm match rules.
-5. Replace placeholders with local facts.
-6. Have a person review the final application.
-
+The public source and build scripts are available at [henkelpress/rerc-grant-finder](https://github.com/henkelpress/rerc-grant-finder).

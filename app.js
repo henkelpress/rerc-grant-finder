@@ -58,6 +58,23 @@ function cleanText(value) {
   return String(value ?? "").trim();
 }
 
+function publicSummary(item) {
+  const reviewed = {
+    "RERC-FND-0021": "Develops and repairs recreational trails and trail facilities for motorized and non-motorized use.",
+    "RERC-FND-0475": "Supports projects that promote understanding of Japan.",
+    "RERC-FND-0541": "Supports smaller transportation projects such as walking and biking facilities, recreational trails, safe routes to school, historic preservation, environmental work, overlooks, and safety studies.",
+    "RERC-RES-0077": "Helps communities coordinate housing and services to prevent and end homelessness, rehouse people quickly, connect households with mainstream programs, and support long-term stability."
+  };
+  const text = reviewed[item.item_id] || cleanText(item.summary || item.why_it_matters);
+  return text.replace(/^[a-z]/, (letter) => letter.toUpperCase());
+}
+
+function matchLabel(score) {
+  if (score >= 80) return "High";
+  if (score >= 65) return "Medium";
+  return "Broad";
+}
+
 function corpus(item) {
   return [item.title, item.organization, item.geography, item.eligible_users, item.project_stage, item.topic_tags,
     item.support_type, item.summary, item.why_it_matters].join(" ").toLowerCase();
@@ -77,18 +94,26 @@ function isNational(geography) {
   return ["national", "nationwide", "united states", "all states", "federal"].some((term) => value.includes(term));
 }
 
+function appliesToPlace(geography, selectedPlace) {
+  const selected = cleanText(selectedPlace).toLowerCase();
+  return cleanText(geography).split(/[;,|/]/).some((area) => {
+    const normalized = area.trim().toLowerCase();
+    return normalized === selected || normalized.startsWith(`${selected} (`);
+  });
+}
+
 function matchesGeography(item, selectedPlace) {
   if (!selectedPlace) return true;
   const geography = cleanText(item.geography);
-  return isNational(geography) || geography.toLowerCase().includes(selectedPlace.toLowerCase());
+  return isNational(geography) || appliesToPlace(geography, selectedPlace);
 }
 
 function scoreItem(item, text, selectedPlace, applicants, topics, selectedStage) {
   let score = 45;
-  if (item.status === "Open now" || item.status === "Available") score += 18;
+  if (item.status === "Open when checked" || item.status === "Available") score += 18;
   if (item.status === "Recurring") score += 14;
   if (item.status === "Cycle closed") score -= 18;
-  if (selectedPlace && cleanText(item.geography).toLowerCase().includes(selectedPlace.toLowerCase())) score += 15;
+  if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) score += 15;
   if (selectedPlace && isNational(cleanText(item.geography))) score += 8;
   if (applicants.length && matchesAny(text, applicants)) score += 12;
   if (topics.length) score += Math.min(18, topics.filter((group) => matchesAny(text, [group])).length * 7);
@@ -140,11 +165,11 @@ function renderCard(item) {
       </div>
       <h3><a href="${escapeHtml(item.source_url)}" target="_blank" rel="noopener">${escapeHtml(item.title)}</a></h3>
       <p class="organization">${escapeHtml(item.organization)}</p>
-      <p class="summary">${escapeHtml(item.summary || item.why_it_matters)}</p>
+      <p class="summary">${escapeHtml(publicSummary(item))}</p>
       <p class="details"><strong>Where:</strong> ${escapeHtml(item.geography)} &nbsp; <strong>Who:</strong> ${escapeHtml(item.eligible_users || "See official page")}</p>
       <p class="details"><strong>Timing or amount:</strong> ${escapeHtml(timing)} &nbsp; <strong>Checked:</strong> ${escapeHtml(item.last_checked)}</p>
     </div>
-    <div class="score" aria-label="Match score ${item.score} out of 99"><strong>${item.score}</strong><span>fit score</span></div>
+    <div class="score" aria-label="Match level: ${matchLabel(item.score)}"><strong>${matchLabel(item.score)}</strong><span>match level</span></div>
   </article>`;
 }
 
@@ -173,7 +198,7 @@ function render() {
 
   elements.communityTitle.textContent = `${mode === "Both" ? "Funding and resources" : mode === "Funding" ? "Funding" : "Resources"} for ${label}`;
   elements.communitySummary.textContent = currentMatches.length
-    ? `Review the best matches below. Open each official page before you use a deadline or program rule.`
+    ? `Review the most relevant matches below. Match levels only compare your answers; they do not confirm eligibility. Open each official page before you rely on a deadline or program rule.`
     : `Try fewer choices or a wider search.`;
   elements.matchCount.textContent = currentMatches.length.toLocaleString();
   elements.fundingMatchCount.textContent = fundingMatches.toLocaleString();
@@ -203,29 +228,147 @@ function downloadBlob(contents, mimeType, filename) {
 }
 
 function exportCsv() {
-  const headers = ["Item Type","Title","Organization","Status","Geography","Who Can Use It","Project Step","Topics","Type of Help","Timing or Amount","Summary","Official Page","Match Score"];
+  const headers = ["Item Type","Title","Organization","Status","Geography","Who Can Use It","Project Step","Topics","Type of Help","Timing or Amount","Summary","Official Page"];
   const lines = [headers.map(csvCell).join(",")];
   currentMatches.forEach((item) => lines.push([
     item.item_type, item.title, item.organization, item.status, item.geography, item.eligible_users, item.project_stage,
-    item.topic_tags, item.support_type, item.deadline_or_availability || item.amount_or_cost, item.summary, item.source_url, item.score
+    item.topic_tags, item.support_type, item.deadline_or_availability || item.amount_or_cost, publicSummary(item), item.source_url
   ].map(csvCell).join(",")));
   downloadBlob(`\ufeff${lines.join("\r\n")}`, "text/csv;charset=utf-8", "RERC-community-funding-and-resources.csv");
 }
 
-function wordEntry(item) {
-  return `<div class="entry"><h3>${escapeHtml(item.title)}</h3><p><b>${escapeHtml(item.organization)}</b> | ${escapeHtml(item.status)} | ${escapeHtml(item.support_type)}</p><p>${escapeHtml(item.summary || item.why_it_matters)}</p><p><b>Where:</b> ${escapeHtml(item.geography)} | <b>Who:</b> ${escapeHtml(item.eligible_users || "See official page")}</p><p><b>Official page:</b> <a href="${escapeHtml(item.source_url)}">${escapeHtml(item.source_url)}</a></p></div>`;
+function xmlEscape(value) {
+  return cleanText(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }
 
-function exportWord() {
+function wordRunXml(text, options = {}) {
+  const properties = [];
+  if (options.bold) properties.push("<w:b/>");
+  if (options.italic) properties.push("<w:i/>");
+  if (options.color) properties.push('<w:color w:val="' + options.color + '"/>');
+  return "<w:r>" + (properties.length ? "<w:rPr>" + properties.join("") + "</w:rPr>" : "") +
+    '<w:t xml:space="preserve">' + xmlEscape(text) + "</w:t></w:r>";
+}
+
+function wordParagraphXml(runs, style = "") {
+  const properties = style ? '<w:pPr><w:pStyle w:val="' + style + '"/></w:pPr>' : "";
+  return "<w:p>" + properties + runs.join("") + "</w:p>";
+}
+
+function wordLinkParagraphXml(url, relationshipId) {
+  return "<w:p>" +
+    wordRunXml("Official page: ", { bold: true }) +
+    '<w:hyperlink r:id="' + relationshipId + '"><w:r><w:rPr><w:color w:val="1B6A8F"/><w:u w:val="single"/></w:rPr><w:t>Open official page</w:t></w:r></w:hyperlink>' +
+    "</w:p>";
+}
+
+async function exportWord() {
+  if (typeof JSZip === "undefined") {
+    window.alert("The Word export tool did not load. Refresh the page and try again.");
+    return;
+  }
   const community = elements.communityName.value.trim() || "Community";
   const place = elements.stateSelect.value || "United States";
   const funding = currentMatches.filter((item) => item.item_type === "Funding");
   const resources = currentMatches.filter((item) => item.item_type === "Resource");
   const profile = activeFilterSummary();
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>RERC Appendix</title><style>
-    @page{margin:.7in} body{font-family:Arial,sans-serif;color:#20312b;font-size:10pt;line-height:1.35} h1{color:#00573f;font-size:24pt} h2{color:#1b6a8f;border-bottom:2px solid #00573f;padding-bottom:5px} h3{margin:0 0 3px;color:#00573f;font-size:11pt} p{margin:3px 0}.notice{background:#fff7de;border-left:5px solid #f2c14e;padding:10px}.entry{border:1px solid #d8e0dc;border-left:4px solid #00573f;padding:9px;margin:0 0 9px;page-break-inside:avoid}a{color:#1b6a8f}
-  </style></head><body><h1>Appendix C: Funding and Resources</h1><p><b>${escapeHtml(community)}, ${escapeHtml(place)}</b></p><p>${escapeHtml(profile)}</p><div class="notice"><b>RERC is free planning help. It is not a grant program.</b> Program rules and dates can change. Open the official page before you apply or use a resource.</div><h2>Funding Opportunities (${funding.length})</h2>${funding.map(wordEntry).join("")}<h2>Resources (${resources.length})</h2>${resources.map(wordEntry).join("")}</body></html>`;
-  downloadBlob(`\ufeff${html}`, "application/msword", "RERC-community-appendix.doc");
+  const relationships = [];
+  const body = [];
+  let relationshipNumber = 1;
+
+  body.push(wordParagraphXml([wordRunXml("Appendix C: Funding and Resources")], "Heading1"));
+  body.push(wordParagraphXml([
+    wordRunXml("Recreation Economy "),
+    wordRunXml("for", { italic: true }),
+    wordRunXml(" Rural Communities (RERC)")
+  ]));
+  body.push(wordParagraphXml([wordRunXml(community + ", " + place, { bold: true })]));
+  body.push(wordParagraphXml([wordRunXml(profile)]));
+  body.push(wordParagraphXml([
+    wordRunXml("RERC is free planning help. It is not a grant program. ", { bold: true }),
+    wordRunXml("Program rules and dates can change. Open the official page before you apply or use a resource.")
+  ], "Notice"));
+
+  const addSection = (title, items) => {
+    body.push(wordParagraphXml([wordRunXml(title + " (" + items.length + ")")], "Heading2"));
+    items.forEach((item) => {
+      body.push(wordParagraphXml([wordRunXml(item.title)], "Heading3"));
+      body.push(wordParagraphXml([
+        wordRunXml(item.organization, { bold: true }),
+        wordRunXml(" | " + item.status + " | " + item.support_type)
+      ]));
+      body.push(wordParagraphXml([wordRunXml(publicSummary(item))]));
+      body.push(wordParagraphXml([
+        wordRunXml("Where: ", { bold: true }),
+        wordRunXml(item.geography),
+        wordRunXml(" | Who: ", { bold: true }),
+        wordRunXml(item.eligible_users || "See official page")
+      ]));
+      const relationshipId = "rId" + relationshipNumber;
+      relationshipNumber += 1;
+      relationships.push('<Relationship Id="' + relationshipId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="' + xmlEscape(item.source_url) + '" TargetMode="External"/>');
+      body.push(wordLinkParagraphXml(item.source_url, relationshipId));
+    });
+  };
+
+  addSection("Funding Opportunities", funding);
+  addSection("Resources", resources);
+
+  const documentXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+    "<w:body>" + body.join("") +
+    '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1008" w:right="1008" w:bottom="1008" w:left="1008" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>' +
+    "</w:body></w:document>";
+  const stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+    '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="20"/></w:rPr></w:style>' +
+    '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="120" w:after="120"/></w:pPr><w:rPr><w:b/><w:color w:val="00573F"/><w:sz w:val="42"/></w:rPr></w:style>' +
+    '<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="100"/></w:pPr><w:rPr><w:b/><w:color w:val="1B6A8F"/><w:sz w:val="30"/></w:rPr></w:style>' +
+    '<w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="160" w:after="40"/><w:keepNext/></w:pPr><w:rPr><w:b/><w:color w:val="00573F"/><w:sz w:val="23"/></w:rPr></w:style>' +
+    '<w:style w:type="paragraph" w:styleId="Notice"><w:name w:val="Notice"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="100" w:after="180"/><w:shd w:fill="FFF7DE"/><w:ind w:left="160" w:right="160"/></w:pPr></w:style>' +
+    "</w:styles>";
+  const contentTypes = '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+    '<Default Extension="xml" ContentType="application/xml"/>' +
+    '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+    '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
+    '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>' +
+    '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>' +
+    "</Types>";
+  const rootRelationships = '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>' +
+    '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>' +
+    "</Relationships>";
+  const documentRelationships = '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    relationships.join("") + "</Relationships>";
+  const now = new Date().toISOString();
+  const coreXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
+    "<dc:title>RERC Community Funding and Resources Appendix</dc:title><dc:creator>Recreation Economy for Rural Communities</dc:creator><cp:lastModifiedBy>RERC Funding and Resource Finder</cp:lastModifiedBy>" +
+    '<dcterms:created xsi:type="dcterms:W3CDTF">' + now + '</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">' + now + "</dcterms:modified></cp:coreProperties>";
+  const appXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">' +
+    "<Application>RERC Funding and Resource Finder</Application><AppVersion>1.0</AppVersion></Properties>";
+
+  const zip = new JSZip();
+  zip.file("[Content_Types].xml", contentTypes);
+  zip.file("_rels/.rels", rootRelationships);
+  zip.file("docProps/core.xml", coreXml);
+  zip.file("docProps/app.xml", appXml);
+  zip.file("word/document.xml", documentXml);
+  zip.file("word/styles.xml", stylesXml);
+  zip.file("word/_rels/document.xml.rels", documentRelationships);
+  const docx = await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
+  downloadBlob(docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "RERC-community-appendix.docx");
 }
 
 function buildCheckList(container, options, groupName) {
@@ -253,7 +396,7 @@ function reset() {
 function initialize() {
   elements.fundingCount.textContent = catalog.filter((item) => item.item_type === "Funding").length.toLocaleString();
   elements.resourceCount.textContent = catalog.filter((item) => item.item_type === "Resource").length.toLocaleString();
-  elements.stateSelect.innerHTML = `<option value="">All states and territories</option>${places.map((place) => `<option>${escapeHtml(place)}</option>`).join("")}`;
+  elements.stateSelect.innerHTML = `<option value="">All states, D.C., and U.S. territories</option>${places.map((place) => `<option>${escapeHtml(place)}</option>`).join("")}`;
   elements.stageSelect.innerHTML = stages.map((stage) => `<option>${escapeHtml(stage)}</option>`).join("");
   buildCheckList(elements.applicantOptions, applicantOptions, "applicant");
   buildCheckList(elements.topicOptions, topicOptions, "topic");

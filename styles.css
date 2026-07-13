@@ -269,8 +269,8 @@ fieldset { margin: 0; padding: 0; border: 0; }
 }
 
 .mode-tabs button {
-  min-width: 86px;
-  padding: 8px 12px;
+  min-width: 112px;
+  padding: 8px 10px;
   border: 0;
   border-right: 1px solid var(--rerc-green);
   background: var(--paper);

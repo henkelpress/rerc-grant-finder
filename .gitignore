@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+grant-writer-master/build/
+grant-writer-master/build-cache/
+grant-writer-master/dist/
+grant-writer-master/models/
+grant-writer-master/runtime/
+*.gguf
+*.log
+*.pid
