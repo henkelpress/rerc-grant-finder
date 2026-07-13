@@ -7,11 +7,13 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_JS = ROOT / "data.js"
 TIMEOUT_SECONDS = 20
 MAX_WORKERS = 12
+MANUAL_REVIEW_HOSTS = {"oedc.wvu.edu"}
 
 
 def load_urls() -> list[str]:
@@ -65,7 +67,10 @@ def probe(url: str) -> dict:
 
 def is_hard_failure(item: dict) -> bool:
     status = item.get("status")
-    return isinstance(status, int) and status not in {403} and status >= 400
+    host = urlparse(item.get("url", "")).netloc.lower()
+    if host in MANUAL_REVIEW_HOSTS:
+        return False
+    return isinstance(status, int) and status in {404, 410}
 
 
 def needs_manual_review(item: dict) -> bool:
@@ -117,7 +122,7 @@ def main() -> int:
             indent=2,
         )
     )
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
