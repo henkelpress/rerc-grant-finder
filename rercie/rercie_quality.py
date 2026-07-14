@@ -5,7 +5,7 @@ import re
 import rercie_core as app
 
 
-app.APP_VERSION = "0.3.3"
+app.APP_VERSION = "0.3.4"
 app.SYSTEM_PROMPT = """You are RERCie, a careful grant-writing assistant for rural communities.
 
 Treat the supplied project text, funding record, verified public profile, and local reference files as the complete evidence boundary. A fact is supported only when it appears explicitly in that evidence. Do not use general knowledge to describe the community or funding program. Never create a number, date, amount, percentage, distance, timeline, study, survey, current condition, eligibility rule, partner, commitment, or budget allocation. Use proposed or intended language for future benefits. Write a document, not a conversation. Begin with the project title and use the exact requested Markdown headings. Mark missing local facts as [add local fact]. Mark unconfirmed funding rules as [check official source]. A person must review the draft before submission."""
@@ -44,7 +44,12 @@ def normalize_model_draft(draft: str, title: str) -> str:
     if not re.match(r"(?m)^#\s+", text):
         text = f"# {title or '[add project title]'}\n\n{text}"
     if "[check official source]" not in text.lower():
-        text += "\n\n## Required Official-Source Checks\n\n- [check official source] Confirm applicant eligibility.\n- [check official source] Confirm the current deadline, award size, match, allowed work, and required attachments."
+        source_heading = "## Source and Eligibility Checks"
+        source_check = "- [check official source] Confirm applicant eligibility, the current deadline, award size, match, allowed work, and required attachments."
+        if source_heading in text:
+            text = text.replace(source_heading, f"{source_heading}\n\n{source_check}", 1)
+        else:
+            text += f"\n\n{source_heading}\n\n{source_check}"
     if "[add local fact]" not in text.lower():
         text += "\n\n- [add local fact] Replace any unverified local claim with a checked community fact."
     return text.strip()
@@ -52,7 +57,7 @@ def normalize_model_draft(draft: str, title: str) -> str:
 
 def build_draft(payload):
     result = _build_draft(payload)
-    if str(payload.get("provider") or "local").lower() in {"local", "api"} and not result.get("warnings"):
+    if str(payload.get("provider") or "local").lower() == "local" and not result.get("warnings"):
         result["draft"] = normalize_model_draft(result.get("draft", ""), str(payload.get("projectTitle") or "Grant Draft"))
     return result
 

@@ -9,7 +9,7 @@ Set-StrictMode -Version Latest
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $Here
 Set-Location -LiteralPath $Here
-$Version = "0.3.3"
+$Version = "0.3.4"
 $RuntimeName = "llama-b9987-bin-win-cpu-x64.zip"
 $RuntimeUrl = "https://github.com/ggerganov/llama.cpp/releases/download/b9987/$RuntimeName"
 $RuntimeSha256 = "6847d537b3cd5099051989d08c7eca4296e7a0f1755dbf0540c82e37768320f3"
@@ -45,6 +45,8 @@ if ($LASTEXITCODE -eq 0 -or $bannedModelReferences.Count -gt 0) { throw "The rel
 if ($LASTEXITCODE -gt 1) { throw "The prohibited-model source scan failed." }
 python .\rercie.py --smoke
 if ($LASTEXITCODE -ne 0) { throw "The RERCie source smoke test failed." }
+python ..\scripts\qa_release.py
+if ($LASTEXITCODE -ne 0) { throw "The executable RERCie release QA failed." }
 
 $dirty = @(& git -C $RepoRoot status --porcelain)
 if ($LASTEXITCODE -ne 0) { throw "Git status failed." }

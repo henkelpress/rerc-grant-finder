@@ -20,7 +20,7 @@ namespace RERCieDesktop
 {
     internal static class Config
     {
-        public const string Version = "0.3.3";
+        public const string Version = "0.3.4";
         public const string AppUrl = "http://127.0.0.1:8789";
         public const string AppHealthUrl = AppUrl + "/health";
         public const string ModelHealthUrl = "http://127.0.0.1:8788/health";
@@ -463,10 +463,10 @@ namespace RERCieDesktop
             Controls.Add(modelNote);
 
             LinkLabel modelLink = MakeLink("View the model page", 260, 280, 150, Config.ModelPageUrl);
-            LinkLabel licenseLink = MakeLink("Read the Apache license", 418, 280, 170, Config.ModelLicenseUrl);
+            LinkLabel licenseLink = MakeLink("Read the Gemma Terms", 418, 280, 170, Config.ModelLicenseUrl);
             Controls.Add(modelLink); Controls.Add(licenseLink);
 
-            Label licenseNote = MakeLabel("The model is open under Apache License 2.0.", 260, 310, 410, 36, 9.5f, false, Color.FromArgb(70, 80, 75));
+            Label licenseNote = MakeLabel("Use of the model is governed by the Gemma Terms.", 260, 310, 410, 36, 9.5f, false, Color.FromArgb(70, 80, 75));
             Controls.Add(licenseNote);
 
 

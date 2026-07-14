@@ -33,6 +33,18 @@ async function main() {
     checks.resourceMatches = Number((await page.locator("#matchCount").innerText()).replace(/,/g, ""));
     checks.resourceCardsOnly = await page.locator(".result-card:not(.resource)").count() === 0;
     await page.locator('[data-mode="Both"]').click();
+    await page.locator("#resetButton").click();
+    const unfilteredMatches = Number((await page.locator("#matchCount").innerText()).replace(/,/g, ""));
+    await page.selectOption("#stageSelect", { label: "Construction" });
+    checks.constructionMatches = Number((await page.locator("#matchCount").innerText()).replace(/,/g, ""));
+    checks.stageActuallyFilters = checks.constructionMatches > 0 && checks.constructionMatches < unfilteredMatches;
+    await page.locator("#resetButton").click();
+    await page.getByLabel("Local government").check();
+    checks.localGovernmentMatches = Number((await page.locator("#matchCount").innerText()).replace(/,/g, ""));
+    checks.applicantEligibilityFiltered = await page.locator(".result-card .details").evaluateAll((nodes) => nodes.filter((_, index) => index % 2 === 0).every((node) => /local government|municipal|county|city|town|village/i.test(node.textContent)));
+    await page.locator("#resetButton").click();
+    await page.selectOption("#stateSelect", { label: "American Samoa" });
+    checks.territoryNationalCaution = await page.locator(".result-card").filter({ hasText: "confirm territory eligibility" }).count() > 0;
 
     const csvEvent = page.waitForEvent("download");
     await page.locator("#exportCsv").click();
@@ -70,10 +82,12 @@ async function main() {
     await mobile.close();
 
     const failures = [];
-    if (checks.counts.funding !== "655" || checks.counts.resources !== "65") failures.push("counts");
+    if (checks.counts.funding !== "659" || checks.counts.resources !== "61") failures.push("counts");
     if (!checks.desktopNoOverflow || !checks.mobileNoOverflow) failures.push("overflow");
     if (checks.duplicateIds.length) failures.push("duplicate_ids");
     if (checks.puertoRicoMatches < 1 || checks.resourceMatches < 1 || !checks.resourceCardsOnly) failures.push("filtering");
+    if (!checks.stageActuallyFilters || checks.localGovernmentMatches < 1 || !checks.applicantEligibilityFiltered) failures.push("eligibility_controls");
+    if (!checks.territoryNationalCaution) failures.push("territory_caution");
     if (downloads.csv.bytes < 100 || downloads.csv.rows < 1) failures.push("csv_export");
     if (downloads.word.bytes < 1000 || downloads.word.filename !== "RERC-community-appendix.docx" || !downloads.word.zipSignature) failures.push("word_export");
     if (checks.fullDownloads.docx !== 200 || checks.fullDownloads.xlsx !== 200) failures.push("downloads");

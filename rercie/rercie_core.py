@@ -19,7 +19,7 @@ from typing import Any
 from xml.sax.saxutils import escape
 
 
-APP_VERSION = "0.3.3"
+APP_VERSION = "0.3.4"
 APP_DIR = Path(os.environ.get("RERCIE_APP_ROOT") or (Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent))
 ASSET_DIR = APP_DIR / "assets"
 if not ASSET_DIR.is_dir() and not getattr(sys, "frozen", False):
@@ -341,19 +341,6 @@ def call_local_writer(prompt: str, model: str) -> str:
     return choices[0].get("message", {}).get("content", "").strip() if choices else ""
 
 
-def call_openai_compatible(prompt: str, endpoint: str, api_key: str, model: str) -> str:
-    if not endpoint or not api_key or not model:
-        raise ValueError("Endpoint, API key, and model are required for online API mode.")
-    payload = {
-        "model": model,
-        "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
-        "temperature": 0.2,
-    }
-    data = request_json(endpoint, payload=payload, headers={"Authorization": f"Bearer {api_key}"}, timeout=300)
-    choices = data.get("choices") or []
-    return choices[0].get("message", {}).get("content", "").strip() if choices else ""
-
-
 def _funding_record_text(value: Any) -> str:
     raw = str(value or "").strip()
     if not raw:
@@ -419,7 +406,7 @@ Use the final application to explain the size and effect of this need with check
 
 ## Proposed Work
 
-The current concept is based on the project summary and the confirmed notes below.{notes_block}
+The current concept is based on the project summary and the community-supplied notes below.{notes_block}
 
 Before submission, turn this concept into a confirmed scope with clear tasks, locations, responsible parties, approvals, deliverables, and measures of success.
 
@@ -480,6 +467,10 @@ def _number_tokens(text: str) -> set[str]:
     return tokens
 
 
+def _word_tokens(text: str) -> set[str]:
+    return {token.lower() for token in re.findall(r"[A-Za-z][A-Za-z'-]{2,}", text or "")}
+
+
 def grounding_issues(draft: str, payload: dict[str, Any], public_profile: dict[str, str]) -> list[str]:
     evidence_parts = [
         str(payload.get("community") or ""), str(payload.get("state") or ""),
@@ -494,20 +485,28 @@ def grounding_issues(draft: str, payload: dict[str, Any], public_profile: dict[s
     draft_without_list_numbers = re.sub(r"(?m)^\s*\d+[.)]\s+", "", draft or "")
     unexpected_numbers = sorted(_number_tokens(draft_without_list_numbers) - allowed_numbers)
     issues = [f"unsupported number: {number}" for number in unexpected_numbers]
-
-    suspicious_patterns = (
-        r"\b(?:study|survey|poll)\b",
-        r"\b(?:currently|existing|recent growth|has experienced|have experienced)\b",
-        r"\b(?:traffic|congestion|accident|revenue)\b",
-        r"\b(?:ada standards?|permit|request for proposals?|rfp)\b",
-        r"\b(?:department|commission|planning and zoning|town council)\b",
-        r"\b(?:maple street|main street|historic district)\b",
-    )
-    for pattern in suspicious_patterns:
-        for match in re.finditer(pattern, draft or "", re.IGNORECASE):
-            phrase = match.group(0).lower()
-            if phrase not in evidence_lower:
-                issues.append(f"unsupported detail: {phrase}")
+    safe_scaffold = deterministic_scaffold(payload, public_profile)
+    if re.sub(r"\s+", " ", draft or "").strip() != re.sub(r"\s+", " ", safe_scaffold).strip():
+        allowed_words = _word_tokens(safe_scaffold)
+        novel_words = sorted(_word_tokens(draft or "") - allowed_words)
+        if novel_words:
+            issues.append("unsupported wording: " + ", ".join(novel_words[:12]))
+        suspicious_patterns = (
+            r"\b(?:study|survey|poll)\b",
+            r"\b(?:currently|existing|recent growth|has experienced|have experienced)\b",
+            r"\b(?:traffic|congestion|accident|revenue)\b",
+            r"\b(?:ada standards?|request for proposals?|rfp)\b",
+            r"\b(?:department|commission|planning and zoning|town council)\b",
+            r"\b(?:maple street|main street|historic district)\b",
+            r"\b(?:acquir\w*|purchas\w*|consult\w*|hir\w*|contract\w*|approval\w*|permit\w*)\b",
+            r"\b(?:community|resident|public) support\b",
+            r"\b(?:has|have|will) (?:secured|committed|approved|funded)\b",
+        )
+        for pattern in suspicious_patterns:
+            for match in re.finditer(pattern, draft or "", re.IGNORECASE):
+                phrase = match.group(0).lower()
+                if phrase not in evidence_lower:
+                    issues.append(f"unsupported detail: {phrase}")
     return sorted(set(issues))
 
 def build_draft(payload: dict[str, Any]) -> dict[str, Any]:
@@ -521,38 +520,26 @@ def build_draft(payload: dict[str, Any]) -> dict[str, Any]:
         profile_lookup = {"profile": {}, "message": "Community lookup was turned off.", "status": "skipped"}
     public_profile = profile_lookup["profile"]
     provider = str(payload.get("provider") or "local").lower()
-    # Online API mode never reads or sends the private local_knowledge folder.
-    local_knowledge = "" if provider == "api" else load_local_knowledge()
+    if provider not in {"local", "fallback"}:
+        provider = "local"
+    local_knowledge = load_local_knowledge()
     prompt = compose_prompt(payload, public_profile, local_knowledge)
-    model = str(payload.get("model") or DEFAULT_MODEL)
+    model = DEFAULT_MODEL
     warnings: list[str] = []
     try:
-        if provider == "local":
-            draft = call_local_writer(prompt, model)
-        elif provider == "api":
-            draft = call_openai_compatible(prompt, str(payload.get("apiEndpoint") or ""), str(payload.get("apiKey") or ""), str(payload.get("apiModel") or ""))
-        else:
-            draft = deterministic_scaffold(payload, public_profile)
+        draft = call_local_writer(prompt, model) if provider == "local" else deterministic_scaffold(payload, public_profile)
     except Exception:
-        label = "The local writer" if provider == "local" else "The online writer"
-        warnings.append(f"{label} could not finish, so RERCie made a fill-in outline instead.")
+        warnings.append("The local Gemma writer could not finish, so RERCie made a fill-in outline instead.")
         draft = deterministic_scaffold(payload, public_profile)
     if not draft.strip():
         warnings.append("RERCie could not make a full draft, so it made a fill-in outline instead.")
         draft = deterministic_scaffold(payload, public_profile)
     return {
-        "draft": draft,
-        "provider": provider,
-        "model": model,
-        "publicProfile": public_profile,
-        "profileMessage": profile_lookup["message"],
-        "profileStatus": profile_lookup["status"],
-        "localKnowledgeChars": len(local_knowledge),
-        "warnings": warnings,
-        "safetyNotice": "",
+        "draft": draft, "provider": provider, "model": model, "publicProfile": public_profile,
+        "profileMessage": profile_lookup["message"], "profileStatus": profile_lookup["status"],
+        "localKnowledgeChars": len(local_knowledge), "warnings": warnings, "safetyNotice": "",
         "generatedAt": int(time.time()),
     }
-
 
 def _paragraph_xml(text: str, style: str | None = None) -> str:
     properties = f'<w:pPr><w:pStyle w:val="{style}"/></w:pPr>' if style else ""
@@ -660,7 +647,7 @@ HTML_PAGE = r'''<!doctype html>
     <div class="welcome"><div><h1>Meet RERCie</h1><p>RERCie helps you turn a grant match and your project notes into a first draft. Check every fact before you apply.</p></div><img class="mascot" src="/assets/rercie-otter.jpg" alt="RERCie, a river otter holding a field notebook"></div>
 
   </header>
-  <div class="privacy"><strong>Private by default:</strong> local writing stays on this computer. Census and catalog lookups use public websites. Online API mode sends typed or uploaded project text, selected funding details, and any public Census profile to the provider you choose. It does not read or send files from <code>local_knowledge</code>.</div>
+  <div class="privacy"><strong>Private by default:</strong> Gemma writing and local reference files stay on this computer. Census and catalog lookups use public websites.</div>
   <div class="notice"><strong>Keep in mind:</strong> RERCie is a community-built grant-writing guide. It is not an EPA grant program. It does not decide who can apply or submit an application for you.</div>
   <main>
     <section class="panel">
@@ -684,14 +671,8 @@ HTML_PAGE = r'''<!doctype html>
     </section>
     <section class="panel">
       <div class="engine">
-        <div><label for="provider">Writing method</label><select id="provider"><option value="local">Local writing model</option><option value="fallback">Structured outline only</option><option value="api">Online API</option></select></div>
+        <div><label for="provider">Writing method</label><select id="provider"><option value="local">Local Gemma writer</option><option value="fallback">Structured outline only</option></select></div>
         <span id="runtime" class="runtime">Checking local writer...</span>
-      </div>
-      <div id="advanced" class="advanced">
-        <p class="section-note"><strong>Online privacy:</strong> this sends the form text, uploaded text, selected funding details, and any public Census profile to the provider. Files in <code>local_knowledge</code> stay on this computer.</p>
-        <label for="apiEndpoint">API endpoint</label><input id="apiEndpoint" value="https://api.openai.com/v1/chat/completions">
-        <label for="apiModel">API model</label><input id="apiModel" placeholder="Provider model name">
-        <label for="apiKey">API key</label><input id="apiKey" type="password" autocomplete="off" placeholder="Used for this request only">
       </div>
       <div class="actions">
         <button id="draftButton" class="secondary" type="button">Create first draft</button>
@@ -717,18 +698,17 @@ HTML_PAGE = r'''<!doctype html>
     function apiFetch(url,options={}){ const headers=new Headers(options.headers||{}); headers.set("X-RERCie-Token",sessionToken); return fetch(url,{...options,headers}); }
     function setStatus(message,warning=false){ status.textContent=message; status.className=warning?"status warning":"status"; }
     let workingTimer=0;
-    function startWorking(){ const box=document.getElementById("working"); const label=document.getElementById("workingLabel"); const clock=document.getElementById("workingTime"); const started=Date.now(); box.hidden=false; const tick=()=>{ const elapsed=Math.floor((Date.now()-started)/1000); clock.textContent=elapsed+" seconds"; label.textContent=elapsed<6?"Looking up community facts...":elapsed<16?"Reading the project details...":"RERCie is drafting the narrative..."; }; tick(); workingTimer=window.setInterval(tick,1000); }
+    function startWorking(){ const box=document.getElementById("working"); const label=document.getElementById("workingLabel"); const clock=document.getElementById("workingTime"); const started=Date.now(); box.hidden=false; label.textContent="RERCie is generating a draft with local Gemma..."; const tick=()=>{ const elapsed=Math.floor((Date.now()-started)/1000); clock.textContent=elapsed+" seconds"; }; tick(); workingTimer=window.setInterval(tick,1000); }
     function stopWorking(){ document.getElementById("working").hidden=true; if(workingTimer){window.clearInterval(workingTimer);workingTimer=0;} }
     function formatProfileValue(key,value){ if((key==="population"||key==="median_household_income")&&/^\d+$/.test(String(value))){ const number=Number(value).toLocaleString(); return key==="median_household_income"?"$"+number:number; } return String(value); }
     function renderProfile(profile,message,lookupStatus){ const box=document.getElementById("communityProfile"); box.replaceChildren(); box.hidden=false; const heading=document.createElement("strong"); heading.textContent=profile&&profile.place?profile.place:"Community facts"; box.appendChild(heading); if(!profile||!Object.keys(profile).length){ const note=document.createElement("span"); note.textContent=message||"No community facts were found."; box.appendChild(note); if(lookupStatus==="key_required"){document.querySelector(".lookup-help").open=true;} return; } const labels={population:"Population",median_age:"Median age",median_household_income:"Median household income",poverty_rate_percent:"People below the poverty line",geography_type:"Geography used"}; const list=document.createElement("ul"); Object.keys(labels).forEach((key)=>{ if(!profile[key])return; const item=document.createElement("li"); let value=formatProfileValue(key,profile[key]); if(key==="median_age")value+=" years"; if(key==="poverty_rate_percent")value+="%"; item.textContent=labels[key]+": "+value; list.appendChild(item); }); box.appendChild(list); const source=document.createElement(profile.source_url?"a":"span"); source.textContent=profile.source||"U.S. Census Bureau"; if(profile.source_url){source.href=profile.source_url;source.target="_blank";source.rel="noopener";} box.appendChild(source); if(profile.coverage_note){ const coverage=document.createElement("p"); coverage.textContent=profile.coverage_note; box.appendChild(coverage); } }
     async function lookupCommunityFacts(){ const button=document.getElementById("lookupCommunity"); button.disabled=true; setStatus("Looking up community facts..."); try{ const body={community:document.getElementById("community").value,state:stateSelect.value,censusApiKey:document.getElementById("censusApiKey").value}; const response=await apiFetch("/api/community-profile",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); const data=await response.json(); if(!response.ok)throw new Error(data.error||"Lookup failed."); renderProfile(data.profile,data.message,data.status); setStatus(data.message,data.status!=="found"); }catch(error){renderProfile({},"Community facts could not be reached right now.","unavailable");setStatus("Community lookup failed: "+error.message,true);}finally{button.disabled=false;} }
-    function collectPayload(){ return {community:document.getElementById("community").value,state:stateSelect.value,projectTitle:document.getElementById("projectTitle").value,projectSummary:document.getElementById("projectSummary").value,selectedGrant:document.getElementById("selectedGrant").value,matchCapacity:document.getElementById("matchCapacity").value,sourceNotes:document.getElementById("sourceNotes").value,projectNotes:document.getElementById("projectNotes").value,usePublicData:document.getElementById("usePublicData").checked,provider:document.getElementById("provider").value,model:"gemma-3-1b-it-Q4_K_M.gguf",apiEndpoint:document.getElementById("apiEndpoint").value,apiModel:document.getElementById("apiModel").value,apiKey:document.getElementById("apiKey").value,censusApiKey:document.getElementById("censusApiKey").value}; }
+    function collectPayload(){ return {community:document.getElementById("community").value,state:stateSelect.value,projectTitle:document.getElementById("projectTitle").value,projectSummary:document.getElementById("projectSummary").value,selectedGrant:document.getElementById("selectedGrant").value,matchCapacity:document.getElementById("matchCapacity").value,sourceNotes:document.getElementById("sourceNotes").value,projectNotes:document.getElementById("projectNotes").value,usePublicData:document.getElementById("usePublicData").checked,provider:document.getElementById("provider").value,model:"gemma-3-1b-it-Q4_K_M.gguf",censusApiKey:document.getElementById("censusApiKey").value}; }
     async function checkRuntime(){ const badge=document.getElementById("runtime"); try{ const response=await apiFetch("/api/runtime"); const data=await response.json(); badge.textContent=data.ready?"Local model ready":"Local model is starting"; badge.className=data.ready?"runtime":"runtime offline"; }catch{ badge.textContent="Could not check local writer"; badge.className="runtime offline"; } }
     async function loadGrants(){ setStatus("Loading the public funding list..."); const response=await apiFetch("/api/grants"); if(!response.ok) throw new Error((await response.json()).error||"The list could not be loaded."); const data=await response.json(); const select=document.getElementById("grantSelect"); select.innerHTML='<option value="">Choose a funding match</option>'; data.grants.forEach((grant,index)=>{ const option=document.createElement("option"); option.value=String(index); option.textContent=`${grant.title||grant.program||"Untitled"} - ${grant.organization||grant.agency||"Organization not listed"}`; option.dataset.grant=JSON.stringify(grant,null,2); select.appendChild(option); }); setStatus(`Loaded ${data.grants.length} funding options. Updated ${data.updated||"date not listed"}.`); }
     document.getElementById("loadGrants").addEventListener("click",()=>loadGrants().catch((error)=>setStatus(`Could not load funding: ${error.message}`,true)));
     document.getElementById("grantSelect").addEventListener("change",(event)=>{ document.getElementById("selectedGrant").value=event.target.selectedOptions[0]?.dataset?.grant||""; });
     document.getElementById("fileInput").addEventListener("change",async(event)=>{ const parts=[]; for(const file of event.target.files){ if(file.size>2000000){ setStatus(`${file.name} is too large. Use a text file under 2 MB.`,true); continue; } parts.push(`\n--- File: ${file.name} ---\n${await file.text()}`); } const notes=document.getElementById("projectNotes"); notes.value=`${notes.value}\n${parts.join("\n")}`.trim(); if(parts.length) setStatus(`Read ${parts.length} file(s).`); });
-    document.getElementById("provider").addEventListener("change",(event)=>{ document.getElementById("advanced").classList.toggle("visible",event.target.value==="api"); });
     document.getElementById("lookupCommunity").addEventListener("click",lookupCommunityFacts);
     document.getElementById("draftButton").addEventListener("click",async()=>{ const button=document.getElementById("draftButton"); button.disabled=true; startWorking(); setStatus("RERCie is preparing the draft..."); try{ const response=await apiFetch("/api/draft",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(collectPayload())}); const data=await response.json(); if(!response.ok) throw new Error(data.error||"Draft failed."); lastDraft=data.draft; output.textContent=data.draft; renderProfile(data.publicProfile,data.profileMessage,data.profileStatus); const readyMessage=data.localKnowledgeChars?"Draft ready. Local reference files were used.":"Draft ready."; setStatus(data.warnings?.length?data.warnings.join(" "):readyMessage+" "+(data.safetyNotice||"")+" "+(data.profileMessage||""),Boolean(data.warnings?.length)); }catch(error){ setStatus("Draft failed: "+error.message,true); }finally{ stopWorking(); button.disabled=false; } });
     function downloadBlob(blob,filename){ const link=document.createElement("a"); link.href=URL.createObjectURL(blob); link.download=filename; link.click(); setTimeout(()=>URL.revokeObjectURL(link.href),1000); }
@@ -892,6 +872,8 @@ def smoke() -> int:
     assert "CENSUS_KEY_SENTINEL" not in compose_prompt({"projectTitle": "Test"}, sample_profile, "")
     unsafe_draft = "A survey found 70% support and an $85,000 budget."
     assert grounding_issues(unsafe_draft, {"projectSummary": "Improve a trail."}, sample_profile)
+    unsafe_qualitative = "The town will acquire land, hire a consultant, obtain approvals, and has strong community support."
+    assert grounding_issues(unsafe_qualitative, {"projectSummary": "Improve a trail."}, sample_profile)
     safe_scaffold = deterministic_scaffold({"community": "Test", "state": "Virginia", "projectTitle": "Trail", "projectSummary": "Improve a trail."}, sample_profile)
     assert not grounding_issues(safe_scaffold, {"community": "Test", "state": "Virginia", "projectTitle": "Trail", "projectSummary": "Improve a trail."}, sample_profile)
     sample = {"community":"Damascus","state":"Virginia","projectTitle":"Trailhead Wayfinding","projectSummary":"Improve access from downtown to nearby trails.","selectedGrant":"Sample funding record","usePublicData":False,"provider":"fallback"}

@@ -12,6 +12,8 @@ const places = [
   "U.S. Virgin Islands"
 ];
 
+const territoryPlaces = new Set(["American Samoa","Guam","Northern Mariana Islands","Puerto Rico","U.S. Virgin Islands"]);
+
 const applicantOptions = [
   ["local government|municipal|county|city|town|village", "Local government"],
   ["tribe|tribal|native", "Tribe or Native community"],
@@ -58,17 +60,38 @@ function cleanText(value) {
   return String(value ?? "").trim();
 }
 
+function summaryTopic(item) {
+  const topics = cleanText(item.topic_tags)
+    .split(/[;,|]/)
+    .map((topic) => topic.trim().toLowerCase().replace("/", " and "))
+    .filter(Boolean)
+    .slice(0, 2);
+  return topics.length ? topics.join(" and ") : "community projects";
+}
+
 function publicSummary(item) {
   const reviewed = {
+    "RERC-FND-0017": "Helps eligible local governments identify, evaluate, and protect historic properties in Alaska.",
     "RERC-FND-0021": "Develops and repairs recreational trails and trail facilities for motorized and non-motorized use.",
+    "RERC-FND-0024": "Offers potential funding for eligible snowmachine recreation projects in Alaska. Check the current program page for eligible work and cycle details.",
+    "RERC-FND-0274": "Offers potential support for eligible projects connected to the Chesapeake Gateways Network. Check the current program page for applicant and project rules.",
     "RERC-FND-0475": "Supports projects that promote understanding of Japan.",
     "RERC-FND-0541": "Supports smaller transportation projects such as walking and biking facilities, recreational trails, safe routes to school, historic preservation, environmental work, overlooks, and safety studies.",
     "RERC-RES-0077": "Helps communities coordinate housing and services to prevent and end homelessness, rehouse people quickly, connect households with mainstream programs, and support long-term stability."
   };
-  const text = reviewed[item.item_id] || cleanText(item.summary || item.why_it_matters);
-  return text.replace(/^[a-z]/, (letter) => letter.toUpperCase());
+  let text = reviewed[item.item_id] || cleanText(item.summary || item.why_it_matters);
+  const placeholder = !text || text === "-" || text.length < 18 ||
+    /^(potential rerc fit|purpose tags|varies by)/i.test(text) ||
+    (/^for\s/i.test(text) && text.length < 80);
+  if (placeholder) {
+    const topic = summaryTopic(item);
+    text = item.item_type === "Resource"
+      ? `Offers information or technical help related to ${topic}. Check the provider's page for current services and access details.`
+      : `Offers potential funding related to ${topic}. Check the current program page for eligible applicants, activities, and timing.`;
+  }
+  text = text[0].toUpperCase() + text.slice(1);
+  return text.endsWith(".") || text.endsWith("!") || text.endsWith("?") ? text : text + ".";
 }
-
 function matchLabel(score) {
   if (score >= 80) return "High";
   if (score >= 65) return "Medium";
@@ -114,8 +137,8 @@ function scoreItem(item, text, selectedPlace, applicants, topics, selectedStage)
   if (item.status === "Recurring") score += 14;
   if (item.status === "Cycle closed") score -= 18;
   if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) score += 15;
-  if (selectedPlace && isNational(cleanText(item.geography))) score += 8;
-  if (applicants.length && matchesAny(text, applicants)) score += 12;
+  if (selectedPlace && isNational(cleanText(item.geography))) score += territoryPlaces.has(selectedPlace) ? 2 : 8;
+  if (applicants.length && matchesAny(cleanText(item.eligible_users).toLowerCase(), applicants)) score += 12;
   if (topics.length) score += Math.min(18, topics.filter((group) => matchesAny(text, [group])).length * 7);
   if (selectedStage !== "Any step" && text.includes(selectedStage.toLowerCase())) score += 10;
   if (item.summary) score += 3;
@@ -135,8 +158,9 @@ function getMatches() {
     if (!matchesGeography(item, selectedPlace)) return false;
     const text = corpus(item);
     if (keyword && !text.includes(keyword)) return false;
-    if (!matchesAny(text, applicants)) return false;
+    if (!matchesAny(cleanText(item.eligible_users).toLowerCase(), applicants)) return false;
     if (!matchesAny(text, topics)) return false;
+    if (selectedStage !== "Any step" && !cleanText(item.project_stage).toLowerCase().includes(selectedStage.toLowerCase())) return false;
     return true;
   }).map((item) => ({
     ...item,
@@ -154,6 +178,9 @@ function getMatches() {
 }
 
 function renderCard(item) {
+  const selectedPlace = elements.stateSelect.value;
+  const nationalTerritoryListing = territoryPlaces.has(selectedPlace) && isNational(cleanText(item.geography)) && !appliesToPlace(item.geography, selectedPlace);
+  const geography = nationalTerritoryListing ? item.geography + " (confirm territory eligibility)" : item.geography;
   const classes = ["result-card", item.item_type === "Resource" ? "resource" : "funding", item.status === "Cycle closed" ? "closed" : ""].join(" ");
   const timing = item.deadline_or_availability || item.amount_or_cost || "Check current availability";
   return `<article class="${classes}">
@@ -166,7 +193,7 @@ function renderCard(item) {
       <h3>${escapeHtml(item.title)}</h3>
       <p class="organization">${escapeHtml(item.organization)}</p>
       <p class="summary">${escapeHtml(publicSummary(item))}</p>
-      <p class="details"><strong>Where:</strong> ${escapeHtml(item.geography)} &nbsp; <strong>Who:</strong> ${escapeHtml(item.eligible_users || "Eligibility varies")}</p>
+      <p class="details"><strong>Where:</strong> ${escapeHtml(geography)} &nbsp; <strong>Who:</strong> ${escapeHtml(item.eligible_users || "Eligibility varies")}</p>
       <p class="details"><strong>Timing or amount:</strong> ${escapeHtml(timing)} &nbsp; <strong>Checked:</strong> ${escapeHtml(item.last_checked)}</p>
     </div>
     <div class="score" aria-label="Match level: ${matchLabel(item.score)}"><strong>${matchLabel(item.score)}</strong><span>match level</span></div>

@@ -6,7 +6,7 @@ import rercie_quality as quality
 
 
 app = quality.app
-app.APP_VERSION = "0.3.3"
+app.APP_VERSION = "0.3.4"
 _build_draft = app.build_draft
 
 
@@ -14,7 +14,6 @@ def normalize_headings(text: str) -> str:
     sections = (
         "Fit Summary", "Project Need", "Community Context", "Proposed Work", "Community Benefit",
         "Work Plan", "Budget and Match Notes", "Source and Eligibility Checks", "Missing Details",
-        "Required Official-Source Checks",
     )
     normalized = text
     for section in sections:
@@ -91,7 +90,7 @@ def apply_evidence_controls(text: str, payload, public_profile) -> str:
 def build_draft(payload):
     result = _build_draft(payload)
     provider = str(payload.get("provider") or "local").lower()
-    if provider in {"local", "api"} and not result.get("warnings"):
+    if provider == "local" and not result.get("warnings"):
         public_profile = result.get("publicProfile") or {}
         issues = app.grounding_issues(result.get("draft", ""), payload, public_profile)
         if issues:

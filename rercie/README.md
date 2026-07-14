@@ -29,7 +29,7 @@ No command line is needed. Open RERCie from the Start Menu. The launcher can ope
 
 ## Privacy
 
-Local writing stays on this computer. The public funding lookup and optional Census lookup use public websites. The Census Bureau requires a free API key for community facts; RERCie can read `CENSUS_API_KEY` from this computer or use a key pasted into the friendly lookup field for that session. Online API mode sends typed or uploaded project text, selected funding details, and any public Census profile to the API provider selected by the user. It does not send the Census key or read files from `local_knowledge`. Keys typed into RERCie are not saved by the app.
+Gemma writing and files in `local_knowledge` stay on this computer. The public funding lookup and optional Census lookup use public websites. The Census Bureau requires a free API key for community facts; RERCie can read `CENSUS_API_KEY` from this computer or use a key pasted into the friendly lookup field for that session. The Census key is not sent to Gemma and is not saved by RERCie.
 
 Do not add private files to a public copy of this project. Local reference files belong in `local_knowledge`.
 
