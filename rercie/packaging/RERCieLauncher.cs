@@ -5,6 +5,7 @@ using System.Drawing;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -19,18 +20,18 @@ namespace RERCieDesktop
 {
     internal static class Config
     {
-        public const string Version = "0.3.1";
+        public const string Version = "0.3.2";
         public const string AppUrl = "http://127.0.0.1:8789";
         public const string AppHealthUrl = AppUrl + "/health";
         public const string ModelHealthUrl = "http://127.0.0.1:8788/health";
         public const string ModelListUrl = "http://127.0.0.1:8788/v1/models";
-        public const string ModelName = "qwen2.5-1.5b-instruct-q4_k_m.gguf";
-        public const string ModelUrl = "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf?download=true";
-        public const long ModelBytes = 1117320736L;
-        public const string ModelSha256 = "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e";
+        public const string ModelName = "gemma-3-1b-it-Q4_K_M.gguf";
+        public const string ModelUrl = "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q4_K_M.gguf?download=true";
+        public const long ModelBytes = 806058240L;
+        public const string ModelSha256 = "8ccc5cd1f1b3602548715ae25a66ed73fd5dc68a210412eea643eb20eb75a135";
         public const string VcRuntimeUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe";
-        public const string ModelPageUrl = "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF";
-        public const string ModelLicenseUrl = "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/blob/main/LICENSE";
+        public const string ModelPageUrl = "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF";
+        public const string ModelLicenseUrl = "https://ai.google.dev/gemma/terms";
     }
 
     internal sealed class IntegrityEntry
@@ -274,31 +275,113 @@ namespace RERCieDesktop
 
         public static async Task DownloadAsync(string url, string destination, Action<long, long> progress)
         {
+            bool isModelDownload = string.Equals(url, Config.ModelUrl, StringComparison.OrdinalIgnoreCase);
+            string downloadName = isModelDownload ? "Google Gemma" : "the required Microsoft Windows component";
             string partial = destination + ".partial";
             Directory.CreateDirectory(Path.GetDirectoryName(destination));
-            if (File.Exists(partial)) File.Delete(partial);
-            using (HttpClientHandler handler = new HttpClientHandler())
-            using (HttpClient client = new HttpClient(handler))
-            using (HttpResponseMessage response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead))
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+            Exception lastError = null;
+            for (int attempt = 1; attempt <= 4; attempt++)
             {
-                response.EnsureSuccessStatusCode();
-                long total = response.Content.Headers.ContentLength.GetValueOrDefault();
-                using (Stream input = await response.Content.ReadAsStreamAsync())
-                using (FileStream output = new FileStream(partial, FileMode.CreateNew, FileAccess.Write, FileShare.None, 131072, true))
+                try
                 {
-                    byte[] buffer = new byte[131072];
-                    long done = 0;
-                    int read;
-                    while ((read = await input.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                    long existing = File.Exists(partial) ? new FileInfo(partial).Length : 0L;
+                    if (existing < 0 || (isModelDownload && existing > Config.ModelBytes))
                     {
-                        await output.WriteAsync(buffer, 0, read);
-                        done += read;
-                        if (progress != null) progress(done, total);
+                        File.Delete(partial);
+                        existing = 0L;
+                    }
+                    using (HttpClientHandler handler = new HttpClientHandler())
+                    {
+                        handler.AllowAutoRedirect = true;
+                        handler.MaxAutomaticRedirections = 10;
+                        handler.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+                        handler.Proxy = WebRequest.DefaultWebProxy;
+                        if (handler.Proxy != null) handler.Proxy.Credentials = CredentialCache.DefaultCredentials;
+                        using (HttpClient client = new HttpClient(handler))
+                        using (HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url))
+                        {
+                            client.Timeout = Timeout.InfiniteTimeSpan;
+                            request.Headers.UserAgent.ParseAdd("RERCie/" + Config.Version + " (Windows; local grant-writing guide)");
+                            request.Headers.Accept.ParseAdd("application/octet-stream");
+                            if (existing > 0) request.Headers.Range = new RangeHeaderValue(existing, null);
+                            using (HttpResponseMessage response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead))
+                            {
+                                if (response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable)
+                                {
+                                    File.Delete(partial);
+                                    throw new IOException("The saved partial download could not be resumed.");
+                                }
+                                response.EnsureSuccessStatusCode();
+                                bool resumed = existing > 0 && response.StatusCode == HttpStatusCode.PartialContent;
+                                long offset = resumed ? existing : 0L;
+                                long contentLength = response.Content.Headers.ContentLength.GetValueOrDefault();
+                                long total = contentLength > 0 ? offset + contentLength : (isModelDownload ? Config.ModelBytes : 0L);
+                                FileMode mode = resumed ? FileMode.Append : FileMode.Create;
+                                using (Stream input = await response.Content.ReadAsStreamAsync())
+                                using (FileStream output = new FileStream(partial, mode, FileAccess.Write, FileShare.None, 131072, true))
+                                {
+                                    byte[] buffer = new byte[131072];
+                                    long done = offset;
+                                    if (progress != null) progress(done, total);
+                                    int read;
+                                    while ((read = await input.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                                    {
+                                        await output.WriteAsync(buffer, 0, read);
+                                        done += read;
+                                        if (progress != null) progress(done, total);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (File.Exists(destination)) File.Delete(destination);
+                    File.Move(partial, destination);
+                    return;
+                }
+                catch (Exception error)
+                {
+                    lastError = error;
+                }
+                if (attempt < 4) await Task.Delay(attempt * 1500);
+            }
+            string detail = lastError == null ? "Unknown network error." : RootMessage(lastError);
+            throw new InvalidOperationException("RERCie could not download " + downloadName + ". Check your internet connection and try again. The saved partial download will resume. Details: " + detail, lastError);
+        }
+
+        private static string RootMessage(Exception error)
+        {
+            Exception current = error;
+            while (current.InnerException != null) current = current.InnerException;
+            return string.IsNullOrWhiteSpace(current.Message) ? error.GetType().Name : current.Message;
+        }
+
+        public static async Task<object> ProbeModelDownloadAsync()
+        {
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+            using (HttpClientHandler handler = new HttpClientHandler())
+            {
+                handler.AllowAutoRedirect = true;
+                handler.MaxAutomaticRedirections = 10;
+                handler.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+                handler.Proxy = WebRequest.DefaultWebProxy;
+                if (handler.Proxy != null) handler.Proxy.Credentials = CredentialCache.DefaultCredentials;
+                using (HttpClient client = new HttpClient(handler))
+                using (HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, Config.ModelUrl))
+                {
+                    client.Timeout = TimeSpan.FromSeconds(45);
+                    request.Headers.UserAgent.ParseAdd("RERCie/" + Config.Version + " (Windows; download probe)");
+                    request.Headers.Accept.ParseAdd("application/octet-stream");
+                    request.Headers.Range = new RangeHeaderValue(0, 1023);
+                    using (HttpResponseMessage response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead))
+                    {
+                        response.EnsureSuccessStatusCode();
+                        byte[] body = await response.Content.ReadAsByteArrayAsync();
+                        if (body.Length != 1024) throw new InvalidOperationException("The Gemma endpoint returned an unexpected probe size.");
+                        return new { status = "PASS", http_status = (int)response.StatusCode, bytes = body.Length, model = Config.ModelName, source = Config.ModelPageUrl };
                     }
                 }
             }
-            if (File.Exists(destination)) File.Delete(destination);
-            File.Move(partial, destination);
         }
     }
 
@@ -376,7 +459,7 @@ namespace RERCieDesktop
             Label boundary = MakeLabel("RERCie is a community-built tool. It is not an EPA grant program. It does not decide who can apply or submit an application for you.", 260, 174, 410, 64, 9.5f, false, Color.FromArgb(70, 80, 75));
             Controls.Add(brand); Controls.Add(title); Controls.Add(intro); Controls.Add(boundary);
 
-            Label modelNote = MakeLabel("The model is about 1.12 GB. It stays on this computer.", 260, 244, 410, 32, 9.5f, true, Color.FromArgb(27, 31, 35));
+            Label modelNote = MakeLabel("Google Gemma is about 0.81 GB. It stays on this computer.", 260, 244, 410, 32, 9.5f, true, Color.FromArgb(27, 31, 35));
             Controls.Add(modelNote);
 
             LinkLabel modelLink = MakeLink("View the model page", 260, 280, 150, Config.ModelPageUrl);
@@ -685,6 +768,21 @@ namespace RERCieDesktop
                 Runtime.StopOwnedProcesses(out failures);
                 return failures == 0 ? 0 : 1;
             }
+            int probeIndex = Array.IndexOf(args, "--probe-download-output");
+            if (probeIndex >= 0 && probeIndex + 1 < args.Length)
+            {
+                try
+                {
+                    object result = Runtime.ProbeModelDownloadAsync().GetAwaiter().GetResult();
+                    File.WriteAllText(args[probeIndex + 1], new JavaScriptSerializer().Serialize(result), new UTF8Encoding(false));
+                    return 0;
+                }
+                catch (Exception error)
+                {
+                    File.WriteAllText(args[probeIndex + 1], "{\"status\":\"FAIL\",\"error\":" + new JavaScriptSerializer().Serialize(error.Message) + "}", new UTF8Encoding(false));
+                    return 1;
+                }
+            }
             int smokeIndex = Array.IndexOf(args, "--smoke-output");
             if (smokeIndex >= 0 && smokeIndex + 1 < args.Length)
             {
@@ -697,6 +795,9 @@ namespace RERCieDesktop
                         app = "RERCie",
                         version = Config.Version,
                         powershell_required = false,
+                        model_name = Config.ModelName,
+                        model_sha256 = Config.ModelSha256,
+                        model_source = Config.ModelPageUrl,
                         model_download_bytes = Config.ModelBytes,
                         launcher = Application.ExecutablePath
                     });

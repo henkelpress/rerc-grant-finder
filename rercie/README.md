@@ -2,7 +2,7 @@
 
 RERCie Local Grant-Writing Guide is an optional app for the Recreation Economy *for* Rural Communities funding and resource explorer.
 
-The Windows installer includes the RERCie app and the pinned `llama.cpp` runtime. It does not require a command line, an account, or an API key. The Qwen model is downloaded only when the person selects **Download and start**.
+The Windows installer includes the RERCie app and the pinned `llama.cpp` runtime. It does not require a command line, an account, or an API key. The Gemma model is downloaded only when the person selects **Download and start**.
 
 ## Install RERCie on Windows
 
@@ -12,7 +12,9 @@ The Windows installer includes the RERCie app and the pinned `llama.cpp` runtime
 4. Select **Meet RERCie** on the last screen.
 5. Select **Download and start**. RERCie downloads the local model and checks it before opening.
 
-The first model download is about 1.12 GB. RERCie checks the model before using it. Later starts use the model already on the computer.
+The first model download is about 0.81 GB. RERCie checks the model before using it. Later starts use the model already on the computer.
+
+When upgrading from version 0.3.1, setup removes the earlier local model folder. The next start downloads only Google Gemma.
 
 No command line is needed. Open RERCie from the Start Menu. The launcher can open or stop the local tool.
 

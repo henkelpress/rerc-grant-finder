@@ -42,7 +42,7 @@ const stages = ["Any step", "Planning", "Early Design", "Engineering", "Construc
 const elements = Object.fromEntries([
   "communityName","stateSelect","keywordSearch","applicantOptions","topicOptions","stageSelect","includeClosed",
   "resetButton","sortSelect","limitSelect","exportWord","exportCsv","communityTitle","communitySummary","matchCount",
-  "fundingMatchCount","resourceMatchCount","geographyLabel","activeFilters","results","fundingCount","resourceCount"
+  "fundingMatchCount","resourceMatchCount","geographyLabel","activeFilters","results","fundingCount","resourceCount","showResources"
 ].map((id) => [id, document.getElementById(id)]));
 
 let mode = "Both";
@@ -189,7 +189,17 @@ function activeFilterSummary() {
 function render() {
   currentMatches = getMatches();
   const limitValue = elements.limitSelect.value;
-  const visible = limitValue === "all" ? currentMatches : currentMatches.slice(0, Number(limitValue));
+  const limit = limitValue === "all" ? Number.MAX_SAFE_INTEGER : Number(limitValue);
+  const fundingResults = currentMatches.filter((item) => item.item_type === "Funding");
+  const resourceResults = currentMatches.filter((item) => item.item_type === "Resource");
+  let visible = currentMatches.slice(0, limit);
+  if (mode === "Both") {
+    let fundingSlots = limitValue === "all" ? fundingResults.length : Math.ceil(limit / 2);
+    let resourceSlots = limitValue === "all" ? resourceResults.length : Math.floor(limit / 2);
+    if (fundingResults.length < fundingSlots) resourceSlots += fundingSlots - fundingResults.length;
+    if (resourceResults.length < resourceSlots) fundingSlots += resourceSlots - resourceResults.length;
+    visible = [...fundingResults.slice(0, fundingSlots), ...resourceResults.slice(0, resourceSlots)];
+  }
   const community = elements.communityName.value.trim();
   const place = elements.stateSelect.value;
   const label = community || place || "rural communities";
@@ -205,9 +215,18 @@ function render() {
   elements.resourceMatchCount.textContent = resourceMatches.toLocaleString();
   elements.geographyLabel.textContent = place || "U.S.";
   elements.activeFilters.textContent = activeFilterSummary();
-  elements.results.innerHTML = visible.length
-    ? visible.map(renderCard).join("")
-    : `<div class="empty-state"><h3>No matches yet</h3><p>Clear one or more answers, or turn on closed rounds to see future options.</p></div>`;
+  if (!visible.length) {
+    elements.results.innerHTML = `<div class="empty-state"><h3>No matches yet</h3><p>Clear one or more answers, or turn on closed rounds to see future options.</p></div>`;
+  } else if (mode === "Both") {
+    const visibleFunding = visible.filter((item) => item.item_type === "Funding");
+    const visibleResources = visible.filter((item) => item.item_type === "Resource");
+    elements.results.innerHTML = [
+      `<section class="result-group funding-group" aria-labelledby="fundingResultsTitle"><div class="result-group-heading"><div><p class="eyebrow">Funding</p><h3 id="fundingResultsTitle">Funding opportunities</h3><p>Grants, loans, tax credits, and other ways to pay for community projects.</p></div><strong>${fundingMatches.toLocaleString()} matches</strong></div>${visibleFunding.length ? visibleFunding.map(renderCard).join("") : `<div class="empty-state"><h3>No funding matches</h3><p>Try fewer answers or a wider search.</p></div>`}</section>`,
+      `<section class="result-group resource-group" aria-labelledby="resourceResultsTitle"><div class="result-group-heading"><div><p class="eyebrow">Resources</p><h3 id="resourceResultsTitle">Tools and technical help</h3><p>Guides, data, training, and hands-on help to plan and carry out the work.</p></div><strong>${resourceMatches.toLocaleString()} matches</strong></div>${visibleResources.length ? visibleResources.map(renderCard).join("") : `<div class="empty-state"><h3>No resource matches</h3><p>Try fewer answers or a wider search.</p></div>`}</section>`
+    ].join("");
+  } else {
+    elements.results.innerHTML = visible.map(renderCard).join("");
+  }
 }
 
 function csvCell(value) {
@@ -392,15 +411,17 @@ function initialize() {
   elements.stageSelect.innerHTML = stages.map((stage) => `<option>${escapeHtml(stage)}</option>`).join("");
   buildCheckList(elements.applicantOptions, applicantOptions, "applicant");
   buildCheckList(elements.topicOptions, topicOptions, "topic");
-  document.querySelectorAll("[data-mode]").forEach((button) => button.addEventListener("click", () => {
-    mode = button.dataset.mode;
+  function chooseMode(nextMode) {
+    mode = nextMode;
     document.querySelectorAll("[data-mode]").forEach((candidate) => {
-      const active = candidate === button;
+      const active = candidate.dataset.mode === mode;
       candidate.classList.toggle("active", active);
       candidate.setAttribute("aria-pressed", String(active));
     });
     render();
-  }));
+  }
+  document.querySelectorAll("[data-mode]").forEach((button) => button.addEventListener("click", () => chooseMode(button.dataset.mode)));
+  elements.showResources.addEventListener("click", () => chooseMode("Resource"));
   document.querySelectorAll("input, select").forEach((control) => control.addEventListener(control.type === "text" || control.type === "search" ? "input" : "change", render));
   elements.resetButton.addEventListener("click", reset);
   elements.exportCsv.addEventListener("click", exportCsv);

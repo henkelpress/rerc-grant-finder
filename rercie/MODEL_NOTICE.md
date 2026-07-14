@@ -1,12 +1,12 @@
 # Local Model Notice
 
-RERCie downloads `qwen2.5-1.5b-instruct-q4_k_m.gguf` directly from the official `Qwen/Qwen2.5-1.5B-Instruct-GGUF` repository on Hugging Face. No account is needed.
+RERCie downloads `gemma-3-1b-it-Q4_K_M.gguf` from the public `ggml-org/gemma-3-1b-it-GGUF` repository on Hugging Face. Gemma is developed by Google.
 
-- Model: Qwen2.5 1.5B Instruct, Q4_K_M GGUF
-- Download size: 1,117,320,736 bytes
-- SHA-256: `6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e`
-- Model page: <https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF>
-- License: Apache License 2.0, included as `licenses/LICENSE-QWEN.txt`
-- Direct download: <https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf?download=true>
+- Model: Google Gemma 3 1B instruction-tuned, Q4_K_M GGUF
+- Download size: 806,058,240 bytes (about 0.81 GB)
+- SHA-256: `8ccc5cd1f1b3602548715ae25a66ed73fd5dc68a210412eea643eb20eb75a135`
+- Model page: <https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF>
+- Gemma Terms: <https://ai.google.dev/gemma/terms>
+- Gemma Prohibited Use Policy: <https://ai.google.dev/gemma/prohibited_use_policy>
 
-The model is not stored in the RERCie installer or this repository. The first-run launcher downloads it only after you select **Download and start**, then verifies the exact size and SHA-256 before use.
+The model is not stored in the RERCie installer or this repository. The first-run launcher downloads it only after you select **Download and start**, then verifies the exact size and SHA-256 before use. An interrupted download is saved and resumes when you try again.

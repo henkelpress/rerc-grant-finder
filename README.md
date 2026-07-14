@@ -31,7 +31,7 @@ RERCie Local Grant-Writing Guide is an optional Windows app. It helps people rev
 - No command-line setup for the person installing it
 - Start Menu shortcut and optional desktop shortcut
 - No account or API key required for local writing
-- First use downloads a verified Qwen 2.5 1.5B model, about 1.12 GB
+- First use downloads a verified Google Gemma 3 1B model, about 0.81 GB
 - Real Word `.docx` and Markdown export
 
 [Download RERCie for Windows](https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Setup.exe)

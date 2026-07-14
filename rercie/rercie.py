@@ -6,7 +6,7 @@ import rercie_quality as quality
 
 
 app = quality.app
-app.APP_VERSION = "0.3.1"
+app.APP_VERSION = "0.3.2"
 _build_draft = app.build_draft
 
 

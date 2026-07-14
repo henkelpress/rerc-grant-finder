@@ -9,7 +9,7 @@ Set-StrictMode -Version Latest
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $Here
 Set-Location -LiteralPath $Here
-$Version = "0.3.1"
+$Version = "0.3.2"
 $RuntimeName = "llama-b9987-bin-win-cpu-x64.zip"
 $RuntimeUrl = "https://github.com/ggerganov/llama.cpp/releases/download/b9987/$RuntimeName"
 $RuntimeSha256 = "6847d537b3cd5099051989d08c7eca4296e7a0f1755dbf0540c82e37768320f3"
@@ -39,6 +39,10 @@ foreach ($checkName in $requiredQaChecks) {
     if (-not $check -or $check.Value.status -ne "PASS") { throw "Required QA check is not PASS: $checkName" }
 }
 
+$bannedModelPattern = ("qw" + "en|qw" + "en2[.]5|LICENSE-" + "QW" + "EN")
+$bannedModelReferences = @(& git -C $RepoRoot grep -I -n -i -E $bannedModelPattern -- README.md index.html rercie)
+if ($LASTEXITCODE -eq 0 -or $bannedModelReferences.Count -gt 0) { throw "The release source contains a prohibited model-family reference: $($bannedModelReferences -join '; ')" }
+if ($LASTEXITCODE -gt 1) { throw "The prohibited-model source scan failed." }
 python .\rercie.py --smoke
 if ($LASTEXITCODE -ne 0) { throw "The RERCie source smoke test failed." }
 
@@ -109,7 +113,7 @@ $PythonLicense = Join-Path $PythonRoot "LICENSE.txt"
 if (-not (Test-Path -LiteralPath $PythonLicense -PathType Leaf)) { throw "The Python license file was not found at $PythonLicense." }
 Copy-Item -LiteralPath $PythonLicense -Destination (Join-Path $PackageRoot "LICENSE-PYTHON.txt")
 [IO.Directory]::CreateDirectory((Join-Path $PackageRoot "licenses")) | Out-Null
-Copy-Item -LiteralPath (Join-Path $Here "licenses\LICENSE-QWEN.txt") -Destination (Join-Path $PackageRoot "licenses\LICENSE-QWEN.txt")
+Copy-Item -LiteralPath (Join-Path $Here "licenses\GEMMA_TERMS.txt") -Destination (Join-Path $PackageRoot "licenses\GEMMA_TERMS.txt")
 curl.exe -L --fail --retry 3 --output (Join-Path $PackageRoot "runtime\llama\LICENSE-llama.cpp") $LicenseUrl
 if ($LASTEXITCODE -ne 0) { throw "The llama.cpp license download failed." }
 
@@ -195,7 +199,17 @@ if ($smokeProcess.ExitCode -ne 0) { throw "The native launcher smoke test failed
 if (-not (Test-Path -LiteralPath $smokePath -PathType Leaf)) { throw "The native launcher smoke report was not created." }
 $smoke = Get-Content -LiteralPath $smokePath -Raw | ConvertFrom-Json
 if ($smoke.status -ne "PASS" -or $smoke.powershell_required -ne $false) { throw "The native launcher smoke report was not valid." }
+if ($smoke.model_name -ne "gemma-3-1b-it-Q4_K_M.gguf" -or $smoke.model_sha256 -ne "8ccc5cd1f1b3602548715ae25a66ed73fd5dc68a210412eea643eb20eb75a135") { throw "The launcher smoke report does not identify the approved Gemma model." }
 
+$downloadProbePath = Join-Path $BuildRoot "launcher-download-probe.json"
+$downloadProbeProcess = Start-Process -FilePath (Join-Path $PackageRoot "RERCie.exe") -ArgumentList @("--probe-download-output", ('"' + $downloadProbePath + '"')) -Wait -PassThru
+if ($downloadProbeProcess.ExitCode -ne 0) { throw "The native launcher could not reach the Gemma download endpoint." }
+if (-not (Test-Path -LiteralPath $downloadProbePath -PathType Leaf)) { throw "The Gemma download probe report was not created." }
+$downloadProbe = Get-Content -LiteralPath $downloadProbePath -Raw | ConvertFrom-Json
+if ($downloadProbe.status -ne "PASS" -or $downloadProbe.http_status -ne 206 -or $downloadProbe.bytes -ne 1024 -or $downloadProbe.model -ne "gemma-3-1b-it-Q4_K_M.gguf") { throw "The Gemma download probe report was not valid." }
+$qa.checks.native_launcher | Add-Member -NotePropertyName download_probe_http_status -NotePropertyValue $downloadProbe.http_status -Force
+$qa.checks.native_launcher | Add-Member -NotePropertyName download_probe_bytes -NotePropertyValue $downloadProbe.bytes -Force
+[IO.File]::WriteAllText($qaPath, ($qa | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
 if (-not (Test-Path -LiteralPath $InnoCompiler -PathType Leaf)) { throw "Inno Setup was not found at $InnoCompiler." }
 if (Test-Path -LiteralPath $InstallerPath) { Remove-Item -LiteralPath $InstallerPath -Force }
 & $InnoCompiler "/DSourceRoot=$PackageRoot" "/DOutputDir=$OutputDirectory" "/DAppVersion=$Version" (Join-Path $Here "packaging\RERCie.iss")

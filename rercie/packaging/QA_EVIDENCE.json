@@ -1,7 +1,7 @@
 {
-    "app_version":  "0.3.1",
+    "app_version":  "0.3.2",
     "status":  "PASS",
-    "tested_date":  "2026-07-13",
+    "tested_date":  "2026-07-14",
     "checks":  {
                    "source_smoke":  {
                                         "status":  "PASS",
@@ -15,7 +15,12 @@
                                            "first_run_notice":  true,
                                            "model_progress_ui":  true,
                                            "verified_process_shutdown":  true,
-                                           "screen_reader_download_milestone_percent":  10
+                                           "screen_reader_download_milestone_percent":  10,
+                                           "resumable_model_download":  true,
+                                           "retry_attempts":  4,
+                                           "infinite_stream_timeout":  true,
+                                           "download_probe_http_status":  206,
+                                           "download_probe_bytes":  1024
                                        },
                    "display_scaling":  {
                                            "status":  "PASS",
@@ -32,7 +37,8 @@
                                             "start_menu_shortcut":  true,
                                             "optional_desktop_shortcut":  true,
                                             "uninstall_entry":  true,
-                                            "isolated_install_completed":  true
+                                            "isolated_install_completed":  true,
+                                            "earlier_model_folder_removed_on_upgrade":  true
                                         },
                    "package_integrity":  {
                                              "status":  "PASS",
@@ -42,14 +48,14 @@
                                          },
                    "live_catalog":  {
                                         "status":  "PASS",
-                                        "total_items":  718,
-                                        "funding_items":  653,
+                                        "total_items":  720,
+                                        "funding_items":  655,
                                         "resource_items":  65,
                                         "territory_filter_checked":  true
                                     },
                    "local_generation":  {
                                             "status":  "PASS",
-                                            "model":  "Qwen2.5 1.5B Instruct Q4_K_M",
+                                            "model":  "Google Gemma 3 1B Instruct Q4_K_M",
                                             "required_sections":  8,
                                             "fact_check_markers":  true
                                         },
@@ -73,19 +79,19 @@
                                                    "full_process_tree_shutdown":  true
                                                },
                    "model":  {
-                                 "name":  "qwen2.5-1.5b-instruct-q4_k_m.gguf",
-                                 "bytes":  1117320736,
-                                 "sha256":  "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
-                                 "source":  "official Qwen Hugging Face repository"
+                                 "name":  "gemma-3-1b-it-Q4_K_M.gguf",
+                                 "bytes":  806058240,
+                                 "sha256":  "8ccc5cd1f1b3602548715ae25a66ed73fd5dc68a210412eea643eb20eb75a135",
+                                 "source":  "Google Gemma model from the public ggml-org Hugging Face repository"
                              },
                    "licensing_and_runtime":  {
                                                  "status":  "PASS",
-                                                 "qwen_apache_license_included":  true,
                                                  "llama_cpp_mit_license_included":  true,
                                                  "full_python_license_included":  true,
                                                  "microsoft_runtime_dlls_redistributed":  false,
                                                  "microsoft_runtime_installer_signature_required":  true,
-                                                 "asset_provenance_included":  true
+                                                 "asset_provenance_included":  true,
+                                                 "gemma_terms_notice_included":  true
                                              }
                },
     "disclosed_limits":  [
@@ -103,6 +109,7 @@
                                   "python rercie.py --smoke",
                                   "python -m py_compile rercie.py rercie_core.py rercie_quality.py",
                                   "RERCie.exe --smoke-output launcher-smoke.json",
+                                  "RERCie.exe --probe-download-output launcher-download-probe.json",
                                   "build_installer.ps1 -AcceptRuntimeDownload"
                               ]
 }
