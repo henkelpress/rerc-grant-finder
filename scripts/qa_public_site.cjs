@@ -60,8 +60,8 @@ async function run() {
       zipSignature: wordBytes[0] === 0x50 && wordBytes[1] === 0x4b,
     };
 
-  const fullDocx = await page.request.get(`${baseUrl}downloads/RERC_Funding_and_Resource_Appendix_2026-07-13.docx`);
-  const fullXlsx = await page.request.get(`${baseUrl}downloads/RERC_Funding_and_Resource_Master_2026-07-13.xlsx`);
+  const fullDocx = await page.request.get(`${baseUrl}downloads/RERC_Funding_and_Resource_Appendix_2026-07-14.docx`);
+  const fullXlsx = await page.request.get(`${baseUrl}downloads/RERC_Funding_and_Resource_Master_2026-07-14.xlsx`);
   checks.fullDownloads = { docx: fullDocx.status(), xlsx: fullXlsx.status() };
   await page.screenshot({ path: path.join(outDir, "desktop.png"), fullPage: true });
   await desktop.close();

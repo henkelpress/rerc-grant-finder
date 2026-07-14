@@ -6,8 +6,8 @@ Live site: <https://henkelpress.github.io/rerc-grant-finder/>
 
 ## Current Catalog
 
-- 718 public items
-- 653 funding options
+- 720 public items
+- 655 funding options
 - 65 guides, tools, data sources, training programs, and other resources
 - Coverage for all 50 states, the District of Columbia, Puerto Rico, American Samoa, Guam, the Northern Mariana Islands, and the U.S. Virgin Islands
 
@@ -42,9 +42,9 @@ The reviewed source is in `rercie/`. Model weights are not stored in this reposi
 
 ## Automated Checks
 
-The `Weekly Source Link Check` workflow checks every unique public link and uploads a source-health report. The `Monthly Federal Opportunity Discovery` workflow searches the public Grants.gov API and uploads a review queue of posted and forecasted opportunities related to rural development, outdoor recreation, trails, tourism, community development, economic development, and technical assistance.
+The `Weekly Source Link Check` workflow checks the catalog maintenance links and uploads a source-health report. The `Monthly Federal Opportunity Discovery` workflow searches the public Grants.gov API and uploads a review queue of posted and forecasted opportunities related to rural development, outdoor recreation, trails, tourism, community development, economic development, and technical assistance.
 
-New opportunities require human review before they enter the public catalog. The discovery workflow does not publish unreviewed records.
+New opportunities and status changes require human review before they enter the public catalog. The discovery workflow does not publish unreviewed records.
 
 ## Publication Boundary
 

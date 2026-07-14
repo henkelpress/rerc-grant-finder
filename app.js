@@ -42,7 +42,7 @@ const stages = ["Any step", "Planning", "Early Design", "Engineering", "Construc
 const elements = Object.fromEntries([
   "communityName","stateSelect","keywordSearch","applicantOptions","topicOptions","stageSelect","includeClosed",
   "resetButton","sortSelect","limitSelect","exportWord","exportCsv","communityTitle","communitySummary","matchCount",
-  "fundingMatchCount","resourceMatchCount","geographyLabel","matchAnnouncement","activeFilters","results","fundingCount","resourceCount"
+  "fundingMatchCount","resourceMatchCount","geographyLabel","activeFilters","results","fundingCount","resourceCount"
 ].map((id) => [id, document.getElementById(id)]));
 
 let mode = "Both";
@@ -70,8 +70,8 @@ function publicSummary(item) {
 }
 
 function matchLabel(score) {
-  if (score >= 80) return "Strong";
-  if (score >= 65) return "Some";
+  if (score >= 80) return "High";
+  if (score >= 65) return "Medium";
   return "Broad";
 }
 
@@ -155,7 +155,7 @@ function getMatches() {
 
 function renderCard(item) {
   const classes = ["result-card", item.item_type === "Resource" ? "resource" : "funding", item.status === "Cycle closed" ? "closed" : ""].join(" ");
-  const timing = item.deadline_or_availability || item.amount_or_cost || "See official page";
+  const timing = item.deadline_or_availability || item.amount_or_cost || "Check current availability";
   return `<article class="${classes}">
     <div>
       <div class="card-kicker">
@@ -163,13 +163,13 @@ function renderCard(item) {
         <span class="pill status">${escapeHtml(item.status)}</span>
         <span>${escapeHtml(item.support_type)}</span>
       </div>
-      <h3><a href="${escapeHtml(item.source_url)}" target="_blank" rel="noopener">${escapeHtml(item.title)}</a></h3>
+      <h3>${escapeHtml(item.title)}</h3>
       <p class="organization">${escapeHtml(item.organization)}</p>
       <p class="summary">${escapeHtml(publicSummary(item))}</p>
-      <p class="details"><strong>Where:</strong> ${escapeHtml(item.geography)} &nbsp; <strong>Who:</strong> ${escapeHtml(item.eligible_users || "See official page")}</p>
+      <p class="details"><strong>Where:</strong> ${escapeHtml(item.geography)} &nbsp; <strong>Who:</strong> ${escapeHtml(item.eligible_users || "Eligibility varies")}</p>
       <p class="details"><strong>Timing or amount:</strong> ${escapeHtml(timing)} &nbsp; <strong>Checked:</strong> ${escapeHtml(item.last_checked)}</p>
     </div>
-    <div class="score" aria-label="${matchLabel(item.score)} match based on your answers"><strong>${matchLabel(item.score)}</strong><span>based on answers</span></div>
+    <div class="score" aria-label="Match level: ${matchLabel(item.score)}"><strong>${matchLabel(item.score)}</strong><span>match level</span></div>
   </article>`;
 }
 
@@ -198,13 +198,12 @@ function render() {
 
   elements.communityTitle.textContent = `${mode === "Both" ? "Funding and resources" : mode === "Funding" ? "Funding" : "Resources"} for ${label}`;
   elements.communitySummary.textContent = currentMatches.length
-    ? `Review the most relevant matches below. Match levels only compare your answers; they do not confirm eligibility. Open each official page before you rely on a deadline or program rule.`
+    ? `Review the most relevant matches below. Match levels compare your answers; they do not confirm eligibility. Check current requirements with the program before you apply or make a decision.`
     : `Try fewer choices or a wider search.`;
   elements.matchCount.textContent = currentMatches.length.toLocaleString();
   elements.fundingMatchCount.textContent = fundingMatches.toLocaleString();
   elements.resourceMatchCount.textContent = resourceMatches.toLocaleString();
   elements.geographyLabel.textContent = place || "U.S.";
-  elements.matchAnnouncement.textContent = `${currentMatches.length.toLocaleString()} matches: ${fundingMatches.toLocaleString()} funding and ${resourceMatches.toLocaleString()} resources for ${place || "the U.S."}.`;
   elements.activeFilters.textContent = activeFilterSummary();
   elements.results.innerHTML = visible.length
     ? visible.map(renderCard).join("")
@@ -228,26 +227,14 @@ function downloadBlob(contents, mimeType, filename) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function filenamePart(value, fallback) {
-  const cleaned = cleanText(value).normalize("NFKD").replace(/[^\w -]/g, "").trim().replace(/\s+/g, "_").slice(0, 60);
-  return cleaned || fallback;
-}
-
-function publicExportFilename(kind, extension) {
-  const community = filenamePart(elements.communityName.value, "Community");
-  const now = new Date();
-  const date = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0"), String(now.getDate()).padStart(2, "0")].join("-");
-  return `RERC_${community}_${kind}_${date}.${extension}`;
-}
-
 function exportCsv() {
-  const headers = ["Item Type","Title","Organization","Status","Geography","Who Can Use It","Project Step","Topics","Type of Help","Timing or Amount","Summary","Official Page"];
+  const headers = ["Item Type","Title","Organization","Status","Geography","Who Can Use It","Project Step","Topics","Type of Help","Timing or Amount","Summary"];
   const lines = [headers.map(csvCell).join(",")];
   currentMatches.forEach((item) => lines.push([
     item.item_type, item.title, item.organization, item.status, item.geography, item.eligible_users, item.project_stage,
-    item.topic_tags, item.support_type, item.deadline_or_availability || item.amount_or_cost, publicSummary(item), item.source_url
+    item.topic_tags, item.support_type, item.deadline_or_availability || item.amount_or_cost, publicSummary(item)
   ].map(csvCell).join(",")));
-  downloadBlob(`\ufeff${lines.join("\r\n")}`, "text/csv;charset=utf-8", publicExportFilename("Funding_and_Resources", "csv"));
+  downloadBlob(`\ufeff${lines.join("\r\n")}`, "text/csv;charset=utf-8", "RERC-community-funding-and-resources.csv");
 }
 
 function xmlEscape(value) {
@@ -271,13 +258,6 @@ function wordRunXml(text, options = {}) {
 function wordParagraphXml(runs, style = "") {
   const properties = style ? '<w:pPr><w:pStyle w:val="' + style + '"/></w:pPr>' : "";
   return "<w:p>" + properties + runs.join("") + "</w:p>";
-}
-
-function wordLinkParagraphXml(url, relationshipId) {
-  return "<w:p>" +
-    wordRunXml("Official page: ", { bold: true }) +
-    '<w:hyperlink r:id="' + relationshipId + '"><w:r><w:rPr><w:color w:val="1B6A8F"/><w:u w:val="single"/></w:rPr><w:t>Open official page</w:t></w:r></w:hyperlink>' +
-    "</w:p>";
 }
 
 async function exportWord() {
@@ -304,7 +284,7 @@ async function exportWord() {
   body.push(wordParagraphXml([wordRunXml(profile)]));
   body.push(wordParagraphXml([
     wordRunXml("RERC is free planning help. It is not a grant program. ", { bold: true }),
-    wordRunXml("Program rules and dates can change. Open the official page before you apply or use a resource.")
+    wordRunXml("Program rules and dates can change. Check current requirements with the program before you apply or use a resource.")
   ], "Notice"));
 
   const addSection = (title, items) => {
@@ -320,12 +300,12 @@ async function exportWord() {
         wordRunXml("Where: ", { bold: true }),
         wordRunXml(item.geography),
         wordRunXml(" | Who: ", { bold: true }),
-        wordRunXml(item.eligible_users || "See official page")
+        wordRunXml(item.eligible_users || "Eligibility varies")
       ]));
-      const relationshipId = "rId" + relationshipNumber;
-      relationshipNumber += 1;
-      relationships.push('<Relationship Id="' + relationshipId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="' + xmlEscape(item.source_url) + '" TargetMode="External"/>');
-      body.push(wordLinkParagraphXml(item.source_url, relationshipId));
+      body.push(wordParagraphXml([
+        wordRunXml("Last checked: ", { bold: true }),
+        wordRunXml(item.last_checked || "Not recorded")
+      ]));
     });
   };
 
@@ -361,16 +341,15 @@ async function exportWord() {
     '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>' +
     "</Relationships>";
   const documentRelationships = '<?xml version="1.0" encoding="UTF-8"?>' +
-    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-    relationships.join("") + "</Relationships>";
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>';
   const now = new Date().toISOString();
   const coreXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
-    "<dc:title>RERC Community Funding and Resources Appendix</dc:title><dc:creator>Recreation Economy for Rural Communities</dc:creator><cp:lastModifiedBy>RERC Funding and Resource Explorer</cp:lastModifiedBy>" +
+    "<dc:title>RERC Community Funding and Resources Appendix</dc:title><dc:creator>Recreation Economy for Rural Communities</dc:creator><cp:lastModifiedBy>RERC Funding and Resource Finder</cp:lastModifiedBy>" +
     '<dcterms:created xsi:type="dcterms:W3CDTF">' + now + '</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">' + now + "</dcterms:modified></cp:coreProperties>";
   const appXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">' +
-    "<Application>RERC Funding and Resource Explorer</Application><AppVersion>1.0</AppVersion></Properties>";
+    "<Application>RERC Funding and Resource Finder</Application><AppVersion>1.0</AppVersion></Properties>";
 
   const zip = new JSZip();
   zip.file("[Content_Types].xml", contentTypes);
@@ -381,7 +360,7 @@ async function exportWord() {
   zip.file("word/styles.xml", stylesXml);
   zip.file("word/_rels/document.xml.rels", documentRelationships);
   const docx = await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
-  downloadBlob(docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", publicExportFilename("Appendix", "docx"));
+  downloadBlob(docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "RERC-community-appendix.docx");
 }
 
 function buildCheckList(container, options, groupName) {
@@ -395,7 +374,7 @@ function reset() {
   elements.stageSelect.value = "Any step";
   elements.includeClosed.checked = false;
   elements.sortSelect.value = "score";
-  elements.limitSelect.value = "15";
+  elements.limitSelect.value = "50";
   document.querySelectorAll(".filters input[type=checkbox]").forEach((input) => { input.checked = false; });
   mode = "Both";
   document.querySelectorAll("[data-mode]").forEach((button) => {

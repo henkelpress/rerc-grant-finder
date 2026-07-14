@@ -53,8 +53,8 @@ async function main() {
       zipSignature: wordBytes[0] === 0x50 && wordBytes[1] === 0x4b,
     };
     checks.fullDownloads = {
-      docx: (await page.request.get(`${baseUrl}downloads/RERC_Funding_and_Resource_Appendix_2026-07-13.docx`)).status(),
-      xlsx: (await page.request.get(`${baseUrl}downloads/RERC_Funding_and_Resource_Master_2026-07-13.xlsx`)).status(),
+      docx: (await page.request.get(`${baseUrl}downloads/RERC_Funding_and_Resource_Appendix_2026-07-14.docx`)).status(),
+      xlsx: (await page.request.get(`${baseUrl}downloads/RERC_Funding_and_Resource_Master_2026-07-14.xlsx`)).status(),
     };
     await page.screenshot({ path: path.join(outDir, "desktop.png"), fullPage: true });
     await desktop.close();
@@ -70,7 +70,7 @@ async function main() {
     await mobile.close();
 
     const failures = [];
-    if (checks.counts.funding !== "653" || checks.counts.resources !== "65") failures.push("counts");
+    if (checks.counts.funding !== "655" || checks.counts.resources !== "65") failures.push("counts");
     if (!checks.desktopNoOverflow || !checks.mobileNoOverflow) failures.push("overflow");
     if (checks.duplicateIds.length) failures.push("duplicate_ids");
     if (checks.puertoRicoMatches < 1 || checks.resourceMatches < 1 || !checks.resourceCardsOnly) failures.push("filtering");
