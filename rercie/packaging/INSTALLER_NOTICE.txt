@@ -4,7 +4,7 @@ What happens after installation
 
 - RERCie opens with a friendly setup screen. You do not need to run a command.
 - On first use, RERCie downloads the Google Gemma 3 1B writing model after you select Download and start. The download is about 0.81 GB.
-- Version 0.3.2 removes any local model saved by an earlier version. The next start downloads only Google Gemma.
+- Version 0.3.3 removes any local model saved by an earlier version. The next start downloads only Google Gemma.
 - The model and local writing stay on this computer. If you choose Online API mode, RERCie sends the text you enter or upload, selected funding details, and any Census profile to the provider you choose.
 - Public funding and Census lookups use public websites.
 

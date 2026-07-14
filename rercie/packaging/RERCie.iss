@@ -5,7 +5,7 @@
   #error OutputDir must be defined by the build script.
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.3.2"
+  #define AppVersion "0.3.3"
 #endif
 
 #define AppName "RERCie"

@@ -20,7 +20,7 @@ namespace RERCieDesktop
 {
     internal static class Config
     {
-        public const string Version = "0.3.2";
+        public const string Version = "0.3.3";
         public const string AppUrl = "http://127.0.0.1:8789";
         public const string AppHealthUrl = AppUrl + "/health";
         public const string ModelHealthUrl = "http://127.0.0.1:8788/health";

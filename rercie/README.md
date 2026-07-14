@@ -2,7 +2,7 @@
 
 RERCie Local Grant-Writing Guide is an optional app for the Recreation Economy *for* Rural Communities funding and resource explorer.
 
-The Windows installer includes the RERCie app and the pinned `llama.cpp` runtime. It does not require a command line, an account, or an API key. The Gemma model is downloaded only when the person selects **Download and start**.
+The Windows installer includes the RERCie app and the pinned `llama.cpp` runtime. The local Gemma writer does not require a command line, an account, or an API key. The Gemma model is downloaded only when the person selects **Download and start**.
 
 ## Install RERCie on Windows
 
@@ -22,14 +22,14 @@ No command line is needed. Open RERCie from the Start Menu. The launcher can ope
 
 - Loads the current public RERC funding list.
 - Accepts project notes and selected text files.
-- Can look up a basic Census place profile.
+- Can look up a verified Census place or county profile. For American Samoa, Guam, the Northern Mariana Islands, and the U.S. Virgin Islands, it adds available territory-level Census context.
 - Creates a first-draft grant narrative with clear fact-check markers.
 - Exports a real Word `.docx` file or Markdown.
 - Includes all 50 states, the District of Columbia, and five U.S. territories.
 
 ## Privacy
 
-Local writing stays on this computer. The public funding lookup and optional Census lookup use public websites. Online API mode sends typed or uploaded project text, selected funding details, and any public Census profile to the API provider selected by the user. It does not read or send files from `local_knowledge`. API keys are used for one request and are not saved by RERCie.
+Local writing stays on this computer. The public funding lookup and optional Census lookup use public websites. The Census Bureau requires a free API key for community facts; RERCie can read `CENSUS_API_KEY` from this computer or use a key pasted into the friendly lookup field for that session. Online API mode sends typed or uploaded project text, selected funding details, and any public Census profile to the API provider selected by the user. It does not send the Census key or read files from `local_knowledge`. Keys typed into RERCie are not saved by the app.
 
 Do not add private files to a public copy of this project. Local reference files belong in `local_knowledge`.
 

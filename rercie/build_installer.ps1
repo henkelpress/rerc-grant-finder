@@ -9,7 +9,7 @@ Set-StrictMode -Version Latest
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $Here
 Set-Location -LiteralPath $Here
-$Version = "0.3.2"
+$Version = "0.3.3"
 $RuntimeName = "llama-b9987-bin-win-cpu-x64.zip"
 $RuntimeUrl = "https://github.com/ggerganov/llama.cpp/releases/download/b9987/$RuntimeName"
 $RuntimeSha256 = "6847d537b3cd5099051989d08c7eca4296e7a0f1755dbf0540c82e37768320f3"
@@ -33,7 +33,7 @@ function Get-Sha256([string]$Path) {
 $sourceQaPath = Join-Path $Here "packaging\QA_EVIDENCE.json"
 $sourceQa = Get-Content -LiteralPath $sourceQaPath -Raw | ConvertFrom-Json
 if ($sourceQa.status -ne "PASS") { throw "QA_EVIDENCE.json must have top-level PASS status before a release build." }
-$requiredQaChecks = @("source_smoke", "native_launcher", "display_scaling", "installer_wizard", "package_integrity", "live_catalog", "local_generation", "docx_export", "api_privacy_regression", "service_identity_checks", "licensing_and_runtime")
+$requiredQaChecks = @("source_smoke", "native_launcher", "display_scaling", "installer_wizard", "package_integrity", "live_catalog", "community_lookup", "local_generation", "docx_export", "api_privacy_regression", "service_identity_checks", "licensing_and_runtime")
 foreach ($checkName in $requiredQaChecks) {
     $check = $sourceQa.checks.PSObject.Properties[$checkName]
     if (-not $check -or $check.Value.status -ne "PASS") { throw "Required QA check is not PASS: $checkName" }

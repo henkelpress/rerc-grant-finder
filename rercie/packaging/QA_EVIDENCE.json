@@ -1,5 +1,5 @@
 {
-    "app_version":  "0.3.2",
+    "app_version":  "0.3.3",
     "status":  "PASS",
     "tested_date":  "2026-07-14",
     "checks":  {
@@ -7,7 +7,8 @@
                                         "status":  "PASS",
                                         "catalog_formats":  2,
                                         "territories":  5,
-                                        "docx_created":  true
+                                        "docx_created":  true,
+                                        "grounding_regression":  true
                                     },
                    "native_launcher":  {
                                            "status":  "PASS",
@@ -29,7 +30,8 @@
                                                                  "150%",
                                                                  "200%"
                                                              ],
-                                           "clipped_text_controls":  0
+                                           "clipped_text_controls":  0,
+                                           "draft_generation_progress_ui":  true
                                        },
                    "installer_wizard":  {
                                             "status":  "PASS",
@@ -51,13 +53,23 @@
                                         "total_items":  720,
                                         "funding_items":  655,
                                         "resource_items":  65,
-                                        "territory_filter_checked":  true
+                                        "territory_filter_checked":  true,
+                                        "resource_tabs_tested_widths":  [
+                                                                            "1440px",
+                                                                            "1024px",
+                                                                            "390px"
+                                                                        ]
                                     },
                    "local_generation":  {
                                             "status":  "PASS",
                                             "model":  "Google Gemma 3 1B Instruct Q4_K_M",
-                                            "required_sections":  8,
-                                            "fact_check_markers":  true
+                                            "required_sections":  9,
+                                            "fact_check_markers":  true,
+                                            "verified_community_context_section":  true,
+                                            "model_prose_preserved_when_grounded":  true,
+                                            "actual_gemma_generation_test":  true,
+                                            "evidence_grounding_gate":  true,
+                                            "unsupported_details_removed":  true
                                         },
                    "docx_export":  {
                                        "status":  "PASS",
@@ -92,9 +104,24 @@
                                                  "microsoft_runtime_installer_signature_required":  true,
                                                  "asset_provenance_included":  true,
                                                  "gemma_terms_notice_included":  true
-                                             }
+                                             },
+                   "community_lookup":  {
+                                            "status":  "PASS",
+                                            "acs_year":  2024,
+                                            "place_name_normalization":  true,
+                                            "county_priority_for_explicit_county":  true,
+                                            "island_area_endpoints":  [
+                                                                          "American Samoa",
+                                                                          "Guam",
+                                                                          "Northern Mariana Islands",
+                                                                          "U.S. Virgin Islands"
+                                                                      ],
+                                            "api_key_not_sent_to_writer":  true,
+                                            "visible_lookup_status":  true
+                                        }
                },
     "disclosed_limits":  [
+                             "Community facts require internet access and a free U.S. Census Bureau API key; grant drafting still works when that lookup is unavailable.",
                              "No clean Windows virtual-machine test has been completed for this version.",
                              "The public installer is not code-signed, so Windows may show a safety notice.",
                              "Microsoft Defender scanning may be unavailable when that Windows feature is disabled on the build machine.",

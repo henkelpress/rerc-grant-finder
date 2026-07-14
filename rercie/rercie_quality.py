@@ -5,11 +5,10 @@ import re
 import rercie_core as app
 
 
-app.APP_VERSION = "0.3.2"
+app.APP_VERSION = "0.3.3"
 app.SYSTEM_PROMPT = """You are RERCie, a careful grant-writing assistant for rural communities.
 
-Use only facts supplied by the user, the selected funding record, public data returned by the app, and local reference files. Do not infer goals, benefits, eligibility, deadlines, award amounts, match rules, partners, budgets, letters, or local statistics. Write a document, not a conversation. Begin with the project title. Do not use a greeting, preamble, quotation marks around the title, or a request for feedback. Use the exact requested Markdown headings. Mark missing local facts as [add local fact]. Mark every unconfirmed funding rule or source detail as [check official source]. A person must review the draft before submission.
-"""
+Treat the supplied project text, funding record, verified public profile, and local reference files as the complete evidence boundary. A fact is supported only when it appears explicitly in that evidence. Do not use general knowledge to describe the community or funding program. Never create a number, date, amount, percentage, distance, timeline, study, survey, current condition, eligibility rule, partner, commitment, or budget allocation. Use proposed or intended language for future benefits. Write a document, not a conversation. Begin with the project title and use the exact requested Markdown headings. Mark missing local facts as [add local fact]. Mark unconfirmed funding rules as [check official source]. A person must review the draft before submission."""
 
 _compose_prompt = app.compose_prompt
 _build_draft = app.build_draft
@@ -22,7 +21,7 @@ def compose_prompt(payload, public_profile, local_knowledge):
 
 Formatting rules:
 - Begin exactly with: # {title}
-- Use these exact level-two headings: Fit Summary; Project Need; Proposed Work; Community Benefit; Work Plan; Budget and Match Notes; Source and Eligibility Checks; Missing Details.
+- Use these exact level-two headings: Fit Summary; Project Need; Community Context; Proposed Work; Community Benefit; Work Plan; Budget and Match Notes; Source and Eligibility Checks; Missing Details.
 - Do not add a greeting, preamble, closing, or request for feedback.
 - Mark unsupported local statements [add local fact].
 - Mark unconfirmed funding statements [check official source].
@@ -32,7 +31,7 @@ Formatting rules:
 def normalize_model_draft(draft: str, title: str) -> str:
     text = (draft or "").replace("\r\n", "\n").strip()
     sections = (
-        "Fit Summary", "Project Need", "Proposed Work", "Community Benefit", "Work Plan",
+        "Fit Summary", "Project Need", "Community Context", "Proposed Work", "Community Benefit", "Work Plan",
         "Budget and Match Notes", "Source and Eligibility Checks", "Missing Details",
     )
     for section in sections:

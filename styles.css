@@ -278,11 +278,11 @@ fieldset { margin: 0; padding: 0; border: 0; }
 .results-workspace { min-width: 0; padding: 42px 38px 70px; }
 
 .results-heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  padding-bottom: 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  padding-bottom: 18px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -290,15 +290,17 @@ fieldset { margin: 0; padding: 0; border: 0; }
 .results-heading p:last-child { margin: 0; color: var(--muted); }
 
 .mode-tabs {
-  display: inline-grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(100%, 540px);
   border: 1px solid var(--rerc-green);
-  border-radius: 6px;
+  border-radius: 4px;
   overflow: hidden;
+  background: #fff;
 }
 
 .mode-tabs button {
-  min-width: 112px;
+  min-width: 0;
   padding: 8px 10px;
   border: 0;
   border-right: 1px solid var(--rerc-green);

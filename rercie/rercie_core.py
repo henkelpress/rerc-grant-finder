@@ -9,6 +9,7 @@ import re
 import secrets
 import sys
 import time
+import unicodedata
 import urllib.parse
 import urllib.request
 import zipfile
@@ -18,7 +19,7 @@ from typing import Any
 from xml.sax.saxutils import escape
 
 
-APP_VERSION = "0.3.2"
+APP_VERSION = "0.3.3"
 APP_DIR = Path(os.environ.get("RERCIE_APP_ROOT") or (Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent))
 ASSET_DIR = APP_DIR / "assets"
 if not ASSET_DIR.is_dir() and not getattr(sys, "frozen", False):
@@ -33,7 +34,8 @@ LOCAL_MODELS_URL = os.environ.get("RERCIE_LOCAL_MODELS_URL", "http://127.0.0.1:8
 SESSION_TOKEN = os.environ.get("RERCIE_SESSION_TOKEN", "")
 EXPECTED_HOST = os.environ.get("RERCIE_EXPECTED_HOST", "127.0.0.1:8789").lower()
 EXPECTED_ORIGIN = f"http://{EXPECTED_HOST}"
-CENSUS_YEAR = "2023"
+CENSUS_YEAR = "2024"
+CENSUS_ISLAND_YEAR = "2020"
 MAX_REQUEST_BYTES = 6 * 1024 * 1024
 
 STATE_FIPS = {
@@ -52,10 +54,16 @@ STATE_FIPS = {
     "U.S. Virgin Islands": "78",
 }
 
+ISLAND_AREA_DATASETS = {
+    "American Samoa": "dhcas",
+    "Guam": "dhcgu",
+    "Northern Mariana Islands": "dhcmp",
+    "U.S. Virgin Islands": "dhcvi",
+}
+
 SYSTEM_PROMPT = """You are RERCie, a careful grant-writing assistant for rural communities.
 
-Use only the facts supplied by the user, the selected funding record, public data returned by the app, and local reference files. Never invent eligibility, deadlines, award amounts, match rules, partners, budgets, letters, or local statistics. Write clear, natural public-facing language with short paragraphs. Mark missing facts as [add local fact] and anything that must be verified as [check official source]. A person must review the draft before submission.
-"""
+Treat the supplied project text, funding record, verified public profile, and local reference files as the complete evidence boundary. A fact is supported only when it appears explicitly in that evidence. Do not use general knowledge to describe the community or funding program. Never create a number, date, amount, percentage, distance, timeline, study, survey, current condition, eligibility rule, partner, commitment, or budget allocation. Use proposed or intended language for future benefits. Write a document, not a conversation. Mark missing local facts as [add local fact] and unconfirmed funding rules as [check official source]. A person must review the draft before submission."""
 
 
 def request_json(url: str, payload: dict[str, Any] | None = None, headers: dict[str, str] | None = None, timeout: int = 30) -> Any:
@@ -98,42 +106,135 @@ def fetch_public_catalog() -> dict[str, Any]:
         return parse_public_catalog(response.read().decode("utf-8"))
 
 
-def fetch_census_place_profile(community: str, state: str) -> dict[str, str]:
-    community = (community or "").split(",")[0].strip()
-    state = (state or "").strip()
-    # ACS 5-year place profiles cover states, D.C., and Puerto Rico. The other
-    # Island Areas use different Census products and are not queried here.
-    if state in {"American Samoa", "Guam", "Northern Mariana Islands", "U.S. Virgin Islands"}:
+def _local_env_value(name: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if value:
+        return value
+    env_path = Path.home() / ".env"
+    try:
+        for raw_line in env_path.read_text(encoding="utf-8-sig", errors="ignore").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, candidate = line.split("=", 1)
+            if key.strip() == name:
+                return candidate.strip().strip('"').strip("'")
+    except OSError:
+        pass
+    return ""
+
+
+def _normalize_geography_name(value: str) -> str:
+    text = unicodedata.normalize("NFKD", value or "").encode("ascii", "ignore").decode("ascii").lower()
+    text = re.sub(r"\bst[.]?\b", "saint", text)
+    text = re.sub(r"[^a-z0-9]+", " ", text).strip()
+    suffixes = {
+        "city", "town", "village", "borough", "municipality", "municipio", "cdp",
+        "county", "parish", "census area", "city and borough",
+    }
+    for suffix in sorted(suffixes, key=len, reverse=True):
+        if text.endswith(" " + suffix):
+            text = text[: -(len(suffix) + 1)].strip()
+            break
+    return text
+
+
+def _best_geography_record(rows: Any, community: str) -> dict[str, str]:
+    if not isinstance(rows, list) or len(rows) < 2:
         return {}
+    headers = rows[0]
+    target = _normalize_geography_name((community or "").split(",", 1)[0])
+    if not target:
+        return {}
+    scored: list[tuple[int, int, dict[str, str]]] = []
+    for row in rows[1:]:
+        record = dict(zip(headers, row, strict=False))
+        candidate = _normalize_geography_name(record.get("NAME", "").split(",", 1)[0])
+        if candidate == target:
+            score = 4
+        elif candidate.startswith(target + " ") or target.startswith(candidate + " "):
+            score = 3
+        elif target in candidate or candidate in target:
+            score = 2
+        else:
+            continue
+        scored.append((score, -abs(len(candidate) - len(target)), record))
+    if not scored:
+        return {}
+    scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    if len(scored) > 1 and scored[0][:2] == scored[1][:2]:
+        return {}
+    return scored[0][2]
+
+
+def _census_url(path: str, params: dict[str, str]) -> str:
+    return f"https://api.census.gov/data/{path}?{urllib.parse.urlencode(params)}"
+
+
+def fetch_census_community_profile(community: str, state: str, census_api_key: str = "") -> dict[str, str]:
+    community = (community or "").split(",", 1)[0].strip()
+    state = (state or "").strip()
     fips = STATE_FIPS.get(state)
     if not community or not fips:
         return {}
-    params = {
-        "get": "NAME,DP05_0001E,DP03_0062E,DP03_0128PE",
-        "for": "place:*",
-        "in": f"state:{fips}",
-    }
-    url = f"https://api.census.gov/data/{CENSUS_YEAR}/acs/acs5/profile?{urllib.parse.urlencode(params)}"
-    try:
-        rows = request_json(url, timeout=30)
-    except Exception:
-        return {}
-    if not rows or len(rows) < 2:
-        return {}
-    headers = rows[0]
-    needle = community.lower()
-    for row in rows[1:]:
-        record = dict(zip(headers, row, strict=False))
-        if needle in record.get("NAME", "").lower():
-            return {
-                "source": f"U.S. Census Bureau ACS {CENSUS_YEAR} 5-year profile API",
-                "place": record.get("NAME", ""),
-                "population": record.get("DP05_0001E", ""),
-                "median_household_income": record.get("DP03_0062E", ""),
-                "poverty_rate_percent": record.get("DP03_0128PE", ""),
-            }
+    api_key = (census_api_key or _local_env_value("CENSUS_API_KEY")).strip()
+    if not api_key:
+        raise PermissionError("A free Census API key is needed for community facts. Open Community lookup help to add one.")
+
+    if state in ISLAND_AREA_DATASETS:
+        dataset = ISLAND_AREA_DATASETS[state]
+        params = {"get": "NAME,P1_001N", "for": f"state:{fips}", "key": api_key}
+        rows = request_json(_census_url(f"{CENSUS_ISLAND_YEAR}/dec/{dataset}", params), timeout=30)
+        record = dict(zip(rows[0], rows[1], strict=False)) if isinstance(rows, list) and len(rows) > 1 else {}
+        if not record:
+            return {}
+        return {
+            "source": f"U.S. Census Bureau {CENSUS_ISLAND_YEAR} Island Areas Census",
+            "source_url": "https://www.census.gov/data/developers/data-sets/decennial-census.html",
+            "year": CENSUS_ISLAND_YEAR,
+            "geography_type": "territory",
+            "place": record.get("NAME", state),
+            "population": record.get("P1_001N", ""),
+            "coverage_note": f"Community-level ACS profiles are not available through this endpoint, so RERCie used territory-level context for {state}.",
+        }
+
+    fields = "NAME,DP05_0001E,DP03_0062E,DP03_0128PE,DP05_0018E"
+    explicit_county = bool(re.search(r"\b(county|parish|census area)\b", community, re.IGNORECASE))
+    geography_types = ("county", "place") if explicit_county else ("place", "county")
+    for geography_type in geography_types:
+        params = {"get": fields, "for": f"{geography_type}:*", "in": f"state:{fips}", "key": api_key}
+        rows = request_json(_census_url(f"{CENSUS_YEAR}/acs/acs5/profile", params), timeout=30)
+        record = _best_geography_record(rows, community)
+        if not record:
+            continue
+        geoid = fips + record.get(geography_type, "")
+        summary_level = "160" if geography_type == "place" else "050"
+        return {
+            "source": f"U.S. Census Bureau ACS {CENSUS_YEAR} 5-year profile",
+            "source_url": f"https://data.census.gov/profile?g={summary_level}XX00US{geoid}",
+            "year": CENSUS_YEAR,
+            "geography_type": geography_type,
+            "place": record.get("NAME", ""),
+            "population": record.get("DP05_0001E", ""),
+            "median_age": record.get("DP05_0018E", ""),
+            "median_household_income": record.get("DP03_0062E", ""),
+            "poverty_rate_percent": record.get("DP03_0128PE", ""),
+        }
     return {}
 
+
+def lookup_community_profile(community: str, state: str, census_api_key: str = "") -> dict[str, Any]:
+    if not (community or "").strip() or not (state or "").strip():
+        return {"profile": {}, "message": "Enter a community and choose a state or territory first.", "status": "missing_input"}
+    try:
+        profile = fetch_census_community_profile(community, state, census_api_key)
+    except PermissionError as exc:
+        return {"profile": {}, "message": str(exc), "status": "key_required"}
+    except Exception:
+        return {"profile": {}, "message": "Community facts could not be reached right now. The draft will mark local facts that still need to be added.", "status": "unavailable"}
+    if not profile:
+        return {"profile": {}, "message": "No exact Census place or county match was found. Check the community name or add local facts in the notes.", "status": "not_found"}
+    return {"profile": profile, "message": f"Community facts found for {profile.get('place', community)}.", "status": "found"}
 
 def load_local_knowledge(max_total_chars: int = 32000, max_file_chars: int = 9000) -> str:
     LOCAL_KNOWLEDGE_DIR.mkdir(parents=True, exist_ok=True)
@@ -156,8 +257,36 @@ def load_local_knowledge(max_total_chars: int = 32000, max_file_chars: int = 900
     return "\n".join(chunks).strip()
 
 
+def format_public_profile(public_profile: dict[str, str]) -> str:
+    if not public_profile:
+        return "[No verified public community profile was found. Do not guess local statistics.]"
+    lines = [
+        f"Verified geography: {public_profile.get('place', '[not listed]')}",
+        f"Geography type: {public_profile.get('geography_type', '[not listed]')}",
+    ]
+    population = str(public_profile.get("population") or "").strip()
+    income = str(public_profile.get("median_household_income") or "").strip()
+    median_age = str(public_profile.get("median_age") or "").strip()
+    poverty = str(public_profile.get("poverty_rate_percent") or "").strip()
+    if population.lstrip("-").isdigit():
+        lines.append(f"Population: {int(population):,}")
+    if median_age:
+        lines.append(f"Median age: {median_age} years")
+    if income.lstrip("-").isdigit():
+        lines.append("Median household income: $" + f"{int(income):,}")
+    if poverty:
+        lines.append(f"People below the poverty line: {poverty}%")
+    if public_profile.get("coverage_note"):
+        lines.append(f"Coverage note: {public_profile['coverage_note']}")
+    lines.append(f"Source: {public_profile.get('source', 'U.S. Census Bureau')}")
+    if public_profile.get("source_url"):
+        lines.append(f"Official profile: {public_profile['source_url']}")
+    return "\n".join(f"- {line}" for line in lines)
+
+
 def compose_prompt(payload: dict[str, Any], public_profile: dict[str, str], local_knowledge: str) -> str:
-    return f"""Create a first-draft grant narrative for human review.
+    profile_text = format_public_profile(public_profile)
+    return f"""Write a useful first-draft grant narrative for a community team to edit.
 
 Community: {payload.get('community') or '[add community]'}, {payload.get('state') or '[add state or territory]'}
 Project title: {payload.get('projectTitle') or '[add project title]'}
@@ -166,22 +295,34 @@ Project summary: {payload.get('projectSummary') or '[add project summary]'}
 Selected funding record:
 {payload.get('selectedGrant') or '[select a funding source]'}
 
-Match and local capacity:
+Match, staff, and partner capacity:
 {payload.get('matchCapacity') or '[add match and capacity facts]'}
 
-Public profile:
-{json.dumps(public_profile, indent=2)}
+Verified public community context:
+{profile_text}
 
 Project notes and uploaded text:
 {payload.get('projectNotes') or '[add project notes]'}
 
-Source notes:
+Facts to check on the official funding page:
 {payload.get('sourceNotes') or '[add source notes]'}
 
 Local reference files:
 {local_knowledge or '[no local reference files loaded]'}
 
-Return Markdown with these sections: Fit Summary; Project Need; Proposed Work; Community Benefit; Work Plan; Budget and Match Notes; Source and Eligibility Checks; Missing Details. Use plain language. Preserve uncertainty. Mark each unsupported fact [add local fact] or [check official source].
+Write Markdown with these level-two sections in this order: Fit Summary; Project Need; Community Context; Proposed Work; Community Benefit; Work Plan; Budget and Match Notes; Source and Eligibility Checks; Missing Details.
+
+Writing requirements:
+- Write cohesive short paragraphs, not a template conversation or a list of generic claims.
+- Use the verified public facts exactly and name their source in Community Context.
+- Connect only the stated project actions and verified facts; do not invent local conditions, outcomes, eligibility, deadlines, award amounts, match rules, partners, budgets, or commitments.
+- Do not repeat the same caution in every section.
+- Put unknown local facts in Missing Details as [add local fact].
+- Put each unconfirmed funding rule in Source and Eligibility Checks as [check official source].
+- Make the draft specific enough that a community can improve it, while preserving uncertainty.
+- Do not include any number unless that exact number appears in the supplied evidence above.
+- Do not create a study, survey, traffic condition, economic effect, budget, match amount, timeline, required partner, or eligibility rule.
+- When the evidence does not support a claim, omit it and add the missing item under Missing Details.
 """.strip()
 
 
@@ -189,8 +330,10 @@ def call_local_writer(prompt: str, model: str) -> str:
     payload = {
         "model": model or DEFAULT_MODEL,
         "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
-        "temperature": 0.2,
-        "max_tokens": 2400,
+        "temperature": 0.0,
+        "top_p": 0.9,
+        "repeat_penalty": 1.08,
+        "max_tokens": 2600,
         "stream": False,
     }
     data = request_json(LOCAL_CHAT_URL, payload=payload, timeout=300)
@@ -211,69 +354,172 @@ def call_openai_compatible(prompt: str, endpoint: str, api_key: str, model: str)
     return choices[0].get("message", {}).get("content", "").strip() if choices else ""
 
 
+def _funding_record_text(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return "[select a funding source]"
+    try:
+        record = json.loads(raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return raw[:5000]
+    if not isinstance(record, dict):
+        return raw[:5000]
+    fields = (
+        ("Program", record.get("title") or record.get("program")),
+        ("Organization", record.get("organization") or record.get("agency")),
+        ("Description", record.get("description")),
+        ("Best for", record.get("best_for") or record.get("bestFor")),
+        ("Official page", record.get("url") or record.get("source_url")),
+    )
+    return "\n".join(f"- {label}: {value}" for label, value in fields if value) or raw[:5000]
+
+
+def _as_sentence(value: str) -> str:
+    text = (value or "").strip()
+    if not text:
+        return text
+    text = text[0].upper() + text[1:]
+    return text if text.endswith((".", "!", "?")) else text + "."
+
+
 def deterministic_scaffold(payload: dict[str, Any], public_profile: dict[str, str]) -> str:
-    community = payload.get("community") or "[add community]"
-    state = payload.get("state") or "[add state or territory]"
-    title = payload.get("projectTitle") or "[add project title]"
-    summary = payload.get("projectSummary") or "[add project summary]"
-    grant = payload.get("selectedGrant") or "[select a funding source]"
-    match = payload.get("matchCapacity") or "[add match and capacity facts]"
-    source = payload.get("sourceNotes") or "[add the official source link and current details]"
-    profile = "\n".join(f"- {key.replace('_', ' ').title()}: {value}" for key, value in public_profile.items() if value) or "- [add local data]"
+    community = str(payload.get("community") or "[add community]").strip()
+    state = str(payload.get("state") or "[add state or territory]").strip()
+    title = str(payload.get("projectTitle") or "[add project title]").strip()
+    summary = _as_sentence(str(payload.get("projectSummary") or "[add project summary]"))
+    project_notes = str(payload.get("projectNotes") or "").strip()[:1800]
+    grant = _funding_record_text(payload.get("selectedGrant"))
+    match = str(payload.get("matchCapacity") or "[add match, staff, and partner capacity facts]").strip()
+    source = str(payload.get("sourceNotes") or "[add the official source link and current funding details]").strip()
+    profile = format_public_profile(public_profile)
+    notes_block = (
+        f"\n\nProject notes supplied by the community:\n\n{project_notes}"
+        if project_notes
+        else "\n\n[add local fact] Add confirmed project tasks, locations, partners, and expected results."
+    )
     return f"""# {title}
 
 ## Fit Summary
 
-This project may fit the selected funding source because it supports the stated need in {community}, {state}. Confirm the current rules, deadline, match, and allowed costs before using this draft.
+{community}, {state}, is considering the {title} project. The community describes the project as follows: {summary}
+
+The funding record supplied below may be worth screening for this project. [check official source] Confirm that the applicant, location, proposed work, costs, schedule, and attachments meet the current rules.
 
 {grant}
 
 ## Project Need
 
-{community} is seeking support to {summary}
+The community has identified the following need: {summary}
 
-Local facts to review:
+Use the final application to explain the size and effect of this need with checked local evidence. [add local fact]
+
+## Community Context
 
 {profile}
 
 ## Proposed Work
 
-[Add the main tasks, responsible partners, schedule, and deliverables.]
+The current concept is based on the project summary and the confirmed notes below.{notes_block}
+
+Before submission, turn this concept into a confirmed scope with clear tasks, locations, responsible parties, approvals, deliverables, and measures of success.
 
 ## Community Benefit
 
-[Explain who will benefit and how the project supports outdoor recreation, residents, visitors, local businesses, and public spaces.]
+If completed as described, {title} is intended to help {community} advance the purpose stated in the project summary. The final application should identify who would benefit, explain how they would benefit, and support those statements with local plans, records, or partner documentation. [add local fact]
 
 ## Work Plan
 
-1. Confirm the scope and partners.
-2. Confirm the budget and match.
-3. Complete required planning, design, and review steps.
-4. Deliver the project.
-5. Track results.
+1. Confirm the project scope, location, applicant, and responsible staff.
+2. Check the funding program's current eligibility and application requirements.
+3. Define the tasks, approvals, partners, deliverables, and measures that apply to this project.
+4. Build a supported budget, schedule, and match plan.
+5. Complete the application and establish a practical method for tracking results.
 
 ## Budget and Match Notes
 
 {match}
 
+[check official source] Confirm allowed costs, award limits, match rules, and required budget documentation before finalizing the budget.
+
 ## Source and Eligibility Checks
+
+Community notes about the official source:
 
 {source}
 
-Check the official source for eligible applicants, eligible work, award size, match, deadline, and required attachments.
+- [check official source] Confirm eligible applicants, locations, activities, and costs.
+- [check official source] Confirm the current deadline, award range, match, and required attachments.
 
 ## Missing Details
 
-- [add applicant legal name]
-- [add project location]
-- [add total budget]
-- [add committed partners]
-- [check official source for the current deadline]
+- [add local fact] Applicant legal name and confirmed project location.
+- [add local fact] Checked evidence showing the need and people served.
+- [add local fact] Confirmed scope, schedule, staff, partners, and expected results.
+- [add local fact] Total budget and committed match.
+- [check official source] Current funding rules and application instructions.
 """
 
 
+_NUMBER_WORDS = {
+    "zero": "0", "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
+    "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10", "eleven": "11",
+    "twelve": "12", "thirteen": "13", "fourteen": "14", "fifteen": "15", "sixteen": "16",
+    "seventeen": "17", "eighteen": "18", "nineteen": "19", "twenty": "20",
+}
+
+
+def _number_tokens(text: str) -> set[str]:
+    tokens = set()
+    for raw in re.findall(r"(?<![A-Za-z0-9])[$]?(\d[\d,]*(?:\.\d+)?)%?", text or ""):
+        normalized = raw.replace(",", "").lstrip("0") or "0"
+        tokens.add(normalized)
+    lowered = (text or "").lower()
+    for word, number in _NUMBER_WORDS.items():
+        if re.search(rf"\b{word}\b", lowered):
+            tokens.add(number)
+    return tokens
+
+
+def grounding_issues(draft: str, payload: dict[str, Any], public_profile: dict[str, str]) -> list[str]:
+    evidence_parts = [
+        str(payload.get("community") or ""), str(payload.get("state") or ""),
+        str(payload.get("projectTitle") or ""), str(payload.get("projectSummary") or ""),
+        str(payload.get("selectedGrant") or ""), str(payload.get("matchCapacity") or ""),
+        str(payload.get("sourceNotes") or ""), str(payload.get("projectNotes") or ""),
+        json.dumps(public_profile, ensure_ascii=True),
+    ]
+    evidence = "\n".join(evidence_parts)
+    evidence_lower = evidence.lower()
+    allowed_numbers = _number_tokens(evidence)
+    draft_without_list_numbers = re.sub(r"(?m)^\s*\d+[.)]\s+", "", draft or "")
+    unexpected_numbers = sorted(_number_tokens(draft_without_list_numbers) - allowed_numbers)
+    issues = [f"unsupported number: {number}" for number in unexpected_numbers]
+
+    suspicious_patterns = (
+        r"\b(?:study|survey|poll)\b",
+        r"\b(?:currently|existing|recent growth|has experienced|have experienced)\b",
+        r"\b(?:traffic|congestion|accident|revenue)\b",
+        r"\b(?:ada standards?|permit|request for proposals?|rfp)\b",
+        r"\b(?:department|commission|planning and zoning|town council)\b",
+        r"\b(?:maple street|main street|historic district)\b",
+    )
+    for pattern in suspicious_patterns:
+        for match in re.finditer(pattern, draft or "", re.IGNORECASE):
+            phrase = match.group(0).lower()
+            if phrase not in evidence_lower:
+                issues.append(f"unsupported detail: {phrase}")
+    return sorted(set(issues))
+
 def build_draft(payload: dict[str, Any]) -> dict[str, Any]:
-    public_profile = fetch_census_place_profile(payload.get("community", ""), payload.get("state", "")) if payload.get("usePublicData") else {}
+    if payload.get("usePublicData"):
+        profile_lookup = lookup_community_profile(
+            str(payload.get("community") or ""),
+            str(payload.get("state") or ""),
+            str(payload.get("censusApiKey") or ""),
+        )
+    else:
+        profile_lookup = {"profile": {}, "message": "Community lookup was turned off.", "status": "skipped"}
+    public_profile = profile_lookup["profile"]
     provider = str(payload.get("provider") or "local").lower()
     # Online API mode never reads or sends the private local_knowledge folder.
     local_knowledge = "" if provider == "api" else load_local_knowledge()
@@ -299,8 +545,11 @@ def build_draft(payload: dict[str, Any]) -> dict[str, Any]:
         "provider": provider,
         "model": model,
         "publicProfile": public_profile,
+        "profileMessage": profile_lookup["message"],
+        "profileStatus": profile_lookup["status"],
         "localKnowledgeChars": len(local_knowledge),
         "warnings": warnings,
+        "safetyNotice": "",
         "generatedAt": int(time.time()),
     }
 
@@ -392,6 +641,14 @@ HTML_PAGE = r'''<!doctype html>
     .advanced.visible { display:block; }
     .status { margin:12px 0; color:var(--muted); font-size:1rem; }
     .status.warning { color:var(--danger); }
+    .lookup-help { margin-top:10px; padding:10px 12px; border:1px solid var(--line); background:#fafcfb; }
+    .lookup-help summary { color:var(--forest); font-weight:800; cursor:pointer; }
+    .community-profile { margin-top:10px; padding:12px; border-left:5px solid var(--river); background:var(--sky); }
+    .community-profile strong { display:block; margin-bottom:4px; }
+    .community-profile ul { margin:6px 0; padding-left:20px; }
+    .working { margin:12px 0; padding:12px; border:1px solid #b8d6c5; background:#eef7f1; }
+    .working-row { display:flex; justify-content:space-between; gap:12px; color:var(--forest); font-weight:800; }
+    .working progress { display:block; width:100%; height:14px; margin-top:8px; accent-color:var(--green); }
     .output { min-height:570px; padding:18px; border:1px solid var(--line); white-space:pre-wrap; background:#fff; font-family:Consolas,"Courier New",monospace; font-size:1rem; overflow-wrap:anywhere; }
     @media (max-width:900px) { main { grid-template-columns:1fr; } .output { min-height:420px; } }
     @media (max-width:560px) { header .brand,.engine { grid-template-columns:1fr; display:grid; } header .welcome { grid-template-columns:minmax(0,1fr) 88px; gap:12px; } header .mascot { width:88px; height:124px; } main { padding:10px; } .panel { padding:14px; } .actions button { flex:1 1 145px; } }
@@ -420,7 +677,10 @@ HTML_PAGE = r'''<!doctype html>
       <label for="sourceNotes">Facts to check on the official page</label><textarea id="sourceNotes" class="small" placeholder="Deadline, eligibility, match, award size, and source link"></textarea>
       <label for="fileInput">Add text files</label><input id="fileInput" type="file" multiple accept=".txt,.md,.csv,.json">
       <label for="projectNotes">Notes and file text</label><textarea id="projectNotes"></textarea>
-      <label class="check" for="usePublicData"><input id="usePublicData" type="checkbox" checked><span>Look for a basic Census place profile (states, D.C., and Puerto Rico).</span></label>
+      <label class="check" for="usePublicData"><input id="usePublicData" type="checkbox" checked><span>Look for public community facts from the U.S. Census Bureau.</span></label>
+      <div class="actions"><button id="lookupCommunity" class="quiet" type="button">Look up community facts</button></div>
+      <details class="lookup-help"><summary>Community lookup help</summary><p class="section-note">The Census Bureau now requires a free API key. RERCie will use <code>CENSUS_API_KEY</code> from this computer when available, or you can paste a key below for this session.</p><label for="censusApiKey">Census API key</label><input id="censusApiKey" type="password" autocomplete="off" placeholder="Optional on a computer that already has a Census key"><p class="section-note"><a href="https://api.census.gov/data/key_signup.html" target="_blank" rel="noopener">Get a free Census API key</a></p></details>
+      <div id="communityProfile" class="community-profile" hidden aria-live="polite"></div>
     </section>
     <section class="panel">
       <div class="engine">
@@ -439,6 +699,10 @@ HTML_PAGE = r'''<!doctype html>
         <button id="downloadMd" class="quiet" type="button">Export Markdown</button>
         <button id="copyDraft" class="quiet" type="button">Copy</button>
       </div>
+      <div id="working" class="working" hidden aria-live="polite">
+        <div class="working-row"><span id="workingLabel">RERCie is working...</span><span id="workingTime">0 seconds</span></div>
+        <progress aria-label="RERCie is generating the draft"></progress>
+      </div>
       <p id="status" class="status" aria-live="polite">Ready.</p>
       <div id="output" class="output" role="region" aria-label="Draft output" tabindex="0">Your first draft will appear here.</div>
     </section>
@@ -452,14 +716,21 @@ HTML_PAGE = r'''<!doctype html>
     const sessionToken=new URLSearchParams(location.hash.slice(1)).get("token")||""; history.replaceState(null,"",location.pathname+location.search);
     function apiFetch(url,options={}){ const headers=new Headers(options.headers||{}); headers.set("X-RERCie-Token",sessionToken); return fetch(url,{...options,headers}); }
     function setStatus(message,warning=false){ status.textContent=message; status.className=warning?"status warning":"status"; }
-    function collectPayload(){ return {community:document.getElementById("community").value,state:stateSelect.value,projectTitle:document.getElementById("projectTitle").value,projectSummary:document.getElementById("projectSummary").value,selectedGrant:document.getElementById("selectedGrant").value,matchCapacity:document.getElementById("matchCapacity").value,sourceNotes:document.getElementById("sourceNotes").value,projectNotes:document.getElementById("projectNotes").value,usePublicData:document.getElementById("usePublicData").checked,provider:document.getElementById("provider").value,model:"gemma-3-1b-it-Q4_K_M.gguf",apiEndpoint:document.getElementById("apiEndpoint").value,apiModel:document.getElementById("apiModel").value,apiKey:document.getElementById("apiKey").value}; }
+    let workingTimer=0;
+    function startWorking(){ const box=document.getElementById("working"); const label=document.getElementById("workingLabel"); const clock=document.getElementById("workingTime"); const started=Date.now(); box.hidden=false; const tick=()=>{ const elapsed=Math.floor((Date.now()-started)/1000); clock.textContent=elapsed+" seconds"; label.textContent=elapsed<6?"Looking up community facts...":elapsed<16?"Reading the project details...":"RERCie is drafting the narrative..."; }; tick(); workingTimer=window.setInterval(tick,1000); }
+    function stopWorking(){ document.getElementById("working").hidden=true; if(workingTimer){window.clearInterval(workingTimer);workingTimer=0;} }
+    function formatProfileValue(key,value){ if((key==="population"||key==="median_household_income")&&/^\d+$/.test(String(value))){ const number=Number(value).toLocaleString(); return key==="median_household_income"?"$"+number:number; } return String(value); }
+    function renderProfile(profile,message,lookupStatus){ const box=document.getElementById("communityProfile"); box.replaceChildren(); box.hidden=false; const heading=document.createElement("strong"); heading.textContent=profile&&profile.place?profile.place:"Community facts"; box.appendChild(heading); if(!profile||!Object.keys(profile).length){ const note=document.createElement("span"); note.textContent=message||"No community facts were found."; box.appendChild(note); if(lookupStatus==="key_required"){document.querySelector(".lookup-help").open=true;} return; } const labels={population:"Population",median_age:"Median age",median_household_income:"Median household income",poverty_rate_percent:"People below the poverty line",geography_type:"Geography used"}; const list=document.createElement("ul"); Object.keys(labels).forEach((key)=>{ if(!profile[key])return; const item=document.createElement("li"); let value=formatProfileValue(key,profile[key]); if(key==="median_age")value+=" years"; if(key==="poverty_rate_percent")value+="%"; item.textContent=labels[key]+": "+value; list.appendChild(item); }); box.appendChild(list); const source=document.createElement(profile.source_url?"a":"span"); source.textContent=profile.source||"U.S. Census Bureau"; if(profile.source_url){source.href=profile.source_url;source.target="_blank";source.rel="noopener";} box.appendChild(source); if(profile.coverage_note){ const coverage=document.createElement("p"); coverage.textContent=profile.coverage_note; box.appendChild(coverage); } }
+    async function lookupCommunityFacts(){ const button=document.getElementById("lookupCommunity"); button.disabled=true; setStatus("Looking up community facts..."); try{ const body={community:document.getElementById("community").value,state:stateSelect.value,censusApiKey:document.getElementById("censusApiKey").value}; const response=await apiFetch("/api/community-profile",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); const data=await response.json(); if(!response.ok)throw new Error(data.error||"Lookup failed."); renderProfile(data.profile,data.message,data.status); setStatus(data.message,data.status!=="found"); }catch(error){renderProfile({},"Community facts could not be reached right now.","unavailable");setStatus("Community lookup failed: "+error.message,true);}finally{button.disabled=false;} }
+    function collectPayload(){ return {community:document.getElementById("community").value,state:stateSelect.value,projectTitle:document.getElementById("projectTitle").value,projectSummary:document.getElementById("projectSummary").value,selectedGrant:document.getElementById("selectedGrant").value,matchCapacity:document.getElementById("matchCapacity").value,sourceNotes:document.getElementById("sourceNotes").value,projectNotes:document.getElementById("projectNotes").value,usePublicData:document.getElementById("usePublicData").checked,provider:document.getElementById("provider").value,model:"gemma-3-1b-it-Q4_K_M.gguf",apiEndpoint:document.getElementById("apiEndpoint").value,apiModel:document.getElementById("apiModel").value,apiKey:document.getElementById("apiKey").value,censusApiKey:document.getElementById("censusApiKey").value}; }
     async function checkRuntime(){ const badge=document.getElementById("runtime"); try{ const response=await apiFetch("/api/runtime"); const data=await response.json(); badge.textContent=data.ready?"Local model ready":"Local model is starting"; badge.className=data.ready?"runtime":"runtime offline"; }catch{ badge.textContent="Could not check local writer"; badge.className="runtime offline"; } }
     async function loadGrants(){ setStatus("Loading the public funding list..."); const response=await apiFetch("/api/grants"); if(!response.ok) throw new Error((await response.json()).error||"The list could not be loaded."); const data=await response.json(); const select=document.getElementById("grantSelect"); select.innerHTML='<option value="">Choose a funding match</option>'; data.grants.forEach((grant,index)=>{ const option=document.createElement("option"); option.value=String(index); option.textContent=`${grant.title||grant.program||"Untitled"} - ${grant.organization||grant.agency||"Organization not listed"}`; option.dataset.grant=JSON.stringify(grant,null,2); select.appendChild(option); }); setStatus(`Loaded ${data.grants.length} funding options. Updated ${data.updated||"date not listed"}.`); }
     document.getElementById("loadGrants").addEventListener("click",()=>loadGrants().catch((error)=>setStatus(`Could not load funding: ${error.message}`,true)));
     document.getElementById("grantSelect").addEventListener("change",(event)=>{ document.getElementById("selectedGrant").value=event.target.selectedOptions[0]?.dataset?.grant||""; });
     document.getElementById("fileInput").addEventListener("change",async(event)=>{ const parts=[]; for(const file of event.target.files){ if(file.size>2000000){ setStatus(`${file.name} is too large. Use a text file under 2 MB.`,true); continue; } parts.push(`\n--- File: ${file.name} ---\n${await file.text()}`); } const notes=document.getElementById("projectNotes"); notes.value=`${notes.value}\n${parts.join("\n")}`.trim(); if(parts.length) setStatus(`Read ${parts.length} file(s).`); });
     document.getElementById("provider").addEventListener("change",(event)=>{ document.getElementById("advanced").classList.toggle("visible",event.target.value==="api"); });
-    document.getElementById("draftButton").addEventListener("click",async()=>{ const button=document.getElementById("draftButton"); button.disabled=true; setStatus("Creating a first draft..."); try{ const response=await apiFetch("/api/draft",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(collectPayload())}); const data=await response.json(); if(!response.ok) throw new Error(data.error||"Draft failed."); lastDraft=data.draft; output.textContent=data.draft; setStatus(data.warnings?.length?data.warnings.join(" "):(data.localKnowledgeChars?"Draft ready. Local reference files were used.":"Draft ready."),Boolean(data.warnings?.length)); }catch(error){ setStatus(`Draft failed: ${error.message}`,true); }finally{ button.disabled=false; } });
+    document.getElementById("lookupCommunity").addEventListener("click",lookupCommunityFacts);
+    document.getElementById("draftButton").addEventListener("click",async()=>{ const button=document.getElementById("draftButton"); button.disabled=true; startWorking(); setStatus("RERCie is preparing the draft..."); try{ const response=await apiFetch("/api/draft",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(collectPayload())}); const data=await response.json(); if(!response.ok) throw new Error(data.error||"Draft failed."); lastDraft=data.draft; output.textContent=data.draft; renderProfile(data.publicProfile,data.profileMessage,data.profileStatus); const readyMessage=data.localKnowledgeChars?"Draft ready. Local reference files were used.":"Draft ready."; setStatus(data.warnings?.length?data.warnings.join(" "):readyMessage+" "+(data.safetyNotice||"")+" "+(data.profileMessage||""),Boolean(data.warnings?.length)); }catch(error){ setStatus("Draft failed: "+error.message,true); }finally{ stopWorking(); button.disabled=false; } });
     function downloadBlob(blob,filename){ const link=document.createElement("a"); link.href=URL.createObjectURL(blob); link.download=filename; link.click(); setTimeout(()=>URL.revokeObjectURL(link.href),1000); }
     function draftFilename(extension){ const raw=document.getElementById("projectTitle").value||"Project"; const safe=raw.normalize("NFKD").replace(/[^\w -]/g,"").trim().replace(/\s+/g,"_").slice(0,60)||"Project"; const now=new Date(); const date=[now.getFullYear(),String(now.getMonth()+1).padStart(2,"0"),String(now.getDate()).padStart(2,"0")].join("-"); return `RERCie_${safe}_Draft_${date}.${extension}`; }
     document.getElementById("downloadMd").addEventListener("click",()=>{ if(!lastDraft){setStatus("Create a draft first.",true);return;} downloadBlob(new Blob([lastDraft],{type:"text/markdown"}),draftFilename("md")); });
@@ -572,7 +843,13 @@ class RERCieHandler(BaseHTTPRequestHandler):
             return
         try:
             payload = self.read_payload()
-            if self.path == "/api/draft":
+            if self.path == "/api/community-profile":
+                self.send_json(lookup_community_profile(
+                    str(payload.get("community") or ""),
+                    str(payload.get("state") or ""),
+                    str(payload.get("censusApiKey") or ""),
+                ))
+            elif self.path == "/api/draft":
                 self.send_json(build_draft(payload))
             elif self.path == "/api/export-docx":
                 document = build_docx(str(payload.get("draft") or ""), str(payload.get("title") or "RERCie Draft"))
@@ -603,6 +880,20 @@ def smoke() -> int:
     assert len(current["grants"]) == 1 and len(current["resources"]) == 1
     legacy = parse_public_catalog('window.GRANT_EXPLORER_DATA = {"grants":[{"title":"Legacy"}]};')
     assert len(legacy["grants"]) == 1
+    sample_rows = [
+        ["NAME", "state", "place"],
+        ["St. Paul town, Virginia", "51", "71616"],
+        ["Damascus town, Virginia", "51", "21000"],
+    ]
+    assert _best_geography_record(sample_rows, "St Paul").get("place") == "71616"
+    sample_profile = {"place": "St. Paul town, Virginia", "population": "1046", "median_household_income": "29554", "source": "Test source"}
+    profile_text = format_public_profile(sample_profile)
+    assert "Population: 1,046" in profile_text and "Median household income: $29,554" in profile_text
+    assert "CENSUS_KEY_SENTINEL" not in compose_prompt({"projectTitle": "Test"}, sample_profile, "")
+    unsafe_draft = "A survey found 70% support and an $85,000 budget."
+    assert grounding_issues(unsafe_draft, {"projectSummary": "Improve a trail."}, sample_profile)
+    safe_scaffold = deterministic_scaffold({"community": "Test", "state": "Virginia", "projectTitle": "Trail", "projectSummary": "Improve a trail."}, sample_profile)
+    assert not grounding_issues(safe_scaffold, {"community": "Test", "state": "Virginia", "projectTitle": "Trail", "projectSummary": "Improve a trail."}, sample_profile)
     sample = {"community":"Damascus","state":"Virginia","projectTitle":"Trailhead Wayfinding","projectSummary":"Improve access from downtown to nearby trails.","selectedGrant":"Sample funding record","usePublicData":False,"provider":"fallback"}
     result = build_draft(sample)
     assert "Fit Summary" in result["draft"]
