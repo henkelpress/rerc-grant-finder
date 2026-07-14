@@ -18,7 +18,7 @@ from typing import Any
 from xml.sax.saxutils import escape
 
 
-APP_VERSION = "0.3.0"
+APP_VERSION = "0.3.1"
 APP_DIR = Path(os.environ.get("RERCIE_APP_ROOT") or (Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent))
 ASSET_DIR = APP_DIR / "assets"
 if not ASSET_DIR.is_dir() and not getattr(sys, "frozen", False):
@@ -461,7 +461,7 @@ HTML_PAGE = r'''<!doctype html>
     document.getElementById("provider").addEventListener("change",(event)=>{ document.getElementById("advanced").classList.toggle("visible",event.target.value==="api"); });
     document.getElementById("draftButton").addEventListener("click",async()=>{ const button=document.getElementById("draftButton"); button.disabled=true; setStatus("Creating a first draft..."); try{ const response=await apiFetch("/api/draft",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(collectPayload())}); const data=await response.json(); if(!response.ok) throw new Error(data.error||"Draft failed."); lastDraft=data.draft; output.textContent=data.draft; setStatus(data.warnings?.length?data.warnings.join(" "):(data.localKnowledgeChars?"Draft ready. Local reference files were used.":"Draft ready."),Boolean(data.warnings?.length)); }catch(error){ setStatus(`Draft failed: ${error.message}`,true); }finally{ button.disabled=false; } });
     function downloadBlob(blob,filename){ const link=document.createElement("a"); link.href=URL.createObjectURL(blob); link.download=filename; link.click(); setTimeout(()=>URL.revokeObjectURL(link.href),1000); }
-    function draftFilename(extension){ const raw=document.getElementById("projectTitle").value||"Project"; const safe=raw.normalize("NFKD").replace(/[^\w -]/g,"").trim().replace(/\s+/g,"_").slice(0,60)||"Project"; const date=new Date().toISOString().slice(0,10); return `RERCie_${safe}_Draft_${date}.${extension}`; }
+    function draftFilename(extension){ const raw=document.getElementById("projectTitle").value||"Project"; const safe=raw.normalize("NFKD").replace(/[^\w -]/g,"").trim().replace(/\s+/g,"_").slice(0,60)||"Project"; const now=new Date(); const date=[now.getFullYear(),String(now.getMonth()+1).padStart(2,"0"),String(now.getDate()).padStart(2,"0")].join("-"); return `RERCie_${safe}_Draft_${date}.${extension}`; }
     document.getElementById("downloadMd").addEventListener("click",()=>{ if(!lastDraft){setStatus("Create a draft first.",true);return;} downloadBlob(new Blob([lastDraft],{type:"text/markdown"}),draftFilename("md")); });
     document.getElementById("downloadDocx").addEventListener("click",async()=>{ if(!lastDraft){setStatus("Create a draft first.",true);return;} setStatus("Building the Word file..."); const response=await apiFetch("/api/export-docx",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({draft:lastDraft,title:document.getElementById("projectTitle").value||"RERCie Draft"})}); if(!response.ok){setStatus("The Word file could not be created.",true);return;} downloadBlob(await response.blob(),draftFilename("docx")); setStatus("Word file ready."); });
     document.getElementById("copyDraft").addEventListener("click",async()=>{ if(!lastDraft){setStatus("Create a draft first.",true);return;} await navigator.clipboard.writeText(lastDraft); setStatus("Draft copied."); });
