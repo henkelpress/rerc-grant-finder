@@ -1,0 +1,27 @@
+{
+  "status": "PASS",
+  "updated": "2026-07-18",
+  "records": 1197,
+  "funding": 659,
+  "resources": 61,
+  "community_examples": 477,
+  "source_sha256": {
+    "data.js": "db041742474fade4659aecf618d9edf99710a7b96763fedf06342a052ae5fde6",
+    "case_studies.js": "124cdb643e127e6fbeea304e6068a376b8c4c9c1d501fd5c6005d497cb009677"
+  },
+  "docx": {
+    "file": "RERC_Community_Explorer_Appendix_2026-07-18.docx",
+    "bytes": 330632,
+    "sha256": "8db735deb64511ddd9508f1b2bd425ef024b243a369f6b2d0d641755a26192bc"
+  },
+  "xlsx": {
+    "file": "RERC_Community_Explorer_Master_2026-07-18.xlsx",
+    "bytes": 327283,
+    "sha256": "a240bb6df840bf69ff7a1cefa668dc745a3b50de5c755ec5c4366dcb0c13efb0"
+  },
+  "csv": {
+    "file": "RERC_Community_Explorer_Master_2026-07-18.csv",
+    "bytes": 818204,
+    "sha256": "000e803708abadaa0d7311fc3c9dd36861a7b3c6d96aed4bb7096015f92d8e6b"
+  }
+}

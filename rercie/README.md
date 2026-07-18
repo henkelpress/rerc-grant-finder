@@ -14,7 +14,7 @@ The Windows installer includes the RERCie app and the pinned `llama.cpp` runtime
 
 The first model download is about 0.81 GB. RERCie checks the model before using it. Later starts use the model already on the computer.
 
-When upgrading from version 0.3.1, setup removes the earlier local model folder. The next start downloads only Google Gemma.
+Upgrades keep a verified local Gemma model, so people do not have to download it again.
 
 No command line is needed. Open RERCie from the Start Menu. The launcher can open or stop the local tool.
 
@@ -29,7 +29,7 @@ No command line is needed. Open RERCie from the Start Menu. The launcher can ope
 
 ## Privacy
 
-Gemma writing and files in `local_knowledge` stay on this computer. The public funding lookup and optional Census lookup use public websites. The Census Bureau requires a free API key for community facts; RERCie can read `CENSUS_API_KEY` from this computer or use a key pasted into the friendly lookup field for that session. The Census key is not sent to Gemma and is not saved by RERCie.
+Gemma writing and files in `local_knowledge` stay on this computer. The public funding lookup and optional Census lookup use public websites. Most community lookups work without a key. If the Census Bureau rate-limits the computer, RERCie can read an optional `CENSUS_API_KEY` or use a key pasted into the friendly lookup field for that session. The Census key is not sent to Gemma and is not saved by RERCie.
 
 Do not add private files to a public copy of this project. Local reference files belong in `local_knowledge`.
 

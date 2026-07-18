@@ -18,12 +18,16 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Check public source links
+      - name: Check funding and resource links
         run: python scripts/grantlink_3po.py
+      - name: Check community example links
+        run: python scripts/check_case_sources.py
       - name: Upload source health report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: source-health-report
           path: |
             source-health-report.json
             source-health-report.md
+            case_studies.source_health.json

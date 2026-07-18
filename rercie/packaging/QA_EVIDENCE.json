@@ -1,14 +1,16 @@
 {
-    "app_version":  "0.3.4",
+    "app_version":  "0.3.5",
     "status":  "PASS",
-    "tested_date":  "2026-07-14",
+    "tested_date":  "2026-07-18",
     "checks":  {
                    "source_smoke":  {
                                         "status":  "PASS",
                                         "catalog_formats":  2,
                                         "territories":  5,
                                         "docx_created":  true,
-                                        "grounding_regression":  true
+                                        "grounding_regression":  true,
+                                        "verified_exact_excerpt_gate":  true,
+                                        "raw_model_prose_exposed":  false
                                     },
                    "native_launcher":  {
                                            "status":  "PASS",
@@ -41,17 +43,18 @@
                                             "optional_desktop_shortcut":  true,
                                             "uninstall_entry":  true,
                                             "isolated_install_completed":  true,
-                                            "earlier_model_folder_removed_on_upgrade":  true
+                                            "earlier_model_folder_removed_on_upgrade":  true,
+                                            "verified_model_preserved_on_upgrade":  true
                                         },
                    "package_integrity":  {
                                              "status":  "PASS",
-                                             "integrity_checked_binaries":  0,
+                                             "integrity_checked_binaries":  null,
                                              "model_rechecked_on_start":  true,
                                              "tampered_binary_rejected":  true
                                          },
                    "live_catalog":  {
                                         "status":  "PASS",
-                                        "total_items":  720,
+                                        "total_items":  1197,
                                         "funding_items":  659,
                                         "resource_items":  61,
                                         "territory_filter_checked":  true,
@@ -59,7 +62,14 @@
                                                                             "1440px",
                                                                             "1024px",
                                                                             "390px"
-                                                                        ]
+                                                                        ],
+                                        "plural_applicant_regression":  true,
+                                        "mixed_stage_regression":  true,
+                                        "case_study_items":  477,
+                                        "case_study_official_hosts_only":  true,
+                                        "case_study_private_fields_excluded":  true,
+                                        "case_study_unique_urls_checked":  304,
+                                        "case_study_hard_failed_urls":  0
                                     },
                    "local_generation":  {
                                             "status":  "PASS",
@@ -68,10 +78,15 @@
                                             "fact_check_markers":  true,
                                             "verified_community_context_section":  true,
                                             "actual_gemma_generation_test":  true,
-                                            "evidence_grounding_gate":  true,
                                             "unsupported_details_removed":  true,
-                                            "grounded_model_draft_or_evidence_scaffold":  true,
-                                            "qualitative_hallucination_probe_rejected":  true
+                                            "qualitative_hallucination_probe_rejected":  true,
+                                            "ci_downloads_or_runs_gemma":  false,
+                                            "verified_exact_excerpt_gate":  true,
+                                            "raw_model_prose_exposed":  false,
+                                            "deterministic_final_scaffold":  true,
+                                            "manual_local_gemma_test_required_before_release":  false,
+                                            "manual_local_gemma_test_status":  "PASS",
+                                            "verified_excerpt_count":  1
                                         },
                    "docx_export":  {
                                        "status":  "PASS",
@@ -120,18 +135,20 @@
                                                                           "U.S. Virgin Islands"
                                                                       ],
                                             "api_key_not_sent_to_writer":  true,
-                                            "visible_lookup_status":  true
+                                            "visible_lookup_status":  true,
+                                            "api_key_optional":  true,
+                                            "keyless_request_regression":  true
                                         },
                    "executable_release_qa":  {
                                                  "status":  "PASS",
-                                                 "checks":  18,
+                                                 "checks":  59,
                                                  "ci_required":  true,
                                                  "deploy_required":  true,
                                                  "installer_build_required":  true
                                              }
                },
     "disclosed_limits":  [
-                             "Community facts require internet access and a free U.S. Census Bureau API key; grant drafting still works when that lookup is unavailable.",
+                             "Community facts require internet access. An optional U.S. Census Bureau API key can be used if the service rate-limits the computer; grant drafting still works when lookup is unavailable.",
                              "No clean Windows virtual-machine test has been completed for this version.",
                              "The public installer is not code-signed, so Windows may show a safety notice.",
                              "Microsoft Defender scanning may be unavailable when that Windows feature is disabled on the build machine.",
@@ -144,9 +161,10 @@
                         },
     "verification_commands":  [
                                   "python scripts/qa_release.py",
+                                  "python scripts/qa_case_studies.py",
                                   "python rercie/rercie.py --smoke",
                                   "python -m py_compile rercie/rercie.py rercie/rercie_core.py rercie/rercie_quality.py",
-                                  "node scripts/qa_public_site_final.cjs http://127.0.0.1:8875/ QA_OUTPUT",
+                                  "node scripts/qa_public_site_cases.cjs http://127.0.0.1:8875/ QA_OUTPUT",
                                   "RERCie.exe --smoke-output launcher-smoke.json",
                                   "RERCie.exe --probe-download-output launcher-download-probe.json",
                                   "build_installer.ps1 -AcceptRuntimeDownload"

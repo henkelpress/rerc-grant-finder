@@ -1,17 +1,18 @@
-# RERC Funding and Resource Explorer
+# RERC Community Explorer
 
-Public GitHub Pages site for the Recreation Economy *for* Rural Communities funding and resource catalog.
+Public GitHub Pages site for exploring funding, technical resources, and official community examples relevant to Recreation Economy *for* Rural Communities work.
 
 Live site: <https://henkelpress.github.io/rerc-grant-finder/>
 
 ## Current Catalog
 
-- 720 public items
-- 655 funding options
-- 65 guides, tools, data sources, training programs, and other resources
+- 1,197 public records
+- 659 funding options
+- 61 guides, tools, data sources, training programs, and other resources
+- 477 official federal community examples
 - Coverage for all 50 states, the District of Columbia, Puerto Rico, American Samoa, Guam, the Northern Mariana Islands, and the U.S. Virgin Islands
 
-People can name a community for the appendix, choose its state or territory, select Funding, Resources, or Both, answer a few project questions, and export the matched results as a real Word DOCX or CSV. The full Word appendix and Excel workbook are also available from the site.
+People can name a community for the appendix, choose its state or territory, select All, Funding, Resources, or Case studies, answer a few project questions, and export the matched results as a real Word DOCX or CSV. The full Word appendix, Excel workbook, and CSV include all three content types and their official URLs.
 
 ## Public Site Files
 
@@ -20,12 +21,18 @@ People can name a community for the appendix, choose its state or territory, sel
 - `rercie.css`
 - `app.js`
 - `data.js`
+- `case_studies.js`
 - `assets/`
 - `downloads/`
 
+
+## Community Examples
+
+The community-example layer includes only public text and links from official EPA, U.S. Climate Resilience Toolkit, and USDA Rural Development pages. Private records, local paths, administrative notes, and images are excluded.
+
 ## Meet RERCie
 
-RERCie Local Grant-Writing Guide is an optional Windows app. It helps people review likely funding matches and turn project notes into a first draft.
+RERCie Local Grant-Writing Guide is an optional Windows app. It helps people review likely funding matches and turn project notes into a structured first draft. Local Gemma may select exact excerpts from supplied evidence; RERCie verifies them and places them in a fixed outline. Raw model prose is not shown.
 
 - Friendly Windows setup wizard
 - No command-line setup for the person installing it
@@ -40,6 +47,13 @@ RERCie is a community-built tool. It is not an EPA grant program, does not decid
 
 The reviewed source is in `rercie/`. Model weights are not stored in this repository or installer.
 
+## Release QA
+
+- `python scripts/qa_release.py`
+- `python scripts/qa_case_studies.py`
+- `python scripts/check_case_sources.py`
+- `node scripts/qa_public_site_cases.cjs <site-url> <output-folder>`
+
 ## Automated Checks
 
 The `Weekly Source Link Check` workflow checks the catalog maintenance links and uploads a source-health report. The `Monthly Federal Opportunity Discovery` workflow searches the public Grants.gov API and uploads a review queue of posted and forecasted opportunities related to rural development, outdoor recreation, trails, tourism, community development, economic development, and technical assistance.
@@ -48,4 +62,4 @@ New opportunities and status changes require human review before they enter the 
 
 ## Publication Boundary
 
-Do not add raw working files, source-audit tables, private notes, email chains, private reference files, model weights, generated logs, PID files, or draft QA material to this public repository.
+Do not add raw working files, source-audit tables, private records, private notes, email chains, private reference files, model weights, generated logs, PID files, or draft QA material to this public repository.

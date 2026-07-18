@@ -1,6 +1,8 @@
 "use strict";
 
-const catalog = Array.isArray(window.RERC_CATALOG?.items) ? window.RERC_CATALOG.items : [];
+const fundingResources = Array.isArray(window.RERC_CATALOG?.items) ? window.RERC_CATALOG.items : [];
+const caseStudies = Array.isArray(window.RERC_CASE_STUDIES?.items) ? window.RERC_CASE_STUDIES.items : [];
+const catalog = [...fundingResources, ...caseStudies];
 
 const places = [
   "Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut","Delaware","District of Columbia",
@@ -15,14 +17,14 @@ const places = [
 const territoryPlaces = new Set(["American Samoa","Guam","Northern Mariana Islands","Puerto Rico","U.S. Virgin Islands"]);
 
 const applicantOptions = [
-  ["local government|municipal|county|city|town|village", "Local government"],
-  ["tribe|tribal|native", "Tribe or Native community"],
-  ["nonprofit|non-profit|community organization", "Nonprofit or community group"],
-  ["state agency|state government", "State agency"],
-  ["business|entrepreneur|tourism|destination marketing", "Business or tourism group"],
-  ["school|college|university|library|museum", "School, library, or museum"],
-  ["utility|authority|district", "Utility or public authority"],
-  ["landowner|individual", "Landowner or individual"]
+  ["local government|local governments|municipal|municipality|municipalities|county|counties|city|cities|town|towns|village|villages", "Local government"],
+  ["tribe|tribes|tribal|native", "Tribe or Native community"],
+  ["nonprofit|nonprofits|non-profit|non-profits|community organization|community organizations", "Nonprofit or community group"],
+  ["state agency|state agencies|state government", "State agency"],
+  ["business|businesses|entrepreneur|entrepreneurs|tourism|destination marketing", "Business or tourism group"],
+  ["school|schools|college|colleges|university|universities|library|libraries|museum|museums", "School, library, or museum"],
+  ["utility|utilities|authority|authorities|district|districts", "Utility or public authority"],
+  ["landowner|landowners|individual|individuals|families", "Landowner or individual"]
 ];
 
 const topicOptions = [
@@ -42,12 +44,13 @@ const topicOptions = [
 const stages = ["Any step", "Planning", "Early Design", "Engineering", "Construction", "Implementation", "Operations/Maintenance", "Capacity Building", "Acquisition", "Cleanup"];
 
 const elements = Object.fromEntries([
-  "communityName","stateSelect","keywordSearch","applicantOptions","topicOptions","stageSelect","includeClosed",
-  "resetButton","sortSelect","limitSelect","exportWord","exportCsv","communityTitle","communitySummary","matchCount",
-  "fundingMatchCount","resourceMatchCount","geographyLabel","activeFilters","results","fundingCount","resourceCount","showResources"
+  "communityName","stateSelect","placeTypeSelect","keywordSearch","applicantOptions","topicOptions","stageSelect",
+  "includeClosed","toggleFilters","resetButton","sortSelect","limitSelect","exportWord","exportCsv","communityTitle","communitySummary",
+  "matchCount","fundingMatchCount","resourceMatchCount","caseStudyMatchCount","activeFilters","results","matchAnnouncement",
+  "fundingCount","resourceCount","caseStudyCount","showFunding","showResources","showCases"
 ].map((id) => [id, document.getElementById(id)]));
 
-let mode = "Both";
+let mode = "All";
 let currentMatches = [];
 
 function escapeHtml(value) {
@@ -70,6 +73,7 @@ function summaryTopic(item) {
 }
 
 function publicSummary(item) {
+  if (item.item_type === "Case Study") return cleanText(item.summary);
   const reviewed = {
     "RERC-FND-0017": "Helps eligible local governments identify, evaluate, and protect historic properties in Alaska.",
     "RERC-FND-0021": "Develops and repairs recreational trails and trail facilities for motorized and non-motorized use.",
@@ -99,8 +103,11 @@ function matchLabel(score) {
 }
 
 function corpus(item) {
-  return [item.title, item.organization, item.geography, item.eligible_users, item.project_stage, item.topic_tags,
-    item.support_type, item.summary, item.why_it_matters].join(" ").toLowerCase();
+  return [
+    item.title, item.organization, item.geography, item.eligible_users, item.project_stage, item.topic_tags,
+    item.support_type, item.summary, item.why_it_matters, item.case_place, item.case_state, item.case_place_type,
+    item.case_program, item.case_partners
+  ].join(" ").toLowerCase();
 }
 
 function selectedValues(container) {
@@ -109,7 +116,10 @@ function selectedValues(container) {
 
 function matchesAny(text, groups) {
   if (!groups.length) return true;
-  return groups.some((group) => group.split("|").some((term) => text.includes(term)));
+  return groups.some((group) => group.split("|").some((term) => {
+    const escaped = term.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\s+/g, "\\s+");
+    return new RegExp(`(^|[^a-z0-9])${escaped}(?=$|[^a-z0-9])`, "i").test(text);
+  }));
 }
 
 function isNational(geography) {
@@ -126,45 +136,60 @@ function appliesToPlace(geography, selectedPlace) {
 }
 
 function matchesGeography(item, selectedPlace) {
-  if (!selectedPlace) return true;
+  if (!selectedPlace || item.item_type === "Case Study") return true;
   const geography = cleanText(item.geography);
-  return isNational(geography) || appliesToPlace(geography, selectedPlace);
+  const territoryMultiState = territoryPlaces.has(selectedPlace) &&
+    geography.toLowerCase().includes("multi-state") &&
+    /(territor|insular|island area|office of insular affairs)/i.test(corpus(item));
+  return isNational(geography) || appliesToPlace(geography, selectedPlace) || territoryMultiState;
 }
 
-function scoreItem(item, text, selectedPlace, applicants, topics, selectedStage) {
-  let score = 45;
-  if (item.status === "Open when checked" || item.status === "Available") score += 18;
-  if (item.status === "Recurring") score += 14;
-  if (item.status === "Cycle closed") score -= 18;
-  if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) score += 15;
-  if (selectedPlace && isNational(cleanText(item.geography))) score += territoryPlaces.has(selectedPlace) ? 2 : 8;
-  if (applicants.length && matchesAny(cleanText(item.eligible_users).toLowerCase(), applicants)) score += 12;
-  if (topics.length) score += Math.min(18, topics.filter((group) => matchesAny(text, [group])).length * 7);
-  if (selectedStage !== "Any step" && text.includes(selectedStage.toLowerCase())) score += 10;
-  if (item.summary) score += 3;
+function scoreItem(item, text, selectedPlace, selectedPlaceType, applicants, topics, selectedStage) {
+  let score = item.item_type === "Case Study" ? 52 : 45;
+  if (item.item_type === "Case Study") {
+    if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) score += 18;
+    if (selectedPlaceType && matchesAny(cleanText(item.case_place_type).toLowerCase(), [selectedPlaceType])) score += 12;
+    if (topics.length) score += Math.min(21, topics.filter((group) => matchesAny(text, [group])).length * 7);
+    if (selectedStage !== "Any step" && text.includes(selectedStage.toLowerCase())) score += 8;
+    if (item.source_url) score += 5;
+  } else {
+    if (item.status === "Open when checked" || item.status === "Available") score += 18;
+    if (item.status === "Recurring") score += 14;
+    if (item.status === "Cycle closed") score -= 18;
+    if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) score += 15;
+    if (selectedPlace && isNational(cleanText(item.geography))) score += territoryPlaces.has(selectedPlace) ? 2 : 8;
+    if (applicants.length && matchesAny(cleanText(item.eligible_users).toLowerCase(), applicants)) score += 12;
+    if (topics.length) score += Math.min(18, topics.filter((group) => matchesAny(text, [group])).length * 7);
+    if (selectedStage !== "Any step" && text.includes(selectedStage.toLowerCase())) score += 10;
+    if (item.summary) score += 3;
+  }
   return Math.max(1, Math.min(99, score));
 }
 
 function getMatches() {
   const selectedPlace = elements.stateSelect.value;
+  const selectedPlaceType = elements.placeTypeSelect.value;
   const applicants = selectedValues(elements.applicantOptions);
   const topics = selectedValues(elements.topicOptions);
   const selectedStage = elements.stageSelect.value;
   const keyword = elements.keywordSearch.value.trim().toLowerCase();
 
   const matches = catalog.filter((item) => {
-    if (mode !== "Both" && item.item_type !== mode) return false;
+    if (mode !== "All" && item.item_type !== mode) return false;
     if (!elements.includeClosed.checked && item.status === "Cycle closed") return false;
     if (!matchesGeography(item, selectedPlace)) return false;
     const text = corpus(item);
     if (keyword && !text.includes(keyword)) return false;
-    if (!matchesAny(cleanText(item.eligible_users).toLowerCase(), applicants)) return false;
+    if (item.item_type !== "Case Study" && !matchesAny(cleanText(item.eligible_users).toLowerCase(), applicants)) return false;
     if (!matchesAny(text, topics)) return false;
-    if (selectedStage !== "Any step" && !cleanText(item.project_stage).toLowerCase().includes(selectedStage.toLowerCase())) return false;
+    if (item.item_type === "Case Study" && selectedPlaceType &&
+        !matchesAny(cleanText(item.case_place_type).toLowerCase(), [selectedPlaceType])) return false;
+    const stageText = cleanText(item.project_stage).toLowerCase();
+    if (selectedStage !== "Any step" && !matchesAny(stageText, [selectedStage.toLowerCase()])) return false;
     return true;
   }).map((item) => ({
     ...item,
-    score: scoreItem(item, corpus(item), selectedPlace, applicants, topics, selectedStage)
+    score: scoreItem(item, corpus(item), selectedPlace, selectedPlaceType, applicants, topics, selectedStage)
   }));
 
   const sort = elements.sortSelect.value;
@@ -177,7 +202,40 @@ function getMatches() {
   return matches;
 }
 
+function matchReason(item) {
+  const selectedPlace = elements.stateSelect.value;
+  const selectedPlaceType = elements.placeTypeSelect.value;
+  const topics = selectedValues(elements.topicOptions);
+  if (item.item_type === "Case Study") {
+    if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) return "Example from your selected state or territory";
+    if (selectedPlaceType && matchesAny(cleanText(item.case_place_type).toLowerCase(), [selectedPlaceType])) return "Similar community type";
+    if (topics.length) return "Matches one or more selected priorities";
+    return "Source-backed community example";
+  }
+  if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) return "Serves your selected area";
+  if (topics.length) return "Matches one or more selected priorities";
+  return "Broad match for rural community work";
+}
+
 function renderCard(item) {
+  if (item.item_type === "Case Study") {
+    const year = item.case_year ? ` | ${escapeHtml(item.case_year)}` : "";
+    return `<article class="result-card case-study">
+      <div>
+        <div class="card-kicker">
+          <span class="pill">Case study</span>
+          <span>${escapeHtml(item.case_program)}</span>
+        </div>
+        <h3>${escapeHtml(item.title)}</h3>
+        <p class="organization">${escapeHtml(item.case_place)}, ${escapeHtml(item.case_state)}${year}</p>
+        <p class="summary">${escapeHtml(publicSummary(item))}</p>
+        <p class="match-reason"><strong>Why it fits:</strong> ${escapeHtml(matchReason(item))}</p>
+        <p class="details"><strong>Topics:</strong> ${escapeHtml(item.topic_tags || "Community development")}</p>
+        <a class="case-link" href="${escapeHtml(item.source_url)}" target="_blank" rel="noopener">Read the example</a>
+      </div>
+      <div class="score" aria-label="Match level: ${matchLabel(item.score)}"><strong>${matchLabel(item.score)}</strong><span>match level</span></div>
+    </article>`;
+  }
   const selectedPlace = elements.stateSelect.value;
   const nationalTerritoryListing = territoryPlaces.has(selectedPlace) && isNational(cleanText(item.geography)) && !appliesToPlace(item.geography, selectedPlace);
   const geography = nationalTerritoryListing ? item.geography + " (confirm territory eligibility)" : item.geography;
@@ -193,8 +251,10 @@ function renderCard(item) {
       <h3>${escapeHtml(item.title)}</h3>
       <p class="organization">${escapeHtml(item.organization)}</p>
       <p class="summary">${escapeHtml(publicSummary(item))}</p>
+      <p class="match-reason"><strong>Why it fits:</strong> ${escapeHtml(matchReason(item))}</p>
       <p class="details"><strong>Where:</strong> ${escapeHtml(geography)} &nbsp; <strong>Who:</strong> ${escapeHtml(item.eligible_users || "Eligibility varies")}</p>
       <p class="details"><strong>Timing or amount:</strong> ${escapeHtml(timing)} &nbsp; <strong>Checked:</strong> ${escapeHtml(item.last_checked)}</p>
+      <a class="case-link" href="${escapeHtml(item.source_url)}" target="_blank" rel="noopener">${item.item_type === "Resource" ? "Open the resource" : "View program details"}</a>
     </div>
     <div class="score" aria-label="Match level: ${matchLabel(item.score)}"><strong>${matchLabel(item.score)}</strong><span>match level</span></div>
   </article>`;
@@ -203,6 +263,7 @@ function renderCard(item) {
 function activeFilterSummary() {
   const values = [];
   if (elements.stateSelect.value) values.push(elements.stateSelect.value);
+  if (elements.placeTypeSelect.value) values.push(elements.placeTypeSelect.options[elements.placeTypeSelect.selectedIndex].text);
   if (elements.keywordSearch.value.trim()) values.push(`Search: ${elements.keywordSearch.value.trim()}`);
   const applicants = selectedValues(elements.applicantOptions);
   const topics = selectedValues(elements.topicOptions);
@@ -213,43 +274,65 @@ function activeFilterSummary() {
   return values.length ? values.join(" | ") : "Showing current national options. Add details to make the list more useful.";
 }
 
+function renderGroup(kind, title, description, items, total, className) {
+  return `<section class="result-group ${className}" aria-label="${escapeHtml(title)}">
+    <div class="result-group-heading">
+      <div><p class="eyebrow">${escapeHtml(kind)}</p><h3>${escapeHtml(title)}</h3><p>${escapeHtml(description)}</p></div>
+      <strong>${total.toLocaleString()} matches</strong>
+    </div>
+    ${items.length ? items.map(renderCard).join("") : `<div class="empty-state"><h3>No ${escapeHtml(kind.toLowerCase())} matches</h3><p>Try fewer answers or a wider search.</p></div>`}
+  </section>`;
+}
+
 function render() {
   currentMatches = getMatches();
   const limitValue = elements.limitSelect.value;
   const limit = limitValue === "all" ? Number.MAX_SAFE_INTEGER : Number(limitValue);
   const fundingResults = currentMatches.filter((item) => item.item_type === "Funding");
   const resourceResults = currentMatches.filter((item) => item.item_type === "Resource");
+  const caseResults = currentMatches.filter((item) => item.item_type === "Case Study");
   let visible = currentMatches.slice(0, limit);
-  if (mode === "Both") {
-    let fundingSlots = limitValue === "all" ? fundingResults.length : Math.ceil(limit / 2);
-    let resourceSlots = limitValue === "all" ? resourceResults.length : Math.floor(limit / 2);
-    if (fundingResults.length < fundingSlots) resourceSlots += fundingSlots - fundingResults.length;
-    if (resourceResults.length < resourceSlots) fundingSlots += resourceSlots - resourceResults.length;
-    visible = [...fundingResults.slice(0, fundingSlots), ...resourceResults.slice(0, resourceSlots)];
+  if (mode === "All") {
+    const each = limitValue === "all" ? Number.MAX_SAFE_INTEGER : Math.max(1, Math.floor(limit / 3));
+    visible = [
+      ...fundingResults.slice(0, each),
+      ...resourceResults.slice(0, each),
+      ...caseResults.slice(0, each)
+    ];
   }
   const community = elements.communityName.value.trim();
   const place = elements.stateSelect.value;
   const label = community || place || "rural communities";
-  const fundingMatches = currentMatches.filter((item) => item.item_type === "Funding").length;
-  const resourceMatches = currentMatches.filter((item) => item.item_type === "Resource").length;
+  const fundingMatches = fundingResults.length;
+  const resourceMatches = resourceResults.length;
+  const caseMatches = caseResults.length;
+  const modeLabel = {
+    "All": "Funding, resources, and examples",
+    "Funding": "Funding",
+    "Resource": "Resources",
+    "Case Study": "Community examples"
+  }[mode];
 
-  elements.communityTitle.textContent = `${mode === "Both" ? "Funding and resources" : mode === "Funding" ? "Funding" : "Resources"} for ${label}`;
+  elements.communityTitle.textContent = `${modeLabel} for ${label}`;
   elements.communitySummary.textContent = currentMatches.length
-    ? `Review the most relevant matches below. Match levels compare your answers; they do not confirm eligibility. Check current requirements with the program before you apply or make a decision.`
-    : `Try fewer choices or a wider search.`;
+    ? "Match levels compare your answers. They do not confirm eligibility or guarantee that another community's approach will work in your place."
+    : "Try fewer choices or a wider search.";
   elements.matchCount.textContent = currentMatches.length.toLocaleString();
   elements.fundingMatchCount.textContent = fundingMatches.toLocaleString();
   elements.resourceMatchCount.textContent = resourceMatches.toLocaleString();
-  elements.geographyLabel.textContent = place || "U.S.";
+  elements.caseStudyMatchCount.textContent = caseMatches.toLocaleString();
   elements.activeFilters.textContent = activeFilterSummary();
+  elements.matchAnnouncement.textContent = `${currentMatches.length} matches shown for ${label}.`;
   if (!visible.length) {
     elements.results.innerHTML = `<div class="empty-state"><h3>No matches yet</h3><p>Clear one or more answers, or turn on closed rounds to see future options.</p></div>`;
-  } else if (mode === "Both") {
-    const visibleFunding = visible.filter((item) => item.item_type === "Funding");
-    const visibleResources = visible.filter((item) => item.item_type === "Resource");
+  } else if (mode === "All") {
+    const shownFunding = visible.filter((item) => item.item_type === "Funding");
+    const shownResources = visible.filter((item) => item.item_type === "Resource");
+    const shownCases = visible.filter((item) => item.item_type === "Case Study");
     elements.results.innerHTML = [
-      `<section class="result-group funding-group" aria-labelledby="fundingResultsTitle"><div class="result-group-heading"><div><p class="eyebrow">Funding</p><h3 id="fundingResultsTitle">Funding opportunities</h3><p>Grants, loans, tax credits, and other ways to pay for community projects.</p></div><strong>${fundingMatches.toLocaleString()} matches</strong></div>${visibleFunding.length ? visibleFunding.map(renderCard).join("") : `<div class="empty-state"><h3>No funding matches</h3><p>Try fewer answers or a wider search.</p></div>`}</section>`,
-      `<section class="result-group resource-group" aria-labelledby="resourceResultsTitle"><div class="result-group-heading"><div><p class="eyebrow">Resources</p><h3 id="resourceResultsTitle">Tools and technical help</h3><p>Guides, data, training, and hands-on help to plan and carry out the work.</p></div><strong>${resourceMatches.toLocaleString()} matches</strong></div>${visibleResources.length ? visibleResources.map(renderCard).join("") : `<div class="empty-state"><h3>No resource matches</h3><p>Try fewer answers or a wider search.</p></div>`}</section>`
+      renderGroup("Funding", "Ways to pay for the work", "Grants, loans, tax credits, and other funding options.", shownFunding, fundingMatches, "funding-group"),
+      renderGroup("Resources", "Tools and technical help", "Guides, data, training, and hands-on support.", shownResources, resourceMatches, "resource-group"),
+      renderGroup("Case studies", "Examples from other communities", "Source-backed examples to help teams compare approaches and ask better questions.", shownCases, caseMatches, "case-group")
     ].join("");
   } else {
     elements.results.innerHTML = visible.map(renderCard).join("");
@@ -274,13 +357,16 @@ function downloadBlob(contents, mimeType, filename) {
 }
 
 function exportCsv() {
-  const headers = ["Item Type","Title","Organization","Status","Geography","Who Can Use It","Project Step","Topics","Type of Help","Timing or Amount","Summary"];
+  const headers = ["Item Type","Title","Organization or Program","Status","Geography","Who Can Use It","Project Step","Topics","Type of Help","Timing or Year","Summary","Current Link"];
   const lines = [headers.map(csvCell).join(",")];
   currentMatches.forEach((item) => lines.push([
-    item.item_type, item.title, item.organization, item.status, item.geography, item.eligible_users, item.project_stage,
-    item.topic_tags, item.support_type, item.deadline_or_availability || item.amount_or_cost, publicSummary(item)
+    item.item_type, item.title, item.organization, item.status,
+    item.item_type === "Case Study" ? `${item.case_place}, ${item.case_state}` : item.geography,
+    item.eligible_users, item.project_stage, item.topic_tags, item.support_type,
+    item.item_type === "Case Study" ? item.case_year : (item.deadline_or_availability || item.amount_or_cost),
+    publicSummary(item), item.source_url
   ].map(csvCell).join(",")));
-  downloadBlob(`\ufeff${lines.join("\r\n")}`, "text/csv;charset=utf-8", "RERC-community-funding-and-resources.csv");
+  downloadBlob(`\uFEFF${lines.join("\r\n")}`, "text/csv;charset=utf-8", "RERC-community-funding-resources-and-case-studies.csv");
 }
 
 function xmlEscape(value) {
@@ -306,6 +392,11 @@ function wordParagraphXml(runs, style = "") {
   return "<w:p>" + properties + runs.join("") + "</w:p>";
 }
 
+function wordHyperlinkXml(text, relationshipId) {
+  return '<w:hyperlink r:id="' + relationshipId + '"><w:r><w:rPr><w:color w:val="1B6A8F"/><w:u w:val="single"/></w:rPr><w:t>' +
+    xmlEscape(text) + "</w:t></w:r></w:hyperlink>";
+}
+
 async function exportWord() {
   if (typeof JSZip === "undefined") {
     window.alert("The Word export tool did not load. Refresh the page and try again.");
@@ -315,12 +406,13 @@ async function exportWord() {
   const place = elements.stateSelect.value || "United States";
   const funding = currentMatches.filter((item) => item.item_type === "Funding");
   const resources = currentMatches.filter((item) => item.item_type === "Resource");
+  const cases = currentMatches.filter((item) => item.item_type === "Case Study");
   const profile = activeFilterSummary();
   const relationships = [];
   const body = [];
   let relationshipNumber = 1;
 
-  body.push(wordParagraphXml([wordRunXml("Appendix C: Funding and Resources")], "Heading1"));
+  body.push(wordParagraphXml([wordRunXml("Appendix C: Funding, Resources, and Community Examples")], "Heading1"));
   body.push(wordParagraphXml([
     wordRunXml("Recreation Economy "),
     wordRunXml("for", { italic: true }),
@@ -329,8 +421,8 @@ async function exportWord() {
   body.push(wordParagraphXml([wordRunXml(community + ", " + place, { bold: true })]));
   body.push(wordParagraphXml([wordRunXml(profile)]));
   body.push(wordParagraphXml([
-    wordRunXml("RERC is free planning help. It is not a grant program. ", { bold: true }),
-    wordRunXml("Program rules and dates can change. Check current requirements with the program before you apply or use a resource.")
+    wordRunXml("This explorer does not determine eligibility. ", { bold: true }),
+    wordRunXml("Program rules and dates can change. Community examples show approaches, not guaranteed results. Confirm current requirements and local fit before making a decision.")
   ], "Notice"));
 
   const addSection = (title, items) => {
@@ -342,21 +434,39 @@ async function exportWord() {
         wordRunXml(" | " + item.status + " | " + item.support_type)
       ]));
       body.push(wordParagraphXml([wordRunXml(publicSummary(item))]));
-      body.push(wordParagraphXml([
-        wordRunXml("Where: ", { bold: true }),
-        wordRunXml(item.geography),
-        wordRunXml(" | Who: ", { bold: true }),
-        wordRunXml(item.eligible_users || "Eligibility varies")
-      ]));
-      body.push(wordParagraphXml([
-        wordRunXml("Last checked: ", { bold: true }),
-        wordRunXml(item.last_checked || "Not recorded")
-      ]));
+      if (item.item_type === "Case Study") {
+        body.push(wordParagraphXml([
+          wordRunXml("Community: ", { bold: true }),
+          wordRunXml(`${item.case_place}, ${item.case_state}`),
+          wordRunXml(" | Program: ", { bold: true }),
+          wordRunXml(item.case_program)
+        ]));
+      } else {
+        body.push(wordParagraphXml([
+          wordRunXml("Where: ", { bold: true }),
+          wordRunXml(item.geography),
+          wordRunXml(" | Who: ", { bold: true }),
+          wordRunXml(item.eligible_users || "Eligibility varies")
+        ]));
+        body.push(wordParagraphXml([
+          wordRunXml("Last checked: ", { bold: true }),
+          wordRunXml(item.last_checked || "Not recorded")
+        ]));
+      }
+      if (item.source_url) {
+        const relationshipId = "rId" + relationshipNumber++;
+        relationships.push('<Relationship Id="' + relationshipId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="' + xmlEscape(item.source_url) + '" TargetMode="External"/>');
+        body.push(wordParagraphXml([
+          wordRunXml(item.item_type === "Case Study" ? "Read the example: " : "Current program information: ", { bold: true }),
+          wordHyperlinkXml(item.source_url, relationshipId)
+        ]));
+      }
     });
   };
 
   addSection("Funding Opportunities", funding);
   addSection("Resources", resources);
+  addSection("Community Examples", cases);
 
   const documentXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
@@ -387,15 +497,16 @@ async function exportWord() {
     '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>' +
     "</Relationships>";
   const documentRelationships = '<?xml version="1.0" encoding="UTF-8"?>' +
-    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>';
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    relationships.join("") + "</Relationships>";
   const now = new Date().toISOString();
   const coreXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
-    "<dc:title>RERC Community Funding and Resources Appendix</dc:title><dc:creator>Recreation Economy for Rural Communities</dc:creator><cp:lastModifiedBy>RERC Funding and Resource Finder</cp:lastModifiedBy>" +
+    "<dc:title>RERC Community Funding, Resources, and Examples Appendix</dc:title><dc:creator>Recreation Economy for Rural Communities</dc:creator><cp:lastModifiedBy>RERC Community Explorer</cp:lastModifiedBy>" +
     '<dcterms:created xsi:type="dcterms:W3CDTF">' + now + '</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">' + now + "</dcterms:modified></cp:coreProperties>";
   const appXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">' +
-    "<Application>RERC Funding and Resource Finder</Application><AppVersion>1.0</AppVersion></Properties>";
+    "<Application>RERC Community Explorer</Application><AppVersion>1.0</AppVersion></Properties>";
 
   const zip = new JSZip();
   zip.file("[Content_Types].xml", contentTypes);
@@ -416,13 +527,14 @@ function buildCheckList(container, options, groupName) {
 function reset() {
   elements.communityName.value = "";
   elements.stateSelect.value = "";
+  elements.placeTypeSelect.value = "";
   elements.keywordSearch.value = "";
   elements.stageSelect.value = "Any step";
   elements.includeClosed.checked = false;
   elements.sortSelect.value = "score";
-  elements.limitSelect.value = "50";
+  elements.limitSelect.value = "30";
   document.querySelectorAll(".filters input[type=checkbox]").forEach((input) => { input.checked = false; });
-  mode = "Both";
+  mode = "All";
   document.querySelectorAll("[data-mode]").forEach((button) => {
     const active = button.dataset.mode === mode;
     button.classList.toggle("active", active);
@@ -432,8 +544,9 @@ function reset() {
 }
 
 function initialize() {
-  elements.fundingCount.textContent = catalog.filter((item) => item.item_type === "Funding").length.toLocaleString();
-  elements.resourceCount.textContent = catalog.filter((item) => item.item_type === "Resource").length.toLocaleString();
+  elements.fundingCount.textContent = fundingResources.filter((item) => item.item_type === "Funding").length.toLocaleString();
+  elements.resourceCount.textContent = fundingResources.filter((item) => item.item_type === "Resource").length.toLocaleString();
+  elements.caseStudyCount.textContent = caseStudies.length.toLocaleString();
   elements.stateSelect.innerHTML = `<option value="">All states, D.C., and U.S. territories</option>${places.map((place) => `<option>${escapeHtml(place)}</option>`).join("")}`;
   elements.stageSelect.innerHTML = stages.map((stage) => `<option>${escapeHtml(stage)}</option>`).join("");
   buildCheckList(elements.applicantOptions, applicantOptions, "applicant");
@@ -448,8 +561,15 @@ function initialize() {
     render();
   }
   document.querySelectorAll("[data-mode]").forEach((button) => button.addEventListener("click", () => chooseMode(button.dataset.mode)));
+  elements.showFunding.addEventListener("click", () => chooseMode("Funding"));
   elements.showResources.addEventListener("click", () => chooseMode("Resource"));
+  elements.showCases.addEventListener("click", () => chooseMode("Case Study"));
   document.querySelectorAll("input, select").forEach((control) => control.addEventListener(control.type === "text" || control.type === "search" ? "input" : "change", render));
+  elements.toggleFilters.addEventListener("click", () => {
+    const open = document.querySelector(".filters").classList.toggle("open");
+    elements.toggleFilters.setAttribute("aria-expanded", String(open));
+    elements.toggleFilters.textContent = open ? "Hide filters" : "Show filters";
+  });
   elements.resetButton.addEventListener("click", reset);
   elements.exportCsv.addEventListener("click", exportCsv);
   elements.exportWord.addEventListener("click", exportWord);

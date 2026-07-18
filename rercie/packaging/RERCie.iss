@@ -5,7 +5,7 @@
   #error OutputDir must be defined by the build script.
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.3.4"
+  #define AppVersion "0.3.5"
 #endif
 
 #define AppName "RERCie"
@@ -62,8 +62,6 @@ Name: "{autoprograms}\RERCie"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}";
 Name: "{autodesktop}\RERCie"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"; Tasks: desktopicon; Comment: "Use a funding option and project notes to make a first draft"
 Name: "{autoprograms}\RERCie website"; Filename: "{#AppUrl}"
 
-[InstallDelete]
-Type: filesandordirs; Name: "{app}\models"
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "Meet RERCie"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
 

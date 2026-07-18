@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Find funding and planning resources for rural recreation economies.">
-  <title>RERC Funding and Resource Explorer</title>
+  <meta name="description" content="Find funding, planning resources, and real community examples for rural recreation economies.">
+  <title>RERC Community Explorer</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="styles.css?v=20260714-3">
-  <link rel="stylesheet" href="rercie.css?v=20260714-3">
+  <link rel="stylesheet" href="styles.css?v=20260717-1">
+  <link rel="stylesheet" href="rercie.css?v=20260717-1">
 </head>
 <body>
   <a class="skip-link" href="#finder">Skip to the explorer</a>
@@ -15,57 +15,90 @@
     <div class="hero-photo" aria-hidden="true"></div>
     <div class="hero-shade" aria-hidden="true"></div>
     <div class="agency-bar">
-      <span>Recreation Economy <em>for</em> Rural Communities</span>
-      <a href="https://www.epa.gov/smartgrowth/recreation-economy-rural-communities" target="_blank" rel="noopener">EPA RERC website</a>
+      <span class="agency-name">Recreation Economy <em>for</em> Rural Communities</span>
+      <nav class="agency-links" aria-label="RERC links">
+        <a href="https://www.epa.gov/smartgrowth/recreation-economy-rural-communities" target="_blank" rel="noopener">About RERC</a>
+        <a href="https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Setup.exe">Download RERCie</a>
+      </nav>
     </div>
     <div class="hero-inner">
-      <p class="eyebrow">RERC community funding and resource tool</p>
-      <h1>Find funding and help for your community.</h1>
-      <p class="hero-copy">Tell us about your place and project. Get a list of funding and resources to review.</p>
+      <p class="eyebrow">RERC community field guide</p>
+      <h1>Funding, tools, and examples for rural communities.</h1>
+      <p class="hero-copy">Describe your place and priorities. Build one practical list of ways to fund the work, plan the project, and learn from other communities.</p>
       <div class="hero-actions">
-        <a class="primary-action" href="#finder">Build your list</a>
-        <a class="secondary-hero-action" href="https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Setup.exe">Download RERCie</a>
+        <a class="primary-action" href="#finder">Start with your community</a>
+        <a class="secondary-hero-action" href="#caseStudiesIntro">Explore community examples</a>
       </div>
-      <p class="tool-disclosure">RERCie is a community-built companion. It is not an EPA grant program, does not determine eligibility, and does not submit applications.</p>
     </div>
     <p class="photo-credit">Outdoor recreation photo: <a href="https://www.nps.gov/aboutus/disclaimer.htm" target="_blank" rel="noopener">National Park Service</a></p>
   </header>
 
   <section class="intro-band" aria-label="About this tool">
     <div>
-      <strong>RERC is free planning help.</strong>
-      <span>This explorer is not run by EPA and is not a grant program. It helps communities plan their next steps.</span>
+      <strong>Move from an idea to a workable next step.</strong>
+      <span>Use the same community profile to compare funding, hands-on help, and official examples from communities across the country.</span>
     </div>
     <dl class="catalog-counts">
       <div><dt id="fundingCount">0</dt><dd>funding options</dd></div>
-      <div><dt id="resourceCount">0</dt><dd>resources</dd></div>
+      <div><dt id="resourceCount">0</dt><dd>planning resources</dd></div>
+      <div><dt id="caseStudyCount">0</dt><dd>community examples</dd></div>
       <div><dt>U.S.-wide</dt><dd>50 states, D.C. + 5 territories</dd></div>
     </dl>
   </section>
 
-  <section class="resource-intro" aria-labelledby="resourceIntroTitle">
-    <div>
-      <p class="eyebrow">Planning resources</p>
-      <h2 id="resourceIntroTitle">Find tools and hands-on help, too.</h2>
-      <p>Resources include guides, data, training, and technical help. They can help your community shape a project, build partnerships, and get ready to apply for funding.</p>
+  <section id="caseStudiesIntro" class="pathways" aria-labelledby="pathwaysTitle">
+    <div class="pathways-heading">
+      <p class="eyebrow">Three ways forward</p>
+      <h2 id="pathwaysTitle">Find what your community needs now.</h2>
     </div>
-    <a id="showResources" href="#finder">Browse resources</a>
+    <div class="pathway">
+      <span class="pathway-number" aria-hidden="true">01</span>
+      <h3>Fund the work</h3>
+      <p>Review grants, loans, rebates, and other ways to pay for eligible projects.</p>
+      <a id="showFunding" href="#finder">Browse funding</a>
+    </div>
+    <div class="pathway">
+      <span class="pathway-number" aria-hidden="true">02</span>
+      <h3>Plan the project</h3>
+      <p>Find guides, data, training, and technical help that can make the work stronger.</p>
+      <a id="showResources" href="#finder">Browse resources</a>
+    </div>
+    <div class="pathway">
+      <span class="pathway-number" aria-hidden="true">03</span>
+      <h3>Learn from other places</h3>
+      <p>See source-backed examples from communities that faced similar goals and challenges.</p>
+      <a id="showCases" href="#finder">Browse case studies</a>
+    </div>
   </section>
 
   <main id="finder" class="finder-layout">
-    <aside class="filters" aria-label="Community questions">
+    <button id="toggleFilters" class="filter-toggle" type="button" aria-expanded="false" aria-controls="communityFilters">Show filters</button>
+    <aside id="communityFilters" class="filters" aria-label="Community questions">
       <div class="filter-heading">
-        <p class="eyebrow">Your community</p>
-        <h2>What do you need?</h2>
+        <p class="step-label"><span>1</span> Your place</p>
+        <h2>Build a community profile</h2>
+        <p>Your answers narrow the list. They do not determine eligibility.</p>
       </div>
 
-      <label for="communityName">Community name for your appendix</label>
+      <label for="communityName">Community name</label>
       <input id="communityName" type="text" autocomplete="address-level2" placeholder="Example: Taos, New Mexico">
 
       <label for="stateSelect">State, D.C., or U.S. territory</label>
       <select id="stateSelect"></select>
 
-      <label for="keywordSearch">Search words</label>
+      <label for="placeTypeSelect">Community type for examples</label>
+      <select id="placeTypeSelect">
+        <option value="">Any community type</option>
+        <option value="town|city|community|village">Town or city</option>
+        <option value="county|region">County or region</option>
+        <option value="tribal|tribe|native">Tribal community</option>
+      </select>
+
+      <div class="filter-divider">
+        <p class="step-label"><span>2</span> Your priorities</p>
+      </div>
+
+      <label for="keywordSearch">Search words or project name</label>
       <input id="keywordSearch" type="search" placeholder="trail, downtown, business, water">
 
       <fieldset>
@@ -89,17 +122,18 @@
       <button id="resetButton" class="secondary-action" type="button">Reset answers</button>
     </aside>
 
-    <section class="results-workspace" aria-label="Matched funding and resources">
+    <section class="results-workspace" aria-label="Matched funding, resources, and case studies">
       <div class="results-heading">
         <div>
-          <p class="eyebrow">Your matched list</p>
-          <h2 id="communityTitle">Funding and resources for rural communities</h2>
+          <p class="step-label"><span>3</span> Your matches</p>
+          <h2 id="communityTitle">Funding, resources, and examples for rural communities</h2>
           <p id="communitySummary">Choose a place and answer the questions. Your list will update as you go.</p>
         </div>
         <div class="mode-tabs" role="group" aria-label="Choose what to show">
-          <button type="button" data-mode="Both" class="active" aria-pressed="true">Both</button>
+          <button type="button" data-mode="All" class="active" aria-pressed="true">All</button>
           <button type="button" data-mode="Funding" aria-pressed="false">Funding</button>
           <button type="button" data-mode="Resource" aria-pressed="false">Resources</button>
+          <button type="button" data-mode="Case Study" aria-pressed="false">Case studies</button>
         </div>
       </div>
 
@@ -107,7 +141,7 @@
         <div><strong id="matchCount">0</strong><span>matches</span></div>
         <div><strong id="fundingMatchCount">0</strong><span>funding</span></div>
         <div><strong id="resourceMatchCount">0</strong><span>resources</span></div>
-        <div><strong id="geographyLabel">U.S.</strong><span>area</span></div>
+        <div><strong id="caseStudyMatchCount">0</strong><span>case studies</span></div>
       </div>
       <p id="matchAnnouncement" class="sr-only" aria-live="polite" aria-atomic="true"></p>
 
@@ -117,13 +151,13 @@
           <option value="score">Most relevant</option>
           <option value="title">Name</option>
           <option value="status">Status</option>
-          <option value="type">Funding or resource</option>
+          <option value="type">Type</option>
         </select>
         <label for="limitSelect">Show</label>
         <select id="limitSelect">
-          <option value="15" selected>15</option>
-          <option value="50">50</option>
-          <option value="100">100</option>
+          <option value="30" selected>30</option>
+          <option value="60">60</option>
+          <option value="120">120</option>
           <option value="all">All</option>
         </select>
         <button id="exportWord" type="button">Export Word appendix</button>
@@ -137,14 +171,14 @@
 
   <section class="download-band" aria-label="Full catalog downloads">
     <div>
-      <p class="eyebrow">Use the full list</p>
-      <h2>Download every public item.</h2>
-      <p>Use these files for research, review, or an action-plan appendix.</p>
+      <p class="eyebrow">Use the full collection</p>
+      <h2>Download the full community explorer collection.</h2>
+      <p>The Word, Excel, and CSV files include all funding opportunities, resources, and community examples, with official links.</p>
     </div>
     <div class="download-actions">
-      <a href="downloads/RERC_Funding_and_Resource_Appendix_2026-07-14.docx" download>Full Word appendix</a>
-      <a href="downloads/RERC_Funding_and_Resource_Master_2026-07-14.xlsx" download>Full Excel workbook</a>
-      <a href="downloads/RERC_Funding_and_Resource_Master_2026-07-14.csv" download>Full CSV</a>
+      <a href="downloads/RERC_Community_Explorer_Appendix_2026-07-18.docx" download>Full Word appendix</a>
+      <a href="downloads/RERC_Community_Explorer_Master_2026-07-18.xlsx" download>Full Excel workbook</a>
+      <a href="downloads/RERC_Community_Explorer_Master_2026-07-18.csv" download>Full CSV</a>
     </div>
   </section>
 
@@ -154,7 +188,7 @@
       <p class="eyebrow">Optional Windows tool</p>
       <h2>Meet RERCie, your local grant-writing guide.</h2>
       <p>RERCie helps you review likely matches and start a grant draft with your own notes.</p>
-      <p>The setup guide walks you through each step. Local writing does not need a command line, account, or AI key. Optional Census facts need internet access and a free Census API key.</p>
+      <p>The setup guide walks you through each step. Local writing does not need a command line, account, or AI key. Optional Census facts need internet access. A free Census API key is only needed if the service rate-limits the computer.</p>
       <p>RERCie is a community-built companion. It is not an EPA grant program, does not determine eligibility, and does not submit applications.</p>
       <p class="writer-note">First use downloads Google Gemma, about 0.81 GB. Check every fact and funding rule before you apply.</p>
     </div>
@@ -167,12 +201,13 @@
 
   <footer>
     <p><strong>Recreation Economy <em>for</em> Rural Communities</strong></p>
-    <p>Program rules and dates can change. Check current requirements with the program before you apply or make a decision.</p>
+    <p>This community-built explorer is not an EPA grant program. Program rules and dates can change. Confirm current requirements before applying or making a decision.</p>
     <p><a href="https://www.epa.gov/smartgrowth/recreation-economy-rural-communities">Learn about RERC at EPA.gov</a></p>
   </footer>
 
   <script src="vendor/jszip.min.js"></script>
   <script src="data.js"></script>
-  <script src="app.js?v=20260714-3"></script>
+  <script src="case_studies.js"></script>
+  <script src="app.js?v=20260718-1"></script>
 </body>
 </html>

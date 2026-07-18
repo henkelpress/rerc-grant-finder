@@ -19,7 +19,7 @@ from typing import Any
 from xml.sax.saxutils import escape
 
 
-APP_VERSION = "0.3.4"
+APP_VERSION = "0.3.5"
 APP_DIR = Path(os.environ.get("RERCIE_APP_ROOT") or (Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent))
 ASSET_DIR = APP_DIR / "assets"
 if not ASSET_DIR.is_dir() and not getattr(sys, "frozen", False):
@@ -61,9 +61,13 @@ ISLAND_AREA_DATASETS = {
     "U.S. Virgin Islands": "dhcvi",
 }
 
-SYSTEM_PROMPT = """You are RERCie, a careful grant-writing assistant for rural communities.
+SYSTEM_PROMPT = """You are an evidence-extraction assistant. Return JSON only.
 
-Treat the supplied project text, funding record, verified public profile, and local reference files as the complete evidence boundary. A fact is supported only when it appears explicitly in that evidence. Do not use general knowledge to describe the community or funding program. Never create a number, date, amount, percentage, distance, timeline, study, survey, current condition, eligibility rule, partner, commitment, or budget allocation. Use proposed or intended language for future benefits. Write a document, not a conversation. Mark missing local facts as [add local fact] and unconfirmed funding rules as [check official source]. A person must review the draft before submission."""
+Select up to six useful excerpts copied exactly from the supplied evidence. Do not
+paraphrase, summarize, correct, combine, or add text. Each excerpt must be a
+complete sentence or a short self-contained phrase. Return this shape:
+{"excerpts":[{"text":"exact copied text"}]}
+If there is no useful evidence, return {"excerpts":[]}."""
 
 
 def request_json(url: str, payload: dict[str, Any] | None = None, headers: dict[str, str] | None = None, timeout: int = 30) -> Any:
@@ -178,12 +182,12 @@ def fetch_census_community_profile(community: str, state: str, census_api_key: s
     if not community or not fips:
         return {}
     api_key = (census_api_key or _local_env_value("CENSUS_API_KEY")).strip()
-    if not api_key:
-        raise PermissionError("A free Census API key is needed for community facts. Open Community lookup help to add one.")
 
     if state in ISLAND_AREA_DATASETS:
         dataset = ISLAND_AREA_DATASETS[state]
-        params = {"get": "NAME,P1_001N", "for": f"state:{fips}", "key": api_key}
+        params = {"get": "NAME,P1_001N", "for": f"state:{fips}"}
+        if api_key:
+            params["key"] = api_key
         rows = request_json(_census_url(f"{CENSUS_ISLAND_YEAR}/dec/{dataset}", params), timeout=30)
         record = dict(zip(rows[0], rows[1], strict=False)) if isinstance(rows, list) and len(rows) > 1 else {}
         if not record:
@@ -202,7 +206,9 @@ def fetch_census_community_profile(community: str, state: str, census_api_key: s
     explicit_county = bool(re.search(r"\b(county|parish|census area)\b", community, re.IGNORECASE))
     geography_types = ("county", "place") if explicit_county else ("place", "county")
     for geography_type in geography_types:
-        params = {"get": fields, "for": f"{geography_type}:*", "in": f"state:{fips}", "key": api_key}
+        params = {"get": fields, "for": f"{geography_type}:*", "in": f"state:{fips}"}
+        if api_key:
+            params["key"] = api_key
         rows = request_json(_census_url(f"{CENSUS_YEAR}/acs/acs5/profile", params), timeout=30)
         record = _best_geography_record(rows, community)
         if not record:
@@ -326,19 +332,84 @@ Writing requirements:
 """.strip()
 
 
-def call_local_writer(prompt: str, model: str) -> str:
+def call_local_writer(prompt: str, model: str, system_prompt: str = SYSTEM_PROMPT) -> str:
     payload = {
         "model": model or DEFAULT_MODEL,
-        "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
+        "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
         "temperature": 0.0,
         "top_p": 0.9,
         "repeat_penalty": 1.08,
-        "max_tokens": 2600,
+        "max_tokens": 900,
         "stream": False,
     }
     data = request_json(LOCAL_CHAT_URL, payload=payload, timeout=300)
     choices = data.get("choices") or []
     return choices[0].get("message", {}).get("content", "").strip() if choices else ""
+
+
+def _normalized_text(value: str) -> str:
+    return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", value or "")).strip()
+
+
+def evidence_text(payload: dict[str, Any], public_profile: dict[str, str], local_knowledge: str) -> str:
+    fields = (
+        ("Community", payload.get("community")),
+        ("State or territory", payload.get("state")),
+        ("Project title", payload.get("projectTitle")),
+        ("Project summary", payload.get("projectSummary")),
+        ("Selected funding record", _funding_record_text(payload.get("selectedGrant"))),
+        ("Match, staff, and partner capacity", payload.get("matchCapacity")),
+        ("Official-source notes", payload.get("sourceNotes")),
+        ("Project notes and uploaded text", payload.get("projectNotes")),
+        ("Verified public community profile", format_public_profile(public_profile)),
+        ("Local reference files", local_knowledge),
+    )
+    return "\n\n".join(
+        f"[{label}]\n{str(value).strip()}" for label, value in fields if str(value or "").strip()
+    )
+
+
+def parse_verified_excerpts(raw: str, evidence: str, limit: int = 6) -> list[str]:
+    candidate = (raw or "").strip()
+    if candidate.startswith("```"):
+        candidate = re.sub(r"^```(?:json)?\s*", "", candidate, flags=re.IGNORECASE)
+        candidate = re.sub(r"\s*```$", "", candidate)
+    try:
+        parsed = json.loads(candidate)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+    entries = parsed.get("excerpts", []) if isinstance(parsed, dict) else []
+    if not isinstance(entries, list):
+        return []
+    verified: list[str] = []
+    for entry in entries:
+        excerpt = entry.get("text", "") if isinstance(entry, dict) else ""
+        excerpt = str(excerpt).strip()
+        if len(excerpt) < 18 or len(excerpt) > 500:
+            continue
+        if excerpt not in evidence or excerpt in verified:
+            continue
+        verified.append(excerpt)
+        if len(verified) >= limit:
+            break
+    return verified
+
+
+def select_evidence_excerpts(
+    payload: dict[str, Any],
+    public_profile: dict[str, str],
+    local_knowledge: str,
+    model: str,
+) -> list[str]:
+    evidence = evidence_text(payload, public_profile, local_knowledge)
+    if not evidence:
+        return []
+    prompt = (
+        "Select the most useful evidence for a grant-writing outline. "
+        "Copy every excerpt exactly. Return JSON only.\n\nEVIDENCE:\n" + evidence
+    )
+    raw = call_local_writer(prompt, model, SYSTEM_PROMPT)
+    return parse_verified_excerpts(raw, evidence)
 
 
 def _funding_record_text(value: Any) -> str:
@@ -369,7 +440,7 @@ def _as_sentence(value: str) -> str:
     return text if text.endswith((".", "!", "?")) else text + "."
 
 
-def deterministic_scaffold(payload: dict[str, Any], public_profile: dict[str, str]) -> str:
+def deterministic_scaffold(payload: dict[str, Any], public_profile: dict[str, str], excerpts: list[str] | None = None) -> str:
     community = str(payload.get("community") or "[add community]").strip()
     state = str(payload.get("state") or "[add state or territory]").strip()
     title = str(payload.get("projectTitle") or "[add project title]").strip()
@@ -379,6 +450,13 @@ def deterministic_scaffold(payload: dict[str, Any], public_profile: dict[str, st
     match = str(payload.get("matchCapacity") or "[add match, staff, and partner capacity facts]").strip()
     source = str(payload.get("sourceNotes") or "[add the official source link and current funding details]").strip()
     profile = format_public_profile(public_profile)
+    verified_excerpts = [item for item in (excerpts or []) if item]
+    evidence_block = ""
+    if verified_excerpts:
+        evidence_block = (
+            "\n\nVerified excerpts selected from the supplied material:\n\n"
+            + "\n".join(f"- \"{item}\"" for item in verified_excerpts)
+        )
     notes_block = (
         f"\n\nProject notes supplied by the community:\n\n{project_notes}"
         if project_notes
@@ -406,7 +484,7 @@ Use the final application to explain the size and effect of this need with check
 
 ## Proposed Work
 
-The current concept is based on the project summary and the community-supplied notes below.{notes_block}
+The current concept is based on the project summary and the community-supplied notes below.{notes_block}{evidence_block}
 
 Before submission, turn this concept into a confirmed scope with clear tasks, locations, responsible parties, approvals, deliverables, and measures of success.
 
@@ -471,43 +549,17 @@ def _word_tokens(text: str) -> set[str]:
     return {token.lower() for token in re.findall(r"[A-Za-z][A-Za-z'-]{2,}", text or "")}
 
 
-def grounding_issues(draft: str, payload: dict[str, Any], public_profile: dict[str, str]) -> list[str]:
-    evidence_parts = [
-        str(payload.get("community") or ""), str(payload.get("state") or ""),
-        str(payload.get("projectTitle") or ""), str(payload.get("projectSummary") or ""),
-        str(payload.get("selectedGrant") or ""), str(payload.get("matchCapacity") or ""),
-        str(payload.get("sourceNotes") or ""), str(payload.get("projectNotes") or ""),
-        json.dumps(public_profile, ensure_ascii=True),
-    ]
-    evidence = "\n".join(evidence_parts)
-    evidence_lower = evidence.lower()
-    allowed_numbers = _number_tokens(evidence)
-    draft_without_list_numbers = re.sub(r"(?m)^\s*\d+[.)]\s+", "", draft or "")
-    unexpected_numbers = sorted(_number_tokens(draft_without_list_numbers) - allowed_numbers)
-    issues = [f"unsupported number: {number}" for number in unexpected_numbers]
-    safe_scaffold = deterministic_scaffold(payload, public_profile)
-    if re.sub(r"\s+", " ", draft or "").strip() != re.sub(r"\s+", " ", safe_scaffold).strip():
-        allowed_words = _word_tokens(safe_scaffold)
-        novel_words = sorted(_word_tokens(draft or "") - allowed_words)
-        if novel_words:
-            issues.append("unsupported wording: " + ", ".join(novel_words[:12]))
-        suspicious_patterns = (
-            r"\b(?:study|survey|poll)\b",
-            r"\b(?:currently|existing|recent growth|has experienced|have experienced)\b",
-            r"\b(?:traffic|congestion|accident|revenue)\b",
-            r"\b(?:ada standards?|request for proposals?|rfp)\b",
-            r"\b(?:department|commission|planning and zoning|town council)\b",
-            r"\b(?:maple street|main street|historic district)\b",
-            r"\b(?:acquir\w*|purchas\w*|consult\w*|hir\w*|contract\w*|approval\w*|permit\w*)\b",
-            r"\b(?:community|resident|public) support\b",
-            r"\b(?:has|have|will) (?:secured|committed|approved|funded)\b",
-        )
-        for pattern in suspicious_patterns:
-            for match in re.finditer(pattern, draft or "", re.IGNORECASE):
-                phrase = match.group(0).lower()
-                if phrase not in evidence_lower:
-                    issues.append(f"unsupported detail: {phrase}")
-    return sorted(set(issues))
+def grounding_issues(
+    draft: str,
+    payload: dict[str, Any],
+    public_profile: dict[str, str],
+    excerpts: list[str] | None = None,
+) -> list[str]:
+    expected = deterministic_scaffold(payload, public_profile, excerpts)
+    if _normalized_text(draft) == _normalized_text(expected):
+        return []
+    return ["draft differs from the deterministic evidence scaffold"]
+
 
 def build_draft(payload: dict[str, Any]) -> dict[str, Any]:
     if payload.get("usePublicData"):
@@ -523,21 +575,41 @@ def build_draft(payload: dict[str, Any]) -> dict[str, Any]:
     if provider not in {"local", "fallback"}:
         provider = "local"
     local_knowledge = load_local_knowledge()
-    prompt = compose_prompt(payload, public_profile, local_knowledge)
     model = DEFAULT_MODEL
     warnings: list[str] = []
-    try:
-        draft = call_local_writer(prompt, model) if provider == "local" else deterministic_scaffold(payload, public_profile)
-    except Exception:
-        warnings.append("The local Gemma writer could not finish, so RERCie made a fill-in outline instead.")
+    excerpts: list[str] = []
+    if provider == "local":
+        try:
+            excerpts = select_evidence_excerpts(payload, public_profile, local_knowledge, model)
+        except Exception:
+            warnings.append(
+                "The local Gemma evidence review could not finish. "
+                "RERCie still made a structured outline from the supplied facts."
+            )
+    draft = deterministic_scaffold(payload, public_profile, excerpts)
+    issues = grounding_issues(draft, payload, public_profile, excerpts)
+    if issues:
+        excerpts = []
         draft = deterministic_scaffold(payload, public_profile)
-    if not draft.strip():
-        warnings.append("RERCie could not make a full draft, so it made a fill-in outline instead.")
-        draft = deterministic_scaffold(payload, public_profile)
+        warnings.append("RERCie removed an unverified evidence selection.")
+    safety_notice = (
+        f"Gemma selected {len(excerpts)} exact evidence excerpt"
+        f"{'s' if len(excerpts) != 1 else ''}; RERCie verified and placed them in a fixed outline."
+        if excerpts
+        else "RERCie used a fixed evidence-based outline. Add and verify the marked details before submission."
+    )
     return {
-        "draft": draft, "provider": provider, "model": model, "publicProfile": public_profile,
-        "profileMessage": profile_lookup["message"], "profileStatus": profile_lookup["status"],
-        "localKnowledgeChars": len(local_knowledge), "warnings": warnings, "safetyNotice": "",
+        "draft": draft,
+        "provider": provider,
+        "model": model,
+        "publicProfile": public_profile,
+        "profileMessage": profile_lookup["message"],
+        "profileStatus": profile_lookup["status"],
+        "localKnowledgeChars": len(local_knowledge),
+        "warnings": warnings,
+        "safetyNotice": safety_notice,
+        "evidenceExcerpts": excerpts,
+        "rawModelProseExposed": False,
         "generatedAt": int(time.time()),
     }
 
@@ -666,7 +738,7 @@ HTML_PAGE = r'''<!doctype html>
       <label for="projectNotes">Notes and file text</label><textarea id="projectNotes"></textarea>
       <label class="check" for="usePublicData"><input id="usePublicData" type="checkbox" checked><span>Look for public community facts from the U.S. Census Bureau.</span></label>
       <div class="actions"><button id="lookupCommunity" class="quiet" type="button">Look up community facts</button></div>
-      <details class="lookup-help"><summary>Community lookup help</summary><p class="section-note">The Census Bureau now requires a free API key. RERCie will use <code>CENSUS_API_KEY</code> from this computer when available, or you can paste a key below for this session.</p><label for="censusApiKey">Census API key</label><input id="censusApiKey" type="password" autocomplete="off" placeholder="Optional on a computer that already has a Census key"><p class="section-note"><a href="https://api.census.gov/data/key_signup.html" target="_blank" rel="noopener">Get a free Census API key</a></p></details>
+      <details class="lookup-help"><summary>Community lookup help</summary><p class="section-note">Most community lookups work without a key. If the Census Bureau rate-limits this computer, paste a free Census API key below for this session.</p><label for="censusApiKey">Census API key</label><input id="censusApiKey" type="password" autocomplete="off" placeholder="Optional Census API key"><p class="section-note"><a href="https://api.census.gov/data/key_signup.html" target="_blank" rel="noopener">Get a free Census API key</a></p></details>
       <div id="communityProfile" class="community-profile" hidden aria-live="polite"></div>
     </section>
     <section class="panel">
@@ -698,7 +770,7 @@ HTML_PAGE = r'''<!doctype html>
     function apiFetch(url,options={}){ const headers=new Headers(options.headers||{}); headers.set("X-RERCie-Token",sessionToken); return fetch(url,{...options,headers}); }
     function setStatus(message,warning=false){ status.textContent=message; status.className=warning?"status warning":"status"; }
     let workingTimer=0;
-    function startWorking(){ const box=document.getElementById("working"); const label=document.getElementById("workingLabel"); const clock=document.getElementById("workingTime"); const started=Date.now(); box.hidden=false; label.textContent="RERCie is generating a draft with local Gemma..."; const tick=()=>{ const elapsed=Math.floor((Date.now()-started)/1000); clock.textContent=elapsed+" seconds"; }; tick(); workingTimer=window.setInterval(tick,1000); }
+    function startWorking(){ const box=document.getElementById("working"); const label=document.getElementById("workingLabel"); const clock=document.getElementById("workingTime"); const provider=document.getElementById("provider").value; const started=Date.now(); box.hidden=false; label.textContent=provider==="local"?"RERCie is reviewing your notes with local Gemma...":"RERCie is building a structured outline..."; const tick=()=>{ const elapsed=Math.floor((Date.now()-started)/1000); clock.textContent=elapsed+" seconds"; }; tick(); workingTimer=window.setInterval(tick,1000); }
     function stopWorking(){ document.getElementById("working").hidden=true; if(workingTimer){window.clearInterval(workingTimer);workingTimer=0;} }
     function formatProfileValue(key,value){ if((key==="population"||key==="median_household_income")&&/^\d+$/.test(String(value))){ const number=Number(value).toLocaleString(); return key==="median_household_income"?"$"+number:number; } return String(value); }
     function renderProfile(profile,message,lookupStatus){ const box=document.getElementById("communityProfile"); box.replaceChildren(); box.hidden=false; const heading=document.createElement("strong"); heading.textContent=profile&&profile.place?profile.place:"Community facts"; box.appendChild(heading); if(!profile||!Object.keys(profile).length){ const note=document.createElement("span"); note.textContent=message||"No community facts were found."; box.appendChild(note); if(lookupStatus==="key_required"){document.querySelector(".lookup-help").open=true;} return; } const labels={population:"Population",median_age:"Median age",median_household_income:"Median household income",poverty_rate_percent:"People below the poverty line",geography_type:"Geography used"}; const list=document.createElement("ul"); Object.keys(labels).forEach((key)=>{ if(!profile[key])return; const item=document.createElement("li"); let value=formatProfileValue(key,profile[key]); if(key==="median_age")value+=" years"; if(key==="poverty_rate_percent")value+="%"; item.textContent=labels[key]+": "+value; list.appendChild(item); }); box.appendChild(list); const source=document.createElement(profile.source_url?"a":"span"); source.textContent=profile.source||"U.S. Census Bureau"; if(profile.source_url){source.href=profile.source_url;source.target="_blank";source.rel="noopener";} box.appendChild(source); if(profile.coverage_note){ const coverage=document.createElement("p"); coverage.textContent=profile.coverage_note; box.appendChild(coverage); } }

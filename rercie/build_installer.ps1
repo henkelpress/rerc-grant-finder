@@ -9,7 +9,7 @@ Set-StrictMode -Version Latest
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $Here
 Set-Location -LiteralPath $Here
-$Version = "0.3.4"
+$Version = "0.3.5"
 $RuntimeName = "llama-b9987-bin-win-cpu-x64.zip"
 $RuntimeUrl = "https://github.com/ggerganov/llama.cpp/releases/download/b9987/$RuntimeName"
 $RuntimeSha256 = "6847d537b3cd5099051989d08c7eca4296e7a0f1755dbf0540c82e37768320f3"
