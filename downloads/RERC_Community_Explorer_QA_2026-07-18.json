@@ -5,32 +5,33 @@
   "funding": 659,
   "resources": 61,
   "community_examples": 476,
-  "source_commit": "c78f1bf6cf5fa6048358fd4e153e48a77c370631",
+  "catalog_source_commit": "10a644a1e98951543155bd726939ba39b0111637",
+  "release_binding_note": "This is the source commit used to generate the files. See the GitHub release and RELEASE_MANIFEST.json for the final release commit.",
   "site_sha256": {
     "index.html": "731b0d84668787059659cfd4be1f5209be447e4a9fade94297b79d20cdb5ac7d",
     "styles.css": "8550864d8cd7cfcfd5f5aa3b5c0b51c425d3f77a6861026a71bc97c7dce9c0ce",
-    "app.js": "5dedb7c412d7e763d84bda1ee176fde6febc24acbfbea86c11dd30f5e09b41ba",
+    "app.js": "6b0f9963088ff1c2603d1200a4dfb01130f6af7df12cf1a320679d0a51285776",
     "data.js": "4eaf53b91031a7317b4cfb61b0df8de6a5190d3ec986b0a30600f8659759be03",
-    "case_studies.js": "10dc8c605f13abeec5c9ebb9e7b593bbcea16ed9637676f1138f65fce06d2525",
+    "case_studies.js": "fbb85d3d8944925d633b999a0b79b2d4d40430b5602d153fec4eb3e5d80d603f",
     "README.md": "044de5202d0f0e203ca3d9c1fb5a50765be18c110b9f49389fc6e729af4f2b59"
   },
   "source_sha256": {
     "data.js": "4eaf53b91031a7317b4cfb61b0df8de6a5190d3ec986b0a30600f8659759be03",
-    "case_studies.js": "10dc8c605f13abeec5c9ebb9e7b593bbcea16ed9637676f1138f65fce06d2525"
+    "case_studies.js": "fbb85d3d8944925d633b999a0b79b2d4d40430b5602d153fec4eb3e5d80d603f"
   },
   "docx": {
     "file": "RERC_Community_Explorer_Appendix_2026-07-18.docx",
-    "bytes": 362011,
-    "sha256": "d788216ea04602437ceffc67db9f152fe75990940c967e4c07498b462c8284e2"
+    "bytes": 362001,
+    "sha256": "65f6d302e758a6d8f76253ddce957bff8b313e5c3dc472c76399491b1ab4be3c"
   },
   "xlsx": {
     "file": "RERC_Community_Explorer_Master_2026-07-18.xlsx",
-    "bytes": 342346,
-    "sha256": "8812766a247320db16ac8559f35771283571e838ce486cb0fcd45d7f7c1fac9f"
+    "bytes": 342348,
+    "sha256": "9221b68ac6c2057aeeb16afa59bc6a05eedcdef4b975940195c02d41337ee750"
   },
   "csv": {
     "file": "RERC_Community_Explorer_Master_2026-07-18.csv",
     "bytes": 836901,
-    "sha256": "94f2c56ae41022b6f8e8a1b5a4c6fa297bb5b1aad7b2d1fb69be8f0ee8a6f198"
+    "sha256": "eadcc3d3f2cabef7198da1cc7cf07c89e8ea8414bdea1e3af5e8f557a6a10752"
   }
 }
