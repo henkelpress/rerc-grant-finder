@@ -1,37 +1,37 @@
 {
-  "status": "PASS",
-  "updated": "2026-07-18",
-  "records": 1196,
-  "funding": 659,
-  "resources": 61,
-  "community_examples": 476,
-  "catalog_source_commit": "7280647545ec7ee5e4e9c46a4538afba336edc03",
-  "release_binding_note": "This is the source commit used to generate the files. See the GitHub release and RELEASE_MANIFEST.json for the final release commit.",
-  "site_sha256": {
-    "index.html": "d3bd3b948451f009c91a6227b57f50c680d1a739db3b48bd35ada4671f0134f9",
-    "styles.css": "c644ad6728a5939d3c9d4d634503199641a254b6499e71076f48ccd1f7a06d93",
-    "app.js": "04d3a85497a032a757e9a6336070070cf686dacc8fa311d0cf3797175eefdb5b",
-    "data.js": "4eaf53b91031a7317b4cfb61b0df8de6a5190d3ec986b0a30600f8659759be03",
-    "case_studies.js": "520f8f56562cc2d636547a0c326fdce6a931343053efd5387b0397bd314f9f92",
-    "README.md": "b244f894ec70b30737967135ad6c67bb2b295f671ff53b94bc1847c73d3e1cd0"
-  },
-  "source_sha256": {
-    "data.js": "4eaf53b91031a7317b4cfb61b0df8de6a5190d3ec986b0a30600f8659759be03",
-    "case_studies.js": "520f8f56562cc2d636547a0c326fdce6a931343053efd5387b0397bd314f9f92"
-  },
-  "docx": {
-    "file": "RERC_Community_Explorer_Appendix_2026-07-18.docx",
-    "bytes": 361896,
-    "sha256": "e83f21541d24067787e67ec52b6f7bb6097dd37a3e638f8e9a3e82e6496280b7"
-  },
-  "xlsx": {
-    "file": "RERC_Community_Explorer_Master_2026-07-18.xlsx",
-    "bytes": 342189,
-    "sha256": "50ea3767d70f887d24ef5b3b9563d9d644a52210b63af01ff05816740c29956b"
-  },
-  "csv": {
-    "file": "RERC_Community_Explorer_Master_2026-07-18.csv",
-    "bytes": 836660,
-    "sha256": "cb7ca400963c777abba7e84a157e466861f012695e53c525f81bffec8e231ee9"
-  }
+    "status":  "PASS",
+    "updated":  "2026-07-18",
+    "records":  1196,
+    "funding":  659,
+    "resources":  61,
+    "community_examples":  476,
+    "catalog_source_commit":  "7280647545ec7ee5e4e9c46a4538afba336edc03",
+    "release_binding_note":  "This is the source commit used to generate the files. See the GitHub release and RELEASE_MANIFEST.json for the final release commit.",
+    "site_sha256":  {
+                        "index.html":  "a536328a76be7248158a37cbe50b6693b8c24aaf76f8981d2b8c3c30f92c6d08",
+                        "styles.css":  "c644ad6728a5939d3c9d4d634503199641a254b6499e71076f48ccd1f7a06d93",
+                        "app.js":  "04d3a85497a032a757e9a6336070070cf686dacc8fa311d0cf3797175eefdb5b",
+                        "data.js":  "4eaf53b91031a7317b4cfb61b0df8de6a5190d3ec986b0a30600f8659759be03",
+                        "case_studies.js":  "520f8f56562cc2d636547a0c326fdce6a931343053efd5387b0397bd314f9f92",
+                        "README.md":  "cda83459039e70827c4f4f03eac55500f00a56754ea1271c2dec509c5394da4c"
+                    },
+    "source_sha256":  {
+                          "data.js":  "4eaf53b91031a7317b4cfb61b0df8de6a5190d3ec986b0a30600f8659759be03",
+                          "case_studies.js":  "520f8f56562cc2d636547a0c326fdce6a931343053efd5387b0397bd314f9f92"
+                      },
+    "docx":  {
+                 "file":  "RERC_Community_Explorer_Appendix_2026-07-18.docx",
+                 "bytes":  361896,
+                 "sha256":  "e83f21541d24067787e67ec52b6f7bb6097dd37a3e638f8e9a3e82e6496280b7"
+             },
+    "xlsx":  {
+                 "file":  "RERC_Community_Explorer_Master_2026-07-18.xlsx",
+                 "bytes":  342189,
+                 "sha256":  "50ea3767d70f887d24ef5b3b9563d9d644a52210b63af01ff05816740c29956b"
+             },
+    "csv":  {
+                "file":  "RERC_Community_Explorer_Master_2026-07-18.csv",
+                "bytes":  836660,
+                "sha256":  "cb7ca400963c777abba7e84a157e466861f012695e53c525f81bffec8e231ee9"
+            }
 }
