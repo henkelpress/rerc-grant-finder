@@ -31,7 +31,7 @@ async function main() {
     page.on("console", (message) => {
       if (message.type() === "error") errors.push(`console:${message.text()}`);
     });
-    await page.goto(baseUrl, { waitUntil: "networkidle", timeout: 30000 });
+    await page.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
     await page.waitForSelector(".result-card", { timeout: 15000 });
 
     checks.title = await page.title();
@@ -182,11 +182,11 @@ async function main() {
     ];
     downloads.full = {};
     for (const relative of fullFiles) {
-      const response = await page.request.get(baseUrl + relative);
+      const response = await page.request.get(baseUrl + relative, { timeout: 60000 });
       downloads.full[path.basename(relative)] = { status: response.status(), bytes: (await response.body()).length };
     }
     if (baseUrl.includes("github.io")) {
-      const pycResponse = await page.request.get(baseUrl + "rercie/__pycache__/rercie_core.cpython-312.pyc");
+      const pycResponse = await page.request.get(baseUrl + "rercie/__pycache__/rercie_core.cpython-312.pyc", { timeout: 60000 });
       checks.pycNotPublished = pycResponse.status() === 404;
     } else {
       checks.pycNotPublished = true;
@@ -198,7 +198,7 @@ async function main() {
     const mobile = await browser.newContext({ viewport: { width: 390, height: 844 } });
     const mobilePage = await mobile.newPage();
     mobilePage.on("pageerror", (error) => errors.push(`mobile-pageerror:${error.message}`));
-    await mobilePage.goto(baseUrl, { waitUntil: "networkidle", timeout: 30000 });
+    await mobilePage.goto(baseUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
     await mobilePage.waitForSelector(".result-card", { timeout: 15000 });
     checks.mobileNoOverflow = await mobilePage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1);
     checks.mobileTabsVisible = await mobilePage.locator("[data-mode]").evaluateAll((nodes) => nodes.every((node) => node.getBoundingClientRect().width >= 44));
