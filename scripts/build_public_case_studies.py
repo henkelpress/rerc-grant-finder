@@ -139,6 +139,24 @@ SUMMARY_OVERRIDES = {
     "Shubuta, MS: Strengthening Shubuta": "Shubuta used brownfields planning and cleanup support to address underused property and strengthen the small-town community. The project connects land reuse with local revitalization goals.",
     "Overbrook Environmental Education Center Becomes Community Hub: Philadelphia, PA": "Philadelphia's Overbrook Environmental Education Center transformed a former quarry and contaminated commercial sites into an urban environmental education and community hub. Brownfields assessment, cleanup, and reuse planning support expansion toward affordable housing, public space, a health center, and a community food and wellness center.",
     "Akwesasne, New York (2022)": "The Saint Regis Mohawk Tribe brought the Akwesasne community together to build on cultural tourism, economic development, and infrastructure plans, including a new heritage center, an art gallery, and green spaces along the St. Regis River.",
+    "Buchanan, Virginia (2022)": "Buchanan planned Main Street improvements, support for outdoor recreation businesses, and stronger connections between the town, the James River, nearby mountains, and regional trails.",
+    "Loyal, Wisconsin Local Foods, Local Places Summary Report": "Loyal focused its action plan on strengthening the Loyal Farmers Market through vendor support, coordination, and training, and finding a new site that could attract more vendors and customers while helping revitalize downtown.",
+    "Fort Pierce, Florida Local Foods, Local Places Summary Report": "Fort Pierce planned new ways for residents of the historic Lincoln Park neighborhood to access healthy local food, exercise, and learn why protecting Moore's Creek water quality matters.",
+    "Fulton, New York (2025)": "Fulton plans to connect downtown and waterfront assets, engage residents, and expand access to cultural, educational, and recreational activities.",
+    "Smart Growth Publications: Old North St. Louis - St. Louis, Missouri": "Old North St. Louis used EPA technical assistance to develop a neighborhood growth plan that would preserve historic character, add sustainable features, and reflect resident and stakeholder goals.",
+    "Branch Street, Pawtucket, R.I.": "Pawtucket transformed a Branch Street site along the Blackstone River from illegal dumping and invasive growth into 29 affordable homes. EPA Brownfields assessment and cleanup support helped prepare the former residential and industrial land for reuse.",
+    "Carlisle, Pennsylvania - Carlisle Goes Vertical": "Carlisle used a 2013 EPA Area-Wide Planning Grant to create conceptual transportation, stormwater, and redevelopment plans for three catalyst brownfield sites in the borough's northwest quadrant.",
+    "Norristown, PA: Redevelopment Gets Fired Up": "Norristown assessed and reused a former firehouse as Five Saints Distillery. The business opened in 2016 and also serves as a music and community event venue.",
+    "St. Johnsbury Glove Factory, St. Johnsbury, Vt.": "St. Johnsbury redeveloped a former textile factory that had been vacant for about 20 years into an animal hospital. EPA Brownfields assessment support helped prepare the gateway property for its 2021 reopening.",
+    "Newell, WV: Former Football Field Scores a Victory at Home": "Newell assessed a former school football field and found no major environmental hazards, clearing the 3.5-acre property for redevelopment. The county then sold the site for reuse as a car dealership.",
+    "25 Southgate Street, Worcester, Mass.": "Worcester cleaned and redeveloped a former manufacturing and foundry site in the South Worcester Industrial Park as a 50,000-square-foot home for a century-old baking company. EPA, state, and city funding helped prepare the eight-acre industrial park.",
+    "Albany General Store, Albany, Vt.": "Albany rebuilt its general store after a 2013 fire and reopened it as a place for residents to gather. EPA Brownfields support provided part of the nearly $1 million project, alongside public, private, and local donor funding.",
+    "Children's Museum & Theatre of Maine, Portland, Maine": "Portland assessed and cleaned former railroad and industrial land at Thompson's Point for redevelopment that includes a new home for the Children's Museum and Theatre of Maine.",
+    "The Park Theatre, Jaffrey, N.H.": "Jaffrey replaced a former movie and vaudeville theatre with a new performing arts center in 2020. Brownfields assessment helped the community clean and redevelop the site after the old building was demolished in 2013.",
+    "Wood Island Life Saving Station, Kittery, Maine": "Kittery is restoring a former Coast Guard lifesaving station on Wood Island as a maritime history museum. The project combines brownfields cleanup, historic preservation, and public interpretation.",
+    "Ceredo, WV: A Community with Its Heart in the Right Place": "Ceredo used EPA Brownfields assessment support to help the Golden Girl Group Home evaluate land for transitional housing for young women leaving foster care. The project aimed to pair safe housing with independent-living support.",
+    "Goodyear Industrial Campus, Windsor, Vt.": "Windsor cleaned a former Goodyear manufacturing site and reused it for a solar array that can provide about 500 kilowatts of energy. EPA Brownfields revolving loan funds helped finance the environmental cleanup.",
+    "A Successful Transformation: The Adamston Commons": "Clarksburg assessed and cleaned a former glass manufacturing site contaminated by heavy metals, lead, arsenic, and asbestos. Redevelopment began in 2009, turning the long-vacant property into Adamston Commons commercial and retail space.",
 }
 
 EXCLUDED_TITLES = {
@@ -228,6 +246,15 @@ def clean_summary(candidate: str) -> str:
     return repair_text(candidate)
 
 
+def strip_public_source_labels(candidate: str, title: str) -> str:
+    text = repair_text(candidate)
+    text = re.sub(r"^R1 Success Story:\s*", "", text, flags=re.I)
+    if text.lower().startswith(title.lower()):
+        text = text[len(title) :].lstrip(" .:-")
+    text = re.sub(r"^\(pdf\)\s*\([^)]*\)\s*", "", text, flags=re.I)
+    text = re.sub(r"\s+as pictured above\b", "", text, flags=re.I)
+    return text.strip()
+
 def summary_is_public_ready(candidate: str, title: str) -> bool:
     lowered = candidate.lower()
     if len(candidate) < 55 or len(candidate) > 560:
@@ -244,6 +271,23 @@ def summary_is_public_ready(candidate: str, title: str) -> bool:
     return candidate_norm != repeated
 
 
+def bounded_source_sentence(value: str) -> str:
+    sentence = re.split(r"(?<=[.!?])\s+", repair_text(value).replace("; ", ". "), maxsplit=1)[0].strip(" -")
+    if not sentence:
+        return ""
+    words = sentence.split()
+    if len(words) <= 49:
+        return sentence if sentence[-1] in ".!?" else sentence + "."
+    boundaries: list[int] = []
+    for match in re.finditer(r",\s+|\s+(?:and|while|as well as|including|which|that)\s+", sentence, re.I):
+        word_count = len(sentence[: match.start()].split())
+        if 20 <= word_count <= 46:
+            boundaries.append(match.start())
+    if not boundaries:
+        return ""
+    clipped = sentence[: boundaries[-1]].strip(" ,;:-")
+    return clipped + "." if len(clipped) >= 55 else ""
+
 def planning_summary(case: dict, title: str) -> str:
     long_summary = repair_text((case.get("summary") or {}).get("long"))
     for marker in ("The cited EPA description says:", "For this partner community, the report states:"):
@@ -258,7 +302,9 @@ def planning_summary(case: dict, title: str) -> str:
         ]
         if stops:
             segment = segment[: min(stops)]
-        summary = sentence_summary(segment)
+        sentence_ready = re.sub(r";\s*(and|or)\s+", r", \1 ", segment, flags=re.I)
+        sentence_ready = re.sub(r";\s*([a-z])", lambda match: ". " + match.group(1).upper(), sentence_ready)
+        summary = sentence_summary(sentence_ready) or bounded_source_sentence(segment)
         if summary_is_public_ready(summary, title):
             return summary
     return ""
@@ -469,6 +515,7 @@ def build_record(case_path: Path, checked_on: str) -> dict | None:
     source_url = public_url(source.get("origin_path_or_url"))
     year = year_for(case, program_name)
     summary = SUMMARY_OVERRIDES.get(title, summary)
+    summary = strip_public_source_labels(summary, title)
     if program_name in {"Recreation Economy for Rural Communities", "Local Foods, Local Places"}:
         summary = SUMMARY_OVERRIDES.get(title) or planning_summary(case, title) or summary
     if not summary_is_public_ready(summary, title):
