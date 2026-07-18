@@ -11,3 +11,5 @@ rercie/runtime/
 .qa-node/
 qa/
 *.test.exe
+node_modules/
+browser-qa/

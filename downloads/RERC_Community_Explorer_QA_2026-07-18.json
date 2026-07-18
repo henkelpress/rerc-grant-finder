@@ -6,22 +6,22 @@
   "resources": 61,
   "community_examples": 477,
   "source_sha256": {
-    "data.js": "db041742474fade4659aecf618d9edf99710a7b96763fedf06342a052ae5fde6",
-    "case_studies.js": "124cdb643e127e6fbeea304e6068a376b8c4c9c1d501fd5c6005d497cb009677"
+    "data.js": "e2aeb4764c14fdf046e05d79006783b33747f7fd7c87d68afd96f8664263a2c2",
+    "case_studies.js": "74e74d5893702c71ee7f33b0e71c19016858f8b054bb83d07cb5bb627fae5011"
   },
   "docx": {
     "file": "RERC_Community_Explorer_Appendix_2026-07-18.docx",
-    "bytes": 330632,
-    "sha256": "8db735deb64511ddd9508f1b2bd425ef024b243a369f6b2d0d641755a26192bc"
+    "bytes": 332554,
+    "sha256": "54d55c31700d3478a69f3722c26256621db60872988e472f6177ec779d43a916"
   },
   "xlsx": {
     "file": "RERC_Community_Explorer_Master_2026-07-18.xlsx",
-    "bytes": 327283,
-    "sha256": "a240bb6df840bf69ff7a1cefa668dc745a3b50de5c755ec5c4366dcb0c13efb0"
+    "bytes": 328623,
+    "sha256": "48fc06a0d78dc81a11169ecf04b4dd6d02a2dc7fe1466492c7bf4b3cedb4a65f"
   },
   "csv": {
     "file": "RERC_Community_Explorer_Master_2026-07-18.csv",
-    "bytes": 818204,
-    "sha256": "000e803708abadaa0d7311fc3c9dd36861a7b3c6d96aed4bb7096015f92d8e6b"
+    "bytes": 836175,
+    "sha256": "9e6b70f86bda395d87a8febcba8ea22ac8f3df83cd18b1f7bbd2c11548cdb445"
   }
 }

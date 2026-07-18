@@ -35,6 +35,69 @@ PUBLIC_HOSTS = {
     "rd.usda.gov",
 }
 
+PLACE_OVERRIDES = {
+    "Relocating the Native Village of Shishmaref, Alaska Due to Coastal Erosion": "Shishmaref",
+    "Recertifying Utility Workers in a Small, Remote Community": "Multiple communities",
+    "Adapting to Rising Tides in San Francisco Bay, California": "San Francisco Bay Area",
+    "California State Coastal Conservancy: Gravel Beach and Berm for Shorebird Habitat Creation, Erosion Control and Flood Protection": "San Francisco Bay shoreline",
+    "Lakewood, CO: Housing and the Arts at Lamar Street Station": "Lakewood",
+    "Coastal Adaptation Plan for the Town of Groton, Connecticut": "Groton",
+    "Brownfield to Brewery: DNREC delivers a win-win in Delaware": "Multiple communities",
+    "Climate Change and the Florida Keys": "Florida Keys",
+    "Climate Change in Port Heiden, AK": "Port Heiden",
+    "Florida's Community Resiliency Initiative": "Multiple communities",
+    "Oglethorpe Power's Acquisition of Walton County Power Strengthens Reliability and Affordability in Rural Georgia": "Monroe and rural Georgia",
+    "Ferrous Site, Lawrence, Mass.": "Lawrence",
+    "Shubuta, MS: Strengthening Shubuta": "Shubuta",
+    "Ralls County Electric's Vision for a Stronger, Smarter Grid": "Ralls County service area",
+    "CR4HC Case Study: University of Nebraska": "Omaha",
+    "Planning for Climate Resilience-City of Asheville, North Carolina": "Asheville",
+    "Minnkota Power Cooperative's $60 Million Infrastructure Upgrade for a Stronger Future": "Eastern North Dakota and northwestern Minnesota",
+    "A Successful Transformation: Allentown Waterfront - Allentown, PA": "Allentown",
+    "Former Alcoa Research Park New Kensington, PA": "New Kensington",
+    "Homewood Senior Housing & Caf\u00e9 Homewood Ave, Pittsburgh, PA.": "Pittsburgh",
+    "Pittsburgh, PA: Luxury Living with an Industrial Legacy": "Pittsburgh",
+    "Brownfields Success Story: Common Success at Cooper Commons LLC": "Multiple communities",
+    "Overbrook Environmental Education Center Becomes Community Hub: Philadelphia, PA": "Philadelphia",
+    "Finding Solutions Through Distance Learning Technology": "Chamberlain and rural school communities",
+    "Spearfish, SD Climate Resiliency Plan": "Spearfish",
+    "Training a Workforce to Bring Nature-based Solutions into Every Project": "Puerto Rico and U.S. Virgin Islands",
+    "City Market - South End (Onion River Co-op), Burlington, Vt.": "Burlington",
+    "Vermont Climate Action Plan": "Multiple communities",
+    "Promoting Ecotourism to Conserve a Watershed in Virginia": "Lower Chickahominy watershed",
+    "The Edge of Something Special: Williamsburg, VA": "Williamsburg",
+    "Seattle, WA: Redevelopment Yields Much-Needed Affordable Housing": "Seattle",
+    "A Successful Transformation: The Adamston Commons": "Clarksburg",
+    "Wellsburg, WV: A Local Manufacturing Expansion Takes Flight": "Wellsburg",
+    "Beech Bottom, WV: Forging a New Future in Steel Country": "Beech Bottom",
+    "Ranson and Charles Town, WV: A Tale of Two Cities": "Ranson and Charles Town",
+    "A Successful Transformation: From Wasted Lot to Reading Hot\u2010Spot": "Shepherdstown",
+}
+
+PLACE_TYPE_OVERRIDES = {
+    "Climate Change in Port Heiden, AK": "tribal_community",
+    "Addressing Links Between Climate and Public Health in Alaska Native Villages": "tribal_community",
+    "Alaska Native Villages Work to Enhance Local Economies as They Minimize Environmental Risks": "tribal_community",
+    "Assessing the Timing and Extent of Coastal Change in Western Alaska": "tribal_community",
+    "I\u00f1upiat Work to Preserve Food and Traditions on Alaska's North Slope": "tribal_community",
+    "Lapwai, Idaho Local Foods, Local Places Summary Report": "tribal_community",
+    "Mission, South Dakota Local Foods, Local Places Summary Report": "tribal_community",
+    "Relocating the Native Village of Shishmaref, Alaska Due to Coastal Erosion": "tribal_community",
+    "Recertifying Utility Workers in a Small, Remote Community": "statewide_or_multi_community",
+    "Brownfield to Brewery: DNREC delivers a win-win in Delaware": "statewide_or_multi_community",
+    "Florida's Community Resiliency Initiative": "statewide_or_multi_community",
+    "Vermont Climate Action Plan": "statewide_or_multi_community",
+    "Brownfields Success Story: Common Success at Cooper Commons LLC": "statewide_or_multi_community",
+    "Adapting to Rising Tides in San Francisco Bay, California": "county_or_region",
+    "California State Coastal Conservancy: Gravel Beach and Berm for Shorebird Habitat Creation, Erosion Control and Flood Protection": "county_or_region",
+    "Climate Change and the Florida Keys": "county_or_region",
+    "Oglethorpe Power's Acquisition of Walton County Power Strengthens Reliability and Affordability in Rural Georgia": "county_or_region",
+    "Ralls County Electric's Vision for a Stronger, Smarter Grid": "county_or_region",
+    "Minnkota Power Cooperative's $60 Million Infrastructure Upgrade for a Stronger Future": "county_or_region",
+    "Finding Solutions Through Distance Learning Technology": "county_or_region",
+    "Training a Workforce to Bring Nature-based Solutions into Every Project": "county_or_region",
+    "Promoting Ecotourism to Conserve a Watershed in Virginia": "county_or_region",
+}
 INTERNAL_MARKERS = (
     "protos treats",
     "protos indexes",
@@ -74,18 +137,18 @@ def repair_text(value: object) -> str:
 
 def valid_place(value: str, title: str) -> bool:
     lowered = value.lower()
-    if not value or len(value) > 72:
+    if not value or len(value) > 72 or ":" in value:
         return False
     if any(token in lowered for token in (
         "$", "combined value", "grant recipient", "grant type", "authority", "commission",
-        "district", "department", "agency", "foundation", "partnership", " inc",
+        "district", "department", "agency", "foundation", "partnership", " inc", "company",
+        "industrial development", "climate action plan", "successful transformation", "workers in",
+        "planning for", "brownfield to", "site description",
     )):
         return False
     title_words = set(re.findall(r"[a-z]{4,}", title.lower()))
     place_words = set(re.findall(r"[a-z]{4,}", lowered))
     return not (len(place_words) >= 5 and len(place_words - title_words) <= 1)
-
-
 def place_from_title(title: str) -> str:
     parts = [part.strip(" .") for part in title.split(",") if part.strip(" .")]
     if len(parts) < 2:
@@ -118,7 +181,9 @@ def summary_is_public_ready(candidate: str, title: str) -> bool:
         return False
     if any(marker in candidate for marker in ("Ã", "Â", "â", "Æ", "ï¿½", "\ufffd")):
         return False
-    if any(marker in lowered for marker in ("epa grant recipients", "epa grant types", "site description", "photo courtesy")):
+    if any(marker in lowered for marker in ("epa grant recipients", "epa grant types", "site description", "site descrip", "photo courtesy", "image lessons learned", "figure 1", "years awarded", "grant types:", "grants and resources:")):
+        return False
+    if candidate[:1].islower() or "\u019f" in candidate:
         return False
     title_norm = re.sub(r"[^a-z0-9]+", " ", title.lower()).strip()
     candidate_norm = re.sub(r"[^a-z0-9]+", " ", lowered).strip()
@@ -126,13 +191,21 @@ def summary_is_public_ready(candidate: str, title: str) -> bool:
     return candidate_norm != repeated
 
 
-def fallback_summary(title: str, program: str, place: str, state: str, themes: list[str]) -> str:
-    location = f"{place}, {state}" if place and place != state else state
-    topic_text = ", ".join(theme.lower() for theme in themes[:3] if theme)
-    if topic_text:
-        return f"{title} appears in the official {program} collection for {location}. Topics include {topic_text}."
-    return f"{title} appears in the official {program} collection for {location}. Open the official page for project details."
-
+def fallback_summary(title: str, program: str, place: str, state: str, themes: list[str], year: str) -> str:
+    location = state if place == "Multiple communities" else f"{place}, {state}"
+    topic_text = ", ".join(theme.lower() for theme in themes[:3] if theme) or "community priorities"
+    when = f"In {year}, " if year else ""
+    if program == "Recreation Economy for Rural Communities":
+        return f"{when}{location} received EPA planning assistance to connect outdoor recreation with {topic_text}. The official RERC page identifies the partner community and its planning focus."
+    if program == "Local Foods, Local Places":
+        return f"{when}{location} used Local Foods, Local Places planning assistance to work on {topic_text}. The official summary report records the community's goals and action steps."
+    if program == "EPA Brownfields Success Stories":
+        return f"This EPA success story describes how {location} addressed {title.lower()} and related land-reuse work. The official page provides the cleanup, partners, and results."
+    if program == "EPA Examples of Smart Growth Communities and Projects":
+        return f"This EPA example describes {title.lower()} in {location}, with lessons related to {topic_text}."
+    if program == "U.S. Climate Resilience Toolkit":
+        return f"This federal case study describes {title.lower()} in {location}, with lessons related to {topic_text}."
+    return f"This USDA Rural Development story describes {title.lower()} in {location}, with details about {topic_text}."
 def public_url(value: object) -> str:
     url = compact(value)
     if not url.startswith(("https://", "http://")):
@@ -151,7 +224,8 @@ def sentence_summary(value: object, max_chars: int = 500) -> str:
     artifacts = (
         "photo credit", "photo courtesy", "pictured here", "download success story",
         "epa grant recipient", "epa grant type", "current use:", "former use",
-        "supporting environmental excellence", "apply for local foods",
+        "supporting environmental excellence", "apply for local foods", "image lessons learned",
+        "figure 1", "years awarded", "site descrip", "grant types:", "grants and resources:",
     )
     selected: list[str] = []
     for sentence in re.split(r"(?<=[.!?])\s+", text):
@@ -242,25 +316,26 @@ def stage_for(case: dict, program_name: str, source_url: str) -> str:
 
 
 def normalized_place_type(case: dict, place: str, state: str) -> str:
+    title = repair_text(case.get("title"))
+    if title in PLACE_TYPE_OVERRIDES:
+        return PLACE_TYPE_OVERRIDES[title]
     geography = case.get("geography") or {}
     raw = repair_text(geography.get("place_type"))
     context = " ".join(
         [
-            repair_text(case.get("title")),
+            title,
             place,
             repair_text(case.get("case_type")),
             " ".join(repair_text(item) for item in case.get("themes", [])),
-            " ".join(repair_text(item) for item in case.get("partners", [])),
         ]
     ).lower()
-    if re.search(r"\b(tribal|tribe|native|reservation|pueblo|navajo|hopi|passamaquoddy)\b", context):
+    if re.search(r"\b(tribal|tribe|native village|reservation|pueblo|navajo|hopi|passamaquoddy)\b", context):
         return "tribal_community"
     if place == "Multiple communities":
         return "statewide_or_multi_community"
-    if re.search(r"\b(county|region|regional|service area)\b", raw.lower() + " " + context):
+    if re.search(r"\b(county|region|regional|service area|watershed|bay area|shoreline|florida keys)\b", raw.lower() + " " + place.lower()):
         return "county_or_region"
     return "town_or_city"
-
 def build_record(case_path: Path, checked_on: str) -> dict | None:
     case = json.loads(case_path.read_text(encoding="utf-8"))
     program = (case.get("programs") or [{}])[0]
@@ -271,8 +346,8 @@ def build_record(case_path: Path, checked_on: str) -> dict | None:
     geography = case.get("geography") or {}
     state = repair_text(geography.get("state"))
     title = repair_text(case.get("title"))
-    place = repair_text(geography.get("place_name"))
-    if place.lower() == state.lower() or not valid_place(place, title):
+    place = PLACE_OVERRIDES.get(title, repair_text(geography.get("place_name")))
+    if title not in PLACE_OVERRIDES and (place.lower() == state.lower() or not valid_place(place, title)):
         place = place_from_title(title) or "Multiple communities"
     if not state or state == "Unknown" or not place:
         return None
@@ -317,12 +392,12 @@ def build_record(case_path: Path, checked_on: str) -> dict | None:
         themes = [fallback_theme] if fallback_theme else []
 
     title = re.sub(r"^RERC Partner Community:\s*", "", title, flags=re.I)
-    if not summary_is_public_ready(summary, title):
-        summary = fallback_summary(title, program_name, place, state, themes)
-    if summary[-1] not in ".!?":
-        summary += "."
     source_url = public_url(source.get("origin_path_or_url"))
     year = year_for(case, program_name)
+    if program_name in {"Recreation Economy for Rural Communities", "Local Foods, Local Places"} or not summary_is_public_ready(summary, title):
+        summary = fallback_summary(title, program_name, place, state, themes, year)
+    if summary[-1] not in ".!?":
+        summary += "."
     item_id = "RERC-CASE-" + re.sub(r"[^A-Z0-9]+", "-", compact(case.get("case_id")).upper()).strip("-")
     return {
         "item_id": item_id,
@@ -384,7 +459,7 @@ def main() -> int:
     if re.search(r"[A-Z]:\\|Z:\\|D:\\", serialized, flags=re.I):
         raise RuntimeError("Public case-study bundle contains a local Windows path.")
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text("window.RERC_CASE_STUDIES=" + serialized + ";\n", encoding="utf-8")
+    args.output.write_text("window.RERC_CASE_STUDIES=" + serialized + ";\n", encoding="utf-8", newline="\n")
     print(json.dumps({"status": "PASS", "count": len(records), "output": str(args.output)}, indent=2))
     return 0
 

@@ -33,12 +33,12 @@ const topicOptions = [
   ["tourism|visitor|recreation economy", "Tourism and visitor economy"],
   ["business|entrepreneur|workforce|economic development", "Business and jobs"],
   ["transportation|street|bike|pedestrian|transit|mobility", "Transportation and safe access"],
-  ["water|wastewater|stormwater|flood|coastal", "Water and resilience"],
-  ["conservation|habitat|forest|land|river|watershed", "Conservation and public lands"],
+  ["water|wastewater|stormwater|flood|coastal|resilience", "Water and resilience"],
+  ["conservation|environment|environmental|habitat|forest|land|river|watershed", "Conservation and public lands"],
   ["historic|heritage|arts|culture|museum", "History, arts, and culture"],
-  ["housing|community facility|health|food", "Community services"],
-  ["energy|climate|brownfield|cleanup", "Energy, climate, and cleanup"],
-  ["planning|data|mapping|capacity|technical assistance", "Planning and local capacity"]
+  ["housing|community facility|community facilities|community services|public facilities|infrastructure|public safety|emergency services|education|health|food", "Community services"],
+  ["energy|electric|electricity|power|grid|renewable|efficiency|climate|brownfield|cleanup", "Energy, climate, and cleanup"],
+  ["planning|community development|data|mapping|capacity|technical assistance", "Planning and local capacity"]
 ];
 
 const stages = ["Any step", "Planning", "Early Design", "Engineering", "Construction", "Implementation", "Operations/Maintenance", "Capacity Building", "Acquisition", "Cleanup"];
@@ -110,6 +110,11 @@ function corpus(item) {
   ].join(" ").toLowerCase();
 }
 
+function topicCorpus(item) {
+  return [item.title, item.organization, item.project_stage, item.topic_tags, item.support_type, item.summary, item.why_it_matters, item.case_program]
+    .join(" ").toLowerCase();
+}
+
 function selectedValues(container) {
   return [...container.querySelectorAll("input:checked")].map((input) => input.value);
 }
@@ -145,12 +150,13 @@ function matchesGeography(item, selectedPlace) {
 }
 
 function scoreItem(item, text, selectedPlace, selectedPlaceType, applicants, topics, selectedStage) {
+  const topicText = topicCorpus(item);
   let score = item.item_type === "Case Study" ? 52 : 45;
   if (item.item_type === "Case Study") {
     if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) score += 18;
-    if (selectedPlaceType && matchesAny(cleanText(item.case_place_type).toLowerCase(), [selectedPlaceType])) score += 12;
-    if (topics.length) score += Math.min(21, topics.filter((group) => matchesAny(text, [group])).length * 7);
-    if (selectedStage !== "Any step" && text.includes(selectedStage.toLowerCase())) score += 8;
+    if (selectedPlaceType && cleanText(item.case_place_type) === selectedPlaceType) score += 12;
+    if (topics.length) score += Math.min(21, topics.filter((group) => matchesAny(topicText, [group])).length * 7);
+    if (selectedStage !== "Any step" && cleanText(item.project_stage).toLowerCase() === selectedStage.toLowerCase()) score += 8;
     if (item.source_url) score += 5;
   } else {
     if (item.status === "Open when checked" || item.status === "Available") score += 18;
@@ -159,8 +165,8 @@ function scoreItem(item, text, selectedPlace, selectedPlaceType, applicants, top
     if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) score += 15;
     if (selectedPlace && isNational(cleanText(item.geography))) score += territoryPlaces.has(selectedPlace) ? 2 : 8;
     if (applicants.length && matchesAny(cleanText(item.eligible_users).toLowerCase(), applicants)) score += 12;
-    if (topics.length) score += Math.min(18, topics.filter((group) => matchesAny(text, [group])).length * 7);
-    if (selectedStage !== "Any step" && text.includes(selectedStage.toLowerCase())) score += 10;
+    if (topics.length) score += Math.min(18, topics.filter((group) => matchesAny(topicText, [group])).length * 7);
+    if (selectedStage !== "Any step") score += cleanText(item.project_stage).toLowerCase() === "mixed" ? 4 : 10;
     if (item.summary) score += 3;
   }
   return Math.max(1, Math.min(99, score));
@@ -181,11 +187,15 @@ function getMatches() {
     const text = corpus(item);
     if (keyword && !text.includes(keyword)) return false;
     if (item.item_type !== "Case Study" && !matchesAny(cleanText(item.eligible_users).toLowerCase(), applicants)) return false;
-    if (!matchesAny(text, topics)) return false;
+    if (!matchesAny(topicCorpus(item), topics)) return false;
     if (item.item_type === "Case Study" && selectedPlaceType &&
-        !matchesAny(cleanText(item.case_place_type).toLowerCase(), [selectedPlaceType])) return false;
+        cleanText(item.case_place_type) !== selectedPlaceType) return false;
     const stageText = cleanText(item.project_stage).toLowerCase();
-    if (selectedStage !== "Any step" && !matchesAny(stageText, [selectedStage.toLowerCase()])) return false;
+    if (selectedStage !== "Any step") {
+      const exactStage = matchesAny(stageText, [selectedStage.toLowerCase()]);
+      const broadFundingStage = item.item_type !== "Case Study" && stageText === "mixed";
+      if (!exactStage && !broadFundingStage) return false;
+    }
     return true;
   }).map((item) => ({
     ...item,
@@ -208,7 +218,7 @@ function matchReason(item) {
   const topics = selectedValues(elements.topicOptions);
   if (item.item_type === "Case Study") {
     if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) return "Example from your selected state or territory";
-    if (selectedPlaceType && matchesAny(cleanText(item.case_place_type).toLowerCase(), [selectedPlaceType])) return "Similar community type";
+    if (selectedPlaceType && cleanText(item.case_place_type) === selectedPlaceType) return "Similar community type";
     if (topics.length) return "Matches one or more selected priorities";
     return "Source-backed community example";
   }

@@ -33,6 +33,10 @@
     "no internal workflow language",
     "no source filenames",
     "no common mojibake",
-    "no images"
+    "no images",
+    "no extraction debris",
+    "specific community names",
+    "normalized community types",
+    "distinct planning-assistance summaries"
   ]
 }

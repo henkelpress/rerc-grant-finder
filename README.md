@@ -43,6 +43,8 @@ RERCie Local Grant-Writing Guide is an optional Windows app. It helps people rev
 
 [Download RERCie for Windows](https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Setup.exe)
 
+[SHA-256 checksum](https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Setup.exe.sha256) | [Release QA](https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Release-QA.json)
+
 RERCie is a community-built tool. It is not an EPA grant program, does not decide eligibility, and does not submit applications. The installer is not yet digitally signed, so Windows may show a safety notice. Download it only from this repository's release page.
 
 The reviewed source is in `rercie/`. Model weights are not stored in this repository or installer.
@@ -52,7 +54,7 @@ The reviewed source is in `rercie/`. Model weights are not stored in this reposi
 - `python scripts/qa_release.py`
 - `python scripts/qa_case_studies.py`
 - `python scripts/check_case_sources.py`
-- `node scripts/qa_public_site_cases.cjs <site-url> <output-folder>`
+- `node scripts/qa_public_site.cjs <site-url> <output-folder>`
 
 ## Automated Checks
 

@@ -12,6 +12,7 @@ permissions:
 jobs:
   qa:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -19,5 +20,25 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install browser QA dependencies
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
       - name: Run executable release QA
         run: python scripts/qa_release.py
+      - name: Run browser and mobile QA
+        run: |
+          python -m http.server 8877 --bind 127.0.0.1 > /tmp/rerc-http.log 2>&1 &
+          node scripts/qa_public_site.cjs http://127.0.0.1:8877/ browser-qa
+      - name: Upload browser QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-qa
+          path: browser-qa/
+          if-no-files-found: error

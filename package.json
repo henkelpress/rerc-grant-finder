@@ -1,0 +1,8 @@
+{
+  "name": "rerc-community-explorer-qa",
+  "private": true,
+  "version": "1.0.0",
+  "devDependencies": {
+    "playwright": "1.61.1"
+  }
+}

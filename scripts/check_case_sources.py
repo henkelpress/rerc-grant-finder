@@ -91,7 +91,7 @@ def main() -> int:
         "results": rows,
     }
     output = ROOT / "case_studies.source_health.json"
-    output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(json.dumps({key: value for key, value in report.items() if key != "results"}, indent=2))
     return 0 if report["status"] == "PASS" else 1
 

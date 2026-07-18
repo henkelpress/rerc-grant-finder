@@ -1,6 +1,6 @@
 {
     "app_version":  "0.3.5",
-    "status":  "PASS",
+    "status":  "SOURCE_PASS",
     "tested_date":  "2026-07-18",
     "checks":  {
                    "source_smoke":  {
@@ -13,7 +13,7 @@
                                         "raw_model_prose_exposed":  false
                                     },
                    "native_launcher":  {
-                                           "status":  "PASS",
+                                           "status":  "PENDING_BUILD",
                                            "powershell_required":  false,
                                            "first_run_notice":  true,
                                            "model_progress_ui":  true,
@@ -37,7 +37,7 @@
                                            "progress_status_is_indeterminate_and_truthful":  true
                                        },
                    "installer_wizard":  {
-                                            "status":  "PASS",
+                                            "status":  "PENDING_RELEASE_TEST",
                                             "per_user_install":  true,
                                             "start_menu_shortcut":  true,
                                             "optional_desktop_shortcut":  true,
@@ -47,8 +47,8 @@
                                             "verified_model_preserved_on_upgrade":  true
                                         },
                    "package_integrity":  {
-                                             "status":  "PASS",
-                                             "integrity_checked_binaries":  null,
+                                             "status":  "PENDING_BUILD",
+                                             "integrity_checked_binaries":  0,
                                              "model_rechecked_on_start":  true,
                                              "tampered_binary_rejected":  true
                                          },
@@ -141,7 +141,7 @@
                                         },
                    "executable_release_qa":  {
                                                  "status":  "PASS",
-                                                 "checks":  59,
+                                                 "checks":  71,
                                                  "ci_required":  true,
                                                  "deploy_required":  true,
                                                  "installer_build_required":  true
@@ -155,18 +155,20 @@
                              "Users must review every generated draft and verify current funding rules at the official source."
                          ],
     "release_binding":  {
-                            "source_commit":  "injected by build_installer.ps1",
-                            "integrity_manifest_sha256":  "injected by build_installer.ps1",
-                            "installer_sha256":  "published with the GitHub release asset"
+                            "source_commit":  null,
+                            "integrity_manifest_sha256":  null,
+                            "installer_sha256":  null,
+                            "status":  "PENDING_BUILD"
                         },
     "verification_commands":  [
                                   "python scripts/qa_release.py",
                                   "python scripts/qa_case_studies.py",
                                   "python rercie/rercie.py --smoke",
                                   "python -m py_compile rercie/rercie.py rercie/rercie_core.py rercie/rercie_quality.py",
-                                  "node scripts/qa_public_site_cases.cjs http://127.0.0.1:8875/ QA_OUTPUT",
+                                  "node scripts/qa_public_site.cjs http://127.0.0.1:8875/ QA_OUTPUT",
                                   "RERCie.exe --smoke-output launcher-smoke.json",
                                   "RERCie.exe --probe-download-output launcher-download-probe.json",
                                   "build_installer.ps1 -AcceptRuntimeDownload"
-                              ]
+                              ],
+    "evidence_stage":  "source"
 }

@@ -851,7 +851,8 @@ footer a { color: #d3eef7; }
 .filter-toggle { display: none; }
 
 :focus-visible {
-  outline: 3px solid var(--sun);
+  outline: 3px solid #003d2d;
+  box-shadow: 0 0 0 2px #fff;
   outline-offset: 3px;
 }
 

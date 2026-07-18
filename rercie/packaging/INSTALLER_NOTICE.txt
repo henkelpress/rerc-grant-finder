@@ -5,8 +5,7 @@ What happens after installation
 - RERCie opens with a friendly setup screen. You do not need to run a command.
 - On first use, RERCie downloads the Google Gemma 3 1B writing model after you select Download and start. The download is about 0.81 GB.
 - Upgrades keep a verified Google Gemma model already stored on the computer.
-- The Gemma model, local reference files, and writing stay on this computer. Census and catalog lookups use public websites.
-- Public funding and Census lookups use public websites.
+- The Gemma model, local reference files, and writing stay on this computer. Community facts and current catalog details use public U.S. government websites.
 
 Important limits
 

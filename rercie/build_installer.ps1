@@ -32,8 +32,8 @@ function Get-Sha256([string]$Path) {
 
 $sourceQaPath = Join-Path $Here "packaging\QA_EVIDENCE.json"
 $sourceQa = Get-Content -LiteralPath $sourceQaPath -Raw | ConvertFrom-Json
-if ($sourceQa.status -ne "PASS") { throw "QA_EVIDENCE.json must have top-level PASS status before a release build." }
-$requiredQaChecks = @("source_smoke", "native_launcher", "display_scaling", "installer_wizard", "package_integrity", "live_catalog", "community_lookup", "local_generation", "docx_export", "api_privacy_regression", "service_identity_checks", "licensing_and_runtime")
+if ($sourceQa.status -ne "SOURCE_PASS") { throw "QA_EVIDENCE.json must have top-level SOURCE_PASS status before a release build." }
+$requiredQaChecks = @("source_smoke", "display_scaling", "live_catalog", "community_lookup", "local_generation", "docx_export", "api_privacy_regression", "service_identity_checks", "licensing_and_runtime")
 foreach ($checkName in $requiredQaChecks) {
     $check = $sourceQa.checks.PSObject.Properties[$checkName]
     if (-not $check -or $check.Value.status -ne "PASS") { throw "Required QA check is not PASS: $checkName" }
@@ -153,11 +153,15 @@ $sourceCommit = (& git -C $RepoRoot rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or $sourceCommit -notmatch "^[0-9a-f]{40}$") { throw "The build must run from a Git checkout with a valid source commit." }
 $qaPath = Join-Path $PackageRoot "QA_EVIDENCE.json"
 $qa = Get-Content -LiteralPath $qaPath -Raw | ConvertFrom-Json
+$qa.status = "PACKAGE_BUILD"
+$qa.evidence_stage = "package"
 $qa.release_binding.source_commit = $sourceCommit
 $qa.release_binding.integrity_manifest_sha256 = Get-Sha256 $integrityPath
 $qa.release_binding | Add-Member -NotePropertyName built_utc -NotePropertyValue ([DateTime]::UtcNow.ToString("o")) -Force
 $qa.release_binding | Add-Member -NotePropertyName worktree_clean -NotePropertyValue ($dirty.Count -eq 0) -Force
+$qa.checks.package_integrity.status = "PASS"
 $qa.checks.package_integrity.integrity_checked_binaries = @($entries).Count
+$qa.release_binding.status = "PACKAGE_BOUND"
 [IO.File]::WriteAllText($qaPath, ($qa | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
 
 $serviceQaPort = 18791
@@ -211,6 +215,8 @@ $downloadProbe = Get-Content -LiteralPath $downloadProbePath -Raw | ConvertFrom-
 if ($downloadProbe.status -ne "PASS" -or $downloadProbe.http_status -ne 206 -or $downloadProbe.bytes -ne 1024 -or $downloadProbe.model -ne "gemma-3-1b-it-Q4_K_M.gguf") { throw "The Gemma download probe report was not valid." }
 $qa.checks.native_launcher | Add-Member -NotePropertyName download_probe_http_status -NotePropertyValue $downloadProbe.http_status -Force
 $qa.checks.native_launcher | Add-Member -NotePropertyName download_probe_bytes -NotePropertyValue $downloadProbe.bytes -Force
+$qa.checks.native_launcher.status = "PASS"
+$qa.status = "PACKAGE_PASS"
 [IO.File]::WriteAllText($qaPath, ($qa | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
 if (-not (Test-Path -LiteralPath $InnoCompiler -PathType Leaf)) { throw "Inno Setup was not found at $InnoCompiler." }
 if (Test-Path -LiteralPath $InstallerPath) { Remove-Item -LiteralPath $InstallerPath -Force }
@@ -218,13 +224,87 @@ if (Test-Path -LiteralPath $InstallerPath) { Remove-Item -LiteralPath $Installer
 if ($LASTEXITCODE -ne 0) { throw "The RERCie installer build failed." }
 if (-not (Test-Path -LiteralPath $InstallerPath -PathType Leaf)) { throw "The RERCie installer was not created." }
 
+$installerSha256 = Get-Sha256 $InstallerPath
+$checksumPath = Join-Path $OutputDirectory "RERCie-Setup.exe.sha256"
+[IO.File]::WriteAllText($checksumPath, "$installerSha256  RERCie-Setup.exe`n", [Text.UTF8Encoding]::new($false))
+
+$testInstallDir = Join-Path $BuildRoot "isolated-install"
+if (Test-Path -LiteralPath $testInstallDir) { Remove-Item -LiteralPath $testInstallDir -Recurse -Force }
+$installArgs = @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER", ('/DIR="' + $testInstallDir + '"'), '/MERGETASKS="!desktopicon"')
+$installExit = $null
+$upgradeExit = $null
+$uninstallExit = $null
+$upgradePreservedModels = $false
+$installedSmoke = $null
+try {
+    $installProcess = Start-Process -FilePath $InstallerPath -ArgumentList $installArgs -Wait -PassThru
+    $installExit = $installProcess.ExitCode
+    if ($installExit -ne 0) { throw "The isolated installer test failed with exit code $installExit." }
+    $installedSmokePath = Join-Path $testInstallDir "installed-smoke.json"
+    $installedSmokeProcess = Start-Process -FilePath (Join-Path $testInstallDir "RERCie.exe") -ArgumentList @("--smoke-output", ('"' + $installedSmokePath + '"')) -Wait -PassThru
+    if ($installedSmokeProcess.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $installedSmokePath)) { throw "The installed launcher smoke test failed." }
+    $installedSmoke = Get-Content -LiteralPath $installedSmokePath -Raw | ConvertFrom-Json
+    if ($installedSmoke.status -ne "PASS" -or $installedSmoke.powershell_required -ne $false -or $installedSmoke.model_name -ne "gemma-3-1b-it-Q4_K_M.gguf") { throw "The installed launcher smoke evidence is invalid." }
+    $modelDir = Join-Path $testInstallDir "models"
+    [IO.Directory]::CreateDirectory($modelDir) | Out-Null
+    $modelSentinel = Join-Path $modelDir "upgrade-preservation-test.txt"
+    [IO.File]::WriteAllText($modelSentinel, "preserve", [Text.UTF8Encoding]::new($false))
+    $upgradeProcess = Start-Process -FilePath $InstallerPath -ArgumentList $installArgs -Wait -PassThru
+    $upgradeExit = $upgradeProcess.ExitCode
+    if ($upgradeExit -ne 0) { throw "The isolated upgrade test failed with exit code $upgradeExit." }
+    $upgradePreservedModels = Test-Path -LiteralPath $modelSentinel
+    if (-not $upgradePreservedModels) { throw "The isolated upgrade removed the model folder." }
+} finally {
+    $uninstaller = Join-Path $testInstallDir "unins000.exe"
+    if (Test-Path -LiteralPath $uninstaller) {
+        $uninstallProcess = Start-Process -FilePath $uninstaller -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART") -Wait -PassThru
+        $uninstallExit = $uninstallProcess.ExitCode
+    }
+}
+if ($uninstallExit -ne 0) { throw "The isolated uninstall test failed with exit code $uninstallExit." }
+
 $signature = Get-AuthenticodeSignature -LiteralPath $InstallerPath
+$releaseQaPath = Join-Path $OutputDirectory "RERCie-Release-QA.json"
+$releaseQa = [ordered]@{
+    status = "PASS"
+    evidence_stage = "release_asset"
+    app = "RERCie"
+    version = $Version
+    source_commit = $sourceCommit
+    installer_file = "RERCie-Setup.exe"
+    installer_bytes = (Get-Item -LiteralPath $InstallerPath).Length
+    installer_sha256 = $installerSha256
+    checksum_file = "RERCie-Setup.exe.sha256"
+    package_qa_sha256 = Get-Sha256 $qaPath
+    integrity_manifest_sha256 = Get-Sha256 $integrityPath
+    integrity_files = @($entries).Count
+    signature_status = [string]$signature.Status
+    powershell_required = $false
+    approved_model = $installedSmoke.model_name
+    isolated_install = [ordered]@{
+        status = "PASS"
+        install_exit = $installExit
+        launcher_status = $installedSmoke.status
+        upgrade_exit = $upgradeExit
+        upgrade_preserved_models = $upgradePreservedModels
+        uninstall_exit = $uninstallExit
+    }
+    disclosed_limits = @(
+        "The installer is not code-signed, so Windows may show a safety notice.",
+        "The isolated test ran on the build computer rather than a clean Windows virtual machine.",
+        "Users must review generated drafts and verify current rules on official funding pages."
+    )
+}
+[IO.File]::WriteAllText($releaseQaPath, ($releaseQa | ConvertTo-Json -Depth 7), [Text.UTF8Encoding]::new($false))
+
 [pscustomobject]@{
     status = "PASS"
     version = $Version
     installer = $InstallerPath
     bytes = (Get-Item -LiteralPath $InstallerPath).Length
-    sha256 = Get-Sha256 $InstallerPath
+    sha256 = $installerSha256
+    checksum = $checksumPath
+    release_qa = $releaseQaPath
     signature_status = [string]$signature.Status
     powershell_required = $false
     integrity_files = @($entries).Count

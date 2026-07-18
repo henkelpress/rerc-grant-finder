@@ -4,7 +4,9 @@ import csv
 import hashlib
 import json
 import re
-from datetime import date
+import zipfile
+from xml.etree import ElementTree as ET
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from docx import Document
@@ -181,6 +183,26 @@ def add_record_table(document: Document, row: dict[str, str], index: int) -> Non
             cells[1].text = value
 
 
+
+def sanitize_docx_app_properties(path: Path) -> None:
+    namespace = "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
+    temp = path.with_suffix(".metadata.docx")
+    with zipfile.ZipFile(path, "r") as source, zipfile.ZipFile(temp, "w", zipfile.ZIP_DEFLATED) as target:
+        for info in source.infolist():
+            content = source.read(info.filename)
+            if info.filename == "docProps/app.xml":
+                root = ET.fromstring(content)
+                application = root.find(f"{{{namespace}}}Application")
+                if application is None:
+                    application = ET.SubElement(root, f"{{{namespace}}}Application")
+                application.text = "Microsoft Office Word"
+                for field in ("Pages", "Words", "Characters", "CharactersWithSpaces"):
+                    node = root.find(f"{{{namespace}}}{field}")
+                    if node is not None:
+                        root.remove(node)
+                content = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+            target.writestr(info, content)
+    temp.replace(path)
 def build_docx(records: list[dict[str, str]], path: Path) -> None:
     document = Document()
     configure_document(document)
@@ -189,6 +211,8 @@ def build_docx(records: list[dict[str, str]], path: Path) -> None:
     document.core_properties.author = "Recreation Economy for Rural Communities"
     document.core_properties.last_modified_by = "Recreation Economy for Rural Communities"
     document.core_properties.comments = ""
+    document.core_properties.created = datetime(2026, 7, 18, tzinfo=timezone.utc)
+    document.core_properties.modified = datetime(2026, 7, 18, tzinfo=timezone.utc)
     title = document.add_paragraph(style="Title")
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     title.add_run("RERC Community Explorer")
@@ -236,6 +260,7 @@ def build_docx(records: list[dict[str, str]], path: Path) -> None:
         for index, row in enumerate(matching, 1):
             add_record_table(document, row, index)
     document.save(path)
+    sanitize_docx_app_properties(path)
 
 
 def add_sheet(workbook: Workbook, title: str, rows: list[dict[str, str]]) -> None:
@@ -308,7 +333,7 @@ def build_xlsx(records: list[dict[str, str]], path: Path) -> None:
 
 def build_csv(records: list[dict[str, str]], path: Path) -> None:
     with path.open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(records[0]))
+        writer = csv.DictWriter(handle, fieldnames=list(records[0]), lineterminator="\n")
         writer.writeheader()
         writer.writerows(records)
 
@@ -361,6 +386,7 @@ def main() -> int:
     (OUTPUT / f"RERC_Community_Explorer_QA_{DATE_TAG}.json").write_text(
         json.dumps(report, indent=2) + "\n",
         encoding="utf-8",
+        newline="\n",
     )
     print(json.dumps(report, indent=2))
     return 0

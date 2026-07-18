@@ -56,6 +56,18 @@ def main() -> int:
     assert all(item["project_stage"] == "Cleanup" for item in items if item["case_program"] == "EPA Brownfields Success Stories")
     assert not any(item["case_year"] == "2026" for item in items if item["case_program"] == "EPA Examples of Smart Growth Communities and Projects")
 
+    debris = re.compile(r"image lessons learned|figure\s+\d|courtesy|years awarded|site descrip|grant types:|grants and resources:|\u019f", re.I)
+    suspicious_place = re.compile(r"\b(plan|action|company|industrial development|successful transformation|workers in|brownfield to)\b", re.I)
+    assert not any(debris.search(item["summary"]) or item["summary"][:1].islower() for item in items)
+    assert not any(":" in item["case_place"] or suspicious_place.search(item["case_place"]) for item in items)
+    planning = [item for item in items if item["case_program"] in {"Recreation Economy for Rural Communities", "Local Foods, Local Places"}]
+    assert len({item["summary"] for item in planning}) == len(planning)
+    assert all(item["case_place"].lower() in item["summary"].lower() or item["case_place"] == "Multiple communities" for item in planning)
+    assert all(
+        item["case_place"] == "Forest County" or item["case_place_type"] in {"town_or_city", "tribal_community"}
+        for item in items if item["case_program"] == "Local Foods, Local Places"
+    )
+
     programs = Counter(item["case_program"] for item in items)
     hosts = Counter(urlparse(item["source_url"]).hostname for item in items)
     manifest = {
@@ -83,9 +95,13 @@ def main() -> int:
             "no source filenames",
             "no common mojibake",
             "no images",
+            "no extraction debris",
+            "specific community names",
+            "normalized community types",
+            "distinct planning-assistance summaries",
         ],
     }
-    MANIFEST.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    MANIFEST.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(json.dumps(manifest, indent=2))
     return 0
 

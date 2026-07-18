@@ -100,3 +100,15 @@
 @media (max-width: 680px) {
   .tool-disclosure { margin-left: 0; margin-right: 0; }
 }
+
+.writer-actions .verification-links { font-size: 0.86rem; }
+.writer-actions .verification-links a {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-size: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+}

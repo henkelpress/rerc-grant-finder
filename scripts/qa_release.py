@@ -53,6 +53,15 @@ def main() -> int:
     assert "window.RERC_CASE_STUDIES" in app
     assert "Read the example" in app
     assert "placeTypeSelect" in index
+    assert all(value in index for value in ("town_or_city", "county_or_region", "tribal_community", "statewide_or_multi_community"))
+    assert "topicCorpus(item)" in app and "broadFundingStage" in app
+    assert "cleanText(item.case_place_type) !== selectedPlaceType" in app
+    assert "outline: 3px solid #003d2d" in (ROOT / "styles.css").read_text(encoding="utf-8")
+    assert (ROOT / ".gitattributes").read_text(encoding="utf-8").count("eol=lf") >= 8
+    assert (ROOT / "scripts" / "qa_public_site.cjs").is_file()
+    assert not (ROOT / "scripts" / "qa_public_site_cases.cjs").exists()
+    assert not (ROOT / "scripts" / "qa_public_site_final.cjs").exists()
+    assert "qa_public_site.cjs" in (ROOT / ".github" / "workflows" / "qa.yml").read_text(encoding="utf-8")
 
     case_raw = (ROOT / "case_studies.js").read_text(encoding="utf-8").strip()
     case_prefix = "window.RERC_CASE_STUDIES="
@@ -75,6 +84,11 @@ def main() -> int:
         assert "word/comments.xml" not in names
         document_xml = package.read("word/document.xml").decode("utf-8")
         assert document_xml.count("<w:hyperlink") == 1197
+        app_xml = package.read("docProps/app.xml").decode("utf-8")
+        core_xml = package.read("docProps/core.xml").decode("utf-8")
+        assert "Microsoft Office Word" in app_xml and "Macintosh" not in app_xml
+        assert "<ns0:Pages>" not in app_xml and "<Pages>" not in app_xml
+        assert "2026-07-18T00:00:00Z" in core_xml
     with zipfile.ZipFile(static_xlsx) as package:
         names = set(package.namelist())
         assert not any(name.startswith("xl/comments") for name in names)
@@ -108,6 +122,10 @@ def main() -> int:
     installer_script = (ROOT / "rercie" / "packaging" / "RERCie.iss").read_text(encoding="utf-8")
     assert '[InstallDelete]' not in installer_script
     assert 'Name: "{app}\\models"' in installer_script  # Uninstall cleanup remains intentional.
+    source_qa = json.loads((ROOT / "rercie" / "packaging" / "QA_EVIDENCE.json").read_text(encoding="utf-8"))
+    assert source_qa["status"] == "SOURCE_PASS" and source_qa["evidence_stage"] == "source"
+    assert source_qa["checks"]["package_integrity"]["status"] == "PENDING_BUILD"
+    assert source_qa["release_binding"]["status"] == "PENDING_BUILD"
     local_report = json.loads((ROOT / "rercie" / "packaging" / "LOCAL_GEMMA_QA.json").read_text(encoding="utf-8"))
     assert local_report["status"] == "PASS"
     assert local_report["app_version"] == "0.3.5"
@@ -178,7 +196,7 @@ def main() -> int:
         "status": "PASS",
         "version": app.app.APP_VERSION,
         "counts": {**counts, "case_studies": len(cases), "public_total": len(items) + len(cases)},
-        "checks": 59,
+        "checks": 71,
     }
     print(json.dumps(result, indent=2))
     return 0
