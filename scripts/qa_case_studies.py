@@ -76,7 +76,7 @@ def main() -> int:
     assert all(item["project_stage"] == "Cleanup" for item in items if item["case_program"] == "EPA Brownfields Success Stories")
     assert not any(item["case_year"] == "2026" for item in items if item["case_program"] == "EPA Examples of Smart Growth Communities and Projects")
 
-    debris = re.compile(r"image lessons learned|figure\s+\d|courtesy|years awarded|site descrip|grant types?:|grants and resources:|\u019f|\(pdf\)|\b\d+(?:\.\d+)?\s*MB\b|proposed site plan|R1 Success Story:|Residents walk through a greenhouse", re.I)
+    debris = re.compile(r"image lessons learned|figure\s+\d|courtesy|years awarded|site descrip|grant types?:|grants and resources:|\u019f|\(pdf\)|\b\d+(?:\.\d+)?\s*MB\b|proposed site plan|R1 Success Story:|Brownfields Success Story|Job Placement Rate:|Current Uses?:|Year Awarded:|Residents walk through a greenhouse", re.I)
     suspicious_place = re.compile(r"\b(plan|action|company|industrial development|successful transformation|workers in|brownfield to)\b", re.I)
     assert not any(debris.search(item["summary"]) or item["summary"][:1].islower() for item in items)
     assert not any(":" in item["case_place"] or suspicious_place.search(item["case_place"]) for item in items)
