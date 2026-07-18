@@ -292,6 +292,7 @@ $releaseQa = [ordered]@{
     disclosed_limits = @(
         "The installer is not code-signed, so Windows may show a safety notice.",
         "The isolated test ran on the build computer rather than a clean Windows virtual machine.",
+        "A later standalone Gemma inference rerun was not completed because no local inference service was available; the package-bound local generation test remains the applicable evidence.",
         "Users must review generated drafts and verify current rules on official funding pages."
     )
 }
