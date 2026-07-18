@@ -54,7 +54,7 @@
                                          },
                    "live_catalog":  {
                                         "status":  "PASS",
-                                        "total_items":  1197,
+                                        "total_items":  1196,
                                         "funding_items":  659,
                                         "resource_items":  61,
                                         "territory_filter_checked":  true,
@@ -65,10 +65,10 @@
                                                                         ],
                                         "plural_applicant_regression":  true,
                                         "mixed_stage_regression":  true,
-                                        "case_study_items":  477,
+                                        "case_study_items":  476,
                                         "case_study_official_hosts_only":  true,
                                         "case_study_private_fields_excluded":  true,
-                                        "case_study_unique_urls_checked":  304,
+                                        "case_study_unique_urls_checked":  303,
                                         "case_study_hard_failed_urls":  0
                                     },
                    "local_generation":  {

@@ -135,6 +135,13 @@ def main() -> int:
     assert source_qa["status"] == "SOURCE_PASS" and source_qa["evidence_stage"] == "source"
     assert source_qa["checks"]["package_integrity"]["status"] == "PENDING_BUILD"
     assert source_qa["release_binding"]["status"] == "PENDING_BUILD"
+    live_catalog_qa = source_qa["checks"]["live_catalog"]
+    assert live_catalog_qa["total_items"] == len(items) + len(cases)
+    assert live_catalog_qa["funding_items"] == counts["funding"]
+    assert live_catalog_qa["resource_items"] == counts["resources"]
+    assert live_catalog_qa["case_study_items"] == len(cases)
+    assert live_catalog_qa["case_study_unique_urls_checked"] == source_health["unique_urls"]
+    assert live_catalog_qa["case_study_hard_failed_urls"] == source_health["counts"]["hard_failure"]
     local_report = json.loads((ROOT / "rercie" / "packaging" / "LOCAL_GEMMA_QA.json").read_text(encoding="utf-8"))
     assert local_report["status"] == "PASS"
     assert local_report["app_version"] == "0.3.5"
