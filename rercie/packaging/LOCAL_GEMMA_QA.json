@@ -8,7 +8,7 @@
     "raw_model_prose_exposed":  false,
     "deterministic_scaffold":  true,
     "unsupported_eligibility_claim_absent":  true,
-    "evidence_scope":  "Package-bound local Gemma generation test completed before final packaging.",
+    "evidence_scope":  "Package-bound local Gemma generation passed before final packaging.",
     "later_standalone_rerun":  {
                                    "status":  "NOT_RUN",
                                    "reason":  "No local inference service was available for the later standalone rerun."

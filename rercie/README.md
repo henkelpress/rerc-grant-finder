@@ -18,7 +18,7 @@ Upgrades keep a verified local Gemma model, so people do not have to download it
 
 No command line is needed. Open RERCie from the Start Menu. The launcher can open or stop the local tool.
 
-Package testing included a local Gemma draft. A later standalone retest could not run because the local service was not open; this does not replace the package-bound test, and the limitation is retained in release evidence.
+Package-bound local Gemma generation passed. A later standalone retest could not run because the local service was not open; this does not replace the package-bound test, and the limitation is retained in release evidence.
 
 ## What RERCie Does
 

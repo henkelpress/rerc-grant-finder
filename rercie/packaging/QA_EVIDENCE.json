@@ -87,7 +87,7 @@
                                             "manual_local_gemma_test_required_before_release":  false,
                                             "manual_local_gemma_test_status":  "PASS",
                                             "verified_excerpt_count":  1,
-                                            "evidence_scope":  "Package-bound local Gemma generation test completed before final packaging.",
+                                            "evidence_scope":  "Package-bound local Gemma generation passed before final packaging.",
                                             "later_standalone_rerun_status":  "NOT_RUN_NO_SERVICE"
                                         },
                    "docx_export":  {
