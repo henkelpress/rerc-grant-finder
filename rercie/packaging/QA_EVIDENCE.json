@@ -69,7 +69,10 @@
                                         "case_study_official_hosts_only":  true,
                                         "case_study_private_fields_excluded":  true,
                                         "case_study_unique_urls_checked":  303,
-                                        "case_study_hard_failed_urls":  0
+                                        "case_study_hard_failed_urls":  0,
+                                        "case_study_reachable_urls":  271,
+                                        "case_study_restricted_urls":  32,
+                                        "case_study_manual_review_urls":  0
                                     },
                    "local_generation":  {
                                             "status":  "PASS",

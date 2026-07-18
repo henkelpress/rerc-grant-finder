@@ -14,6 +14,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PREFIX = "window.RERC_CASE_STUDIES="
 USER_AGENT = "RERC-Community-Explorer-Link-Check/1.0"
+KNOWN_BOT_BLOCKED_PREFIXES = (
+    "https://www.rd.usda.gov/newsroom/success-stories/",
+)
 
 
 def load_urls() -> list[str]:
@@ -50,7 +53,11 @@ def check(url: str) -> dict[str, object]:
             error = f"{type(exc).__name__}: {exc}"
             if method == "GET":
                 break
-    if 200 <= status < 400:
+    if url.startswith(KNOWN_BOT_BLOCKED_PREFIXES):
+        result = "restricted_but_present"
+        if not error:
+            error = "Automated access is inconsistently blocked by the publisher; manual review required."
+    elif 200 <= status < 400:
         result = "reachable"
     elif status in {401, 403, 429}:
         result = "restricted_but_present"

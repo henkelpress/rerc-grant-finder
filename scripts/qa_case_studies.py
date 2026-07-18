@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "case_studies.js"
 MANIFEST = ROOT / "case_studies.public_manifest.json"
+HEALTH = ROOT / "case_studies.source_health.json"
 PREFIX = "window.RERC_CASE_STUDIES="
 PUBLIC_HOSTS = {"www.epa.gov", "toolkit.climate.gov", "www.rd.usda.gov"}
 FORBIDDEN = (
@@ -112,6 +113,15 @@ def main() -> int:
         for item in items if item["case_program"] == "Local Foods, Local Places"
     )
 
+    health = json.loads(HEALTH.read_text(encoding="utf-8"))
+    assert health["unique_urls"] == 303
+    assert health["counts"] == {
+        "reachable": 271,
+        "restricted_but_present": 32,
+        "hard_failure": 0,
+        "manual_review": 0,
+    }
+
     programs = Counter(item["case_program"] for item in items)
     hosts = Counter(urlparse(item["source_url"]).hostname for item in items)
     manifest = {
@@ -129,6 +139,10 @@ def main() -> int:
         "count": len(items),
         "program_counts": dict(sorted(programs.items())),
         "source_host_counts": dict(sorted(hosts.items())),
+        "source_health": {
+            "unique_urls": health["unique_urls"],
+            **health["counts"],
+        },
         "checks": [
             "unique IDs",
             "official HTTPS hosts only",

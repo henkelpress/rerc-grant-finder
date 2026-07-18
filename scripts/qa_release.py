@@ -119,6 +119,12 @@ def main() -> int:
 
     source_health = json.loads((ROOT / "case_studies.source_health.json").read_text(encoding="utf-8"))
     assert source_health["status"] == "PASS" and source_health["unique_urls"] == 303
+    assert source_health["counts"] == {
+        "reachable": 271,
+        "restricted_but_present": 32,
+        "hard_failure": 0,
+        "manual_review": 0,
+    }
     assert source_health["counts"]["hard_failure"] == 0
     assert source_health["case_studies_sha256"] == hashlib.sha256((ROOT / "case_studies.js").read_bytes()).hexdigest()
 
@@ -145,6 +151,9 @@ def main() -> int:
     assert live_catalog_qa["case_study_items"] == len(cases)
     assert live_catalog_qa["case_study_unique_urls_checked"] == source_health["unique_urls"]
     assert live_catalog_qa["case_study_hard_failed_urls"] == source_health["counts"]["hard_failure"]
+    assert live_catalog_qa["case_study_reachable_urls"] == source_health["counts"]["reachable"]
+    assert live_catalog_qa["case_study_restricted_urls"] == source_health["counts"]["restricted_but_present"]
+    assert live_catalog_qa["case_study_manual_review_urls"] == source_health["counts"]["manual_review"]
     local_report = json.loads((ROOT / "rercie" / "packaging" / "LOCAL_GEMMA_QA.json").read_text(encoding="utf-8"))
     assert local_report["status"] == "PASS"
     assert local_report["app_version"] == "0.3.5"
