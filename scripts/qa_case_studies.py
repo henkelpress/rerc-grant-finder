@@ -32,7 +32,7 @@ def main() -> int:
     assert raw.startswith(PREFIX) and raw.endswith(";")
     payload = json.loads(raw[len(PREFIX) : -1])
     items = payload["items"]
-    assert len(items) >= 400
+    assert len(items) == 476
     assert len({item["item_id"] for item in items}) == len(items)
     assert all(item["item_type"] == "Case Study" for item in items)
     assert all(55 <= len(item["summary"]) <= 560 for item in items)
@@ -47,13 +47,22 @@ def main() -> int:
     assert not any("$" in item["case_place"] or len(item["case_place"]) > 72 for item in items)
     assert not any(re.search(r"epa grant recipients?|site description|photo courtesy|pictured here|supporting environmental excellence", item["summary"], re.I) for item in items)
     assert all(item["summary"][-1] in ".!?" for item in items)
+    assert len({item["summary"] for item in items}) == len(items)
+    assert not any(re.search(r"helps communities compare approaches|official example from", item["summary"], re.I) for item in items)
+    assert not any(re.search(r"\b(un-\s+derutilized|fabrica\u019fion)", item["summary"] + " " + item["topic_tags"], re.I) for item in items)
     assert not any(re.search(r"appears in the official|case record for|is an official|an USDA", item["summary"], re.I) for item in items)
     assert not any(any(len(sentence.split()) > 49 for sentence in re.split(r"(?<=[.!?])\s+", item["summary"])) for item in items)
     assert not any(item["case_place"] == item["case_state"] for item in items)
     assert all(item["case_place_type"] in {"town_or_city", "county_or_region", "tribal_community", "statewide_or_multi_community"} for item in items)
+    assert Counter(item["case_place_type"] for item in items) == {
+        "town_or_city": 364,
+        "county_or_region": 44,
+        "statewide_or_multi_community": 55,
+        "tribal_community": 13,
+    }
     assert sum(item["case_place_type"] == "tribal_community" for item in items) >= 10
     expected_place_types = {
-        "A Successful Transformation: From Wasted Lot to Reading Hot‐Spot": "town_or_city",
+        "A Successful Transformation: From Wasted Lot to Reading Hot\u2010Spot": "town_or_city",
         "Richmond Creamery, Richmond, Vt.": "town_or_city",
         "South Dakota Governor's House Program - Providing Affordable Housing for 30 Years": "statewide_or_multi_community",
         "Lapwai, Idaho Local Foods, Local Places Summary Report": "tribal_community",
@@ -70,6 +79,16 @@ def main() -> int:
     suspicious_place = re.compile(r"\b(plan|action|company|industrial development|successful transformation|workers in|brownfield to)\b", re.I)
     assert not any(debris.search(item["summary"]) or item["summary"][:1].islower() for item in items)
     assert not any(":" in item["case_place"] or suspicious_place.search(item["case_place"]) for item in items)
+    assert not any(re.match(r"^(of|the|a|an)\b", item["case_place"], re.I) for item in items)
+    by_title = {item["title"]: item for item in items}
+    expected_geography = {
+        "WaterFire Arts Center, Providence, R.I.": ("Providence", "Rhode Island", "town_or_city"),
+        "Hillsboro, OR: Navigating a New River Launch": ("Hillsboro", "Oregon", "town_or_city"),
+        "Ambler, PA: Repowering a Historic Landmark": ("Ambler", "Pennsylvania", "town_or_city"),
+        "Richmond, VA: Cheers to a Revitalized Neighborhood": ("Richmond", "Virginia", "town_or_city"),
+        "Wood for Life, a Collaborative Partnership to Provide Wood to the Navajo Nation and Hopi Tribe": ("Navajo Nation and Hopi Tribe", "Arizona", "tribal_community"),
+    }
+    assert all((by_title[title]["case_place"], by_title[title]["case_state"], by_title[title]["case_place_type"]) == expected for title, expected in expected_geography.items())
     planning = [item for item in items if item["case_program"] in {"Recreation Economy for Rural Communities", "Local Foods, Local Places"}]
     assert len({item["summary"] for item in planning}) == len(planning)
     assert all(item["case_place"].lower() in item["summary"].lower() or item["case_place"] == "Multiple communities" for item in planning)

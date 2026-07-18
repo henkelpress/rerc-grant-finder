@@ -40,6 +40,9 @@ async function main() {
       resources: await page.locator("#resourceCount").innerText(),
       cases: await page.locator("#caseStudyCount").innerText(),
     };
+    checks.applicantUnreachable = await page.evaluate(() => fundingResources
+      .filter((item) => !matchesAny(corpus(item), applicantOptions.map(([value]) => value)))
+      .map((item) => item.item_id));
     checks.desktopNoOverflow = await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1);
     checks.duplicateIds = await page.evaluate(() => {
       const ids = [...document.querySelectorAll("[id]")].map((node) => node.id);
@@ -81,7 +84,7 @@ async function main() {
     await page.locator('[data-mode="Case Study"]').click();
     await page.selectOption("#placeTypeSelect", "town_or_city");
     checks.townCaseMatches = number(await page.locator("#matchCount").innerText());
-    checks.townCasesExact = checks.townCaseMatches === 357;
+    checks.townCasesExact = checks.townCaseMatches === 364;
 
     await page.locator("#resetButton").click();
     await page.locator('[data-mode="Funding"]').click();
@@ -106,6 +109,17 @@ async function main() {
     checks.resourceMatches = number(await page.locator("#matchCount").innerText());
     checks.resourceCardsOnly = await page.locator(".result-card:not(.resource)").count() === 0;
     checks.resourceOfficialLinks = await page.locator(".result-card.resource .case-link[href^='http']").count();
+
+    await page.locator("#resetButton").click();
+    await page.locator('[data-mode="Funding"]').click();
+    await page.getByLabel("Other or varies by program").check();
+    checks.otherApplicantMatches = number(await page.locator("#matchCount").innerText());
+
+    await page.locator("#resetButton").click();
+    await page.locator('[data-mode="Resource"]').click();
+    await page.selectOption("#stateSelect", { label: "Virginia" });
+    await page.fill("#keywordSearch", "Appalachian Regional Commission Service Area");
+    checks.appalachianResourceMatches = number(await page.locator("#matchCount").innerText());
 
     await page.locator("#resetButton").click();
     await page.locator('[data-mode="Funding"]').click();
@@ -162,6 +176,12 @@ async function main() {
       const response = await page.request.get(baseUrl + relative);
       downloads.full[path.basename(relative)] = { status: response.status(), bytes: (await response.body()).length };
     }
+    if (baseUrl.includes("github.io")) {
+      const pycResponse = await page.request.get(baseUrl + "rercie/__pycache__/rercie_core.cpython-312.pyc");
+      checks.pycNotPublished = pycResponse.status() === 404;
+    } else {
+      checks.pycNotPublished = true;
+    }
 
     await page.screenshot({ path: path.join(outDir, "desktop.png"), fullPage: true });
     await desktop.close();
@@ -188,16 +208,19 @@ async function main() {
 
     const failures = [];
     if (checks.title !== "RERC Community Explorer") failures.push("title");
-    if (checks.counts.funding !== "659" || checks.counts.resources !== "61" || checks.counts.cases !== "477") failures.push("counts");
+    if (checks.counts.funding !== "659" || checks.counts.resources !== "61" || checks.counts.cases !== "476") failures.push("counts");
     if (!checks.desktopNoOverflow || !checks.mobileNoOverflow) failures.push("overflow");
     if (checks.duplicateIds.length) failures.push("duplicate_ids");
     if (checks.focusRule !== "rgb(0, 61, 45)") failures.push("focus_indicator");
-    if (checks.caseMatches !== 477 || !checks.caseCardsOnly || checks.caseLinks < 1 || checks.caseLinkLabel !== "Read the example") failures.push("case_studies");
-    if (checks.virginiaTrailCases < 1 || !checks.sameStateBoostVisible || checks.tribalCaseMatches < 10 || checks.townCaseMatches !== 357 || !checks.townCasesExact) failures.push("case_matching");
-    if (checks.cleanupCaseMatches !== 114 || !checks.cleanupCasesAreBrownfields || checks.mixedFundingStageMatches < 1) failures.push("case_stage");
+    if (checks.caseMatches !== 476 || !checks.caseCardsOnly || checks.caseLinks < 1 || checks.caseLinkLabel !== "Read the example") failures.push("case_studies");
+    if (checks.virginiaTrailCases < 1 || !checks.sameStateBoostVisible || checks.tribalCaseMatches < 10 || checks.townCaseMatches !== 364 || !checks.townCasesExact) failures.push("case_matching");
+    if (checks.cleanupCaseMatches !== 113 || !checks.cleanupCasesAreBrownfields || checks.mixedFundingStageMatches < 1) failures.push("case_stage");
     if (checks.electricEnergyTopicMatches < 1 || checks.communityFacilitiesTopicMatches < 1) failures.push("topic_reachability");
     if (!checks.topicBoundaries.cultureDoesNotMatchAgriculture || !checks.topicBoundaries.landDoesNotMatchMaryland || !checks.topicBoundaries.artsMatch) failures.push("topic_boundaries");
     if (checks.resourceMatches < 1 || !checks.resourceCardsOnly || checks.resourceOfficialLinks < 1) failures.push("resources");
+    if (checks.otherApplicantMatches < 1 || checks.applicantUnreachable.length) failures.push("applicant_reachability");
+    if (checks.appalachianResourceMatches < 1) failures.push("broad_geography");
+    if (!checks.pycNotPublished) failures.push("deployment_hygiene");
     if (checks.localGovernmentMatches < 1 || !checks.applicantEligibilityFiltered || checks.fundingOfficialLinks < 1) failures.push("eligibility");
     if (!checks.territoryNationalCaution || checks.territoryMultiStateMatches < 1) failures.push("territory_caution");
     if (downloads.csv.bytes < 100 || downloads.csv.rows < 1 || !downloads.csv.hasLinkColumn || !downloads.csv.hasOfficialUrl) failures.push("csv_export");

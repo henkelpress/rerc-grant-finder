@@ -72,6 +72,23 @@ PLACE_OVERRIDES = {
     "Beech Bottom, WV: Forging a New Future in Steel Country": "Beech Bottom",
     "Ranson and Charles Town, WV: A Tale of Two Cities": "Ranson and Charles Town",
     "A Successful Transformation: From Wasted Lot to Reading Hot\u2010Spot": "Shepherdstown",
+    "Boosting Community Storm Resilience in Alaska": "Coastal Alaska communities",
+    "Wood for Life, a Collaborative Partnership to Provide Wood to the Navajo Nation and Hopi Tribe": "Navajo Nation and Hopi Tribe",
+    "Hillsboro, OR: Navigating a New River Launch": "Hillsboro",
+    "Ambler, PA: Repowering a Historic Landmark": "Ambler",
+    "Richmond, VA: Cheers to a Revitalized Neighborhood": "Richmond",
+    "Drought Response and Recovery Project for Water Utilities in North Marin Water District, CA": "North Marin Water District",
+    "Drought Response and Recovery Project for Water Utilities in Tuolumne Utilities District, CA": "Tuolumne Utilities District",
+    "Drought Response and Recovery Project for Water Utilities in Hogansville, GA": "Hogansville",
+    "Drought Response and Recovery Project for Water Utilities in Hays and Russell, KS": "Hays and Russell",
+    "Drought Response and Recovery Project for Water Utilities in Las Vegas, NM": "Las Vegas",
+    "Drought Response and Recovery Project for Water Utilities in Clinton, OK": "Clinton",
+    "Drought Response and Recovery Project for Water Utilities in Spicewood Beach, TX": "Spicewood Beach",
+    "Drought Response and Recovery Project for Water Utilities in Castine, Maine": "Castine",
+    "Grand Isle: Louisiana's First Line of Defense from Coastal Flooding": "Grand Isle",
+    "Virginia Beach Becomes Sea Level Wise": "Virginia Beach",
+    "Integrating Climate Change into the Planning and Operations of the Apostle Islands National Lakeshore, WI": "Apostle Islands National Lakeshore",
+    "WaterFire Arts Center, Providence, R.I.": "Providence",
 }
 
 PLACE_TYPE_OVERRIDES = {
@@ -97,7 +114,37 @@ PLACE_TYPE_OVERRIDES = {
     "Finding Solutions Through Distance Learning Technology": "county_or_region",
     "Training a Workforce to Bring Nature-based Solutions into Every Project": "county_or_region",
     "Promoting Ecotourism to Conserve a Watershed in Virginia": "county_or_region",
+    "Boosting Community Storm Resilience in Alaska": "statewide_or_multi_community",
+    "Drought Response and Recovery Project for Water Utilities in North Marin Water District, CA": "county_or_region",
+    "Drought Response and Recovery Project for Water Utilities in Tuolumne Utilities District, CA": "county_or_region",
+    "Drought Response and Recovery Project for Water Utilities in Hays and Russell, KS": "statewide_or_multi_community",
+    "Integrating Climate Change into the Planning and Operations of the Apostle Islands National Lakeshore, WI": "county_or_region",
 }
+STATE_OVERRIDES = {
+    "WaterFire Arts Center, Providence, R.I.": "Rhode Island",
+}
+
+SUMMARY_OVERRIDES = {
+    "Hillsboro, OR: Navigating a New River Launch": "An abandoned riverside property in Hillsboro was assessed and redeveloped as a public launch on the Tualatin River. The project created safer access for paddling and other outdoor recreation.",
+    "Ambler, PA: Repowering a Historic Landmark": "Ambler restored the former Keasbey and Mattison Boiler House for new use after decades of industrial activity. Brownfields work helped return a long-vacant landmark to the community.",
+    "Richmond, VA: Cheers to a Revitalized Neighborhood": "Richmond reused a former industrial site in Fulton Hill for a brewery, distribution facility, and tasting room. The project brought new investment and activity to the neighborhood.",
+    "WaterFire Arts Center, Providence, R.I.": "WaterFire transformed a contaminated industrial property in Providence into a community arts center and nonprofit headquarters. EPA Brownfields support helped the organization open performance, exhibition, and community space in 2017.",
+    "St. Johnsbury Hardware Store Site, St. Johnsbury, Vt.": "A former downtown hardware store in St. Johnsbury was assessed and cleaned up, then reopened as a craft distillery and event space. EPA Brownfields funding helped address vapor risks and support a new downtown business.",
+    "Three Rivers Trailhead, St. Johnsbury, Vt.": "St. Johnsbury cleaned up an abandoned brownfield and built a trailhead connecting downtown to the Lamoille Valley Rail Trail. EPA assessment and cleanup funds helped remove a deteriorated building and open access to recreation.",
+    "A Successful Transformation: Allentown Waterfront - Allentown, PA": "Allentown began redeveloping a 26-acre contaminated industrial site along the Lehigh River as a mixed-use waterfront district. The project reconnects underused land with the river and the surrounding community.",
+    "Pittsburgh, PA: Luxury Living with an Industrial Legacy": "A former steel foundry in Pittsburgh's Lawrenceville neighborhood was redeveloped as The Foundry at 41st, an apartment community with shared space. The design keeps visible links to the area's industrial history.",
+    "Revitalizing Rural Virginia Pulaski, Virginia": "Pulaski cleared the former Virginia Wood Products site and prepared the underused industrial property for redevelopment. The project supports continued investment near the town's historic core.",
+    "Beech Bottom, WV: Forging a New Future in Steel Country": "The Beech Bottom Industrial Park reused a former steel plant and attracted more than $20 million in investment and about 700 jobs after redevelopment began in 2014.",
+    "Weirton, WV: A Former Coal Mine Springs to Life": "Weirton and regional partners assessed a former coal mine and prepared the land for a business park. The reuse supported new local businesses, including a bakery that opened in 2016.",
+    "Shubuta, MS: Strengthening Shubuta": "Shubuta used brownfields planning and cleanup support to address underused property and strengthen the small-town community. The project connects land reuse with local revitalization goals.",
+    "Overbrook Environmental Education Center Becomes Community Hub: Philadelphia, PA": "Philadelphia's Overbrook Environmental Education Center transformed a former quarry and contaminated commercial sites into an urban environmental education and community hub. Brownfields assessment, cleanup, and reuse planning support expansion toward affordable housing, public space, a health center, and a community food and wellness center.",
+    "Akwesasne, New York (2022)": "The Saint Regis Mohawk Tribe brought the Akwesasne community together to build on cultural tourism, economic development, and infrastructure plans, including a new heritage center, an art gallery, and green spaces along the St. Regis River.",
+}
+
+EXCLUDED_TITLES = {
+    "A Former Coal Mine Springs to Life",
+}
+
 INTERNAL_MARKERS = (
     "protos treats",
     "protos indexes",
@@ -132,12 +179,14 @@ def repair_text(value: object) -> str:
         if best == text:
             break
         text = best
+    text = text.replace("ÆŸ", "ti").replace("\u019f", "ti")
+    text = re.sub(r"(?<=[a-z])-[ ]+(?=[a-z])", "", text)
     return text.strip()
 
 
 def valid_place(value: str, title: str) -> bool:
     lowered = value.lower()
-    if not value or len(value) > 72 or ":" in value:
+    if not value or len(value) > 72 or ":" in value or lowered.startswith(("of ", "the ", "a ", "an ")):
         return False
     if any(token in lowered for token in (
         "$", "combined value", "grant recipient", "grant type", "authority", "commission",
@@ -166,7 +215,11 @@ def clean_theme(value: object) -> str:
     lowered = theme.lower()
     if len(theme) > 48:
         return ""
+    if "steel fabrication" in lowered:
+        return "Steel Fabrication"
     if any(marker in lowered for marker in ("complete evaluation", "funded through", "recipient", "contamination")):
+        return ""
+    if re.search(r"\b(and|for|an|the|of|to|with|in)\.?$", lowered):
         return ""
     return theme
 
@@ -189,6 +242,26 @@ def summary_is_public_ready(candidate: str, title: str) -> bool:
     candidate_norm = re.sub(r"[^a-z0-9]+", " ", lowered).strip()
     repeated = f"{title_norm} is a climate resilience toolkit case record for {title_norm}"
     return candidate_norm != repeated
+
+
+def planning_summary(case: dict, title: str) -> str:
+    long_summary = repair_text((case.get("summary") or {}).get("long"))
+    for marker in ("The cited EPA description says:", "For this partner community, the report states:"):
+        if marker not in long_summary:
+            continue
+        segment = long_summary.split(marker, 1)[1].strip()
+        lowered = segment.lower()
+        stops = [
+            lowered.find(stop)
+            for stop in (" epa describes", " the case is useful", " protos indexes", " the record is source-backed")
+            if lowered.find(stop) >= 0
+        ]
+        if stops:
+            segment = segment[: min(stops)]
+        summary = sentence_summary(segment)
+        if summary_is_public_ready(summary, title):
+            return summary
+    return ""
 
 
 def fallback_summary(title: str, program: str, place: str, state: str, themes: list[str], year: str) -> str:
@@ -343,8 +416,10 @@ def build_record(case_path: Path, checked_on: str) -> dict | None:
         return None
 
     geography = case.get("geography") or {}
-    state = repair_text(geography.get("state"))
     title = repair_text(case.get("title"))
+    if title in EXCLUDED_TITLES:
+        return None
+    state = STATE_OVERRIDES.get(title, repair_text(geography.get("state")))
     place = PLACE_OVERRIDES.get(title, repair_text(geography.get("place_name")))
     if title not in PLACE_OVERRIDES and (place.lower() == state.lower() or not valid_place(place, title)):
         place = place_from_title(title) or "Multiple communities"
@@ -393,8 +468,13 @@ def build_record(case_path: Path, checked_on: str) -> dict | None:
     title = re.sub(r"^RERC Partner Community:\s*", "", title, flags=re.I)
     source_url = public_url(source.get("origin_path_or_url"))
     year = year_for(case, program_name)
-    if program_name in {"Recreation Economy for Rural Communities", "Local Foods, Local Places"} or not summary_is_public_ready(summary, title):
+    summary = SUMMARY_OVERRIDES.get(title, summary)
+    if program_name in {"Recreation Economy for Rural Communities", "Local Foods, Local Places"}:
+        summary = SUMMARY_OVERRIDES.get(title) or planning_summary(case, title) or summary
+    if not summary_is_public_ready(summary, title):
         summary = fallback_summary(title, program_name, place, state, themes, year)
+    if program_name in {"Recreation Economy for Rural Communities", "Local Foods, Local Places"} and place != "Multiple communities" and place.lower() not in summary.lower():
+        summary = f"{place}: {summary}"
     if summary[-1] not in ".!?":
         summary += "."
     item_id = "RERC-CASE-" + re.sub(r"[^A-Z0-9]+", "-", compact(case.get("case_id")).upper()).strip("-")

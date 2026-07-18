@@ -4,6 +4,7 @@ import csv
 import hashlib
 import json
 import re
+import subprocess
 import zipfile
 from xml.etree import ElementTree as ET
 from datetime import date, datetime, timezone
@@ -343,7 +344,7 @@ def sha256(path: Path) -> str:
 
 
 def validate(records: list[dict[str, str]], docx: Path, xlsx: Path, csv_path: Path) -> dict:
-    assert len(records) == 1197
+    assert len(records) == 1196
     assert {row["Type"] for row in records} == {"Funding", "Resource", "Community Example"}
     assert all(row["Official URL"].startswith(("https://", "http://")) for row in records)
     serialized = json.dumps(records, ensure_ascii=False)
@@ -353,7 +354,7 @@ def validate(records: list[dict[str, str]], docx: Path, xlsx: Path, csv_path: Pa
     assert workbook.sheetnames == ["Read Me", "Funding", "Resources", "Community Examples"]
     assert workbook["Funding"].max_row == 660
     assert workbook["Resources"].max_row == 62
-    assert workbook["Community Examples"].max_row == 478
+    assert workbook["Community Examples"].max_row == 477
     assert docx.stat().st_size > 100_000 and xlsx.stat().st_size > 100_000 and csv_path.stat().st_size > 100_000
     return {
         "status": "PASS",
@@ -361,7 +362,12 @@ def validate(records: list[dict[str, str]], docx: Path, xlsx: Path, csv_path: Pa
         "records": len(records),
         "funding": 659,
         "resources": 61,
-        "community_examples": 477,
+        "community_examples": 476,
+        "source_commit": subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip(),
+        "site_sha256": {
+            name: sha256(ROOT / name)
+            for name in ("index.html", "styles.css", "app.js", "data.js", "case_studies.js", "README.md")
+        },
         "source_sha256": {
             "data.js": sha256(ROOT / "data.js"),
             "case_studies.js": sha256(ROOT / "case_studies.js"),

@@ -11,4 +11,4 @@ Important limits
 
 RERCie is a community-built tool. It is not an EPA grant program. It does not decide who can apply, promise funding, or submit an application. Check the funder's page and have a person review every draft.
 
-This installer is not yet digitally signed. Windows may show a safety notice. Download RERCie only from the henkelpress/rerc-grant-finder GitHub release page.
+This installer is not yet digitally signed. Windows may show a safety notice. Installer lifecycle testing ran on the build computer, not a separate clean Windows virtual machine. Download RERCie only from the henkelpress/rerc-grant-finder GitHub release page.

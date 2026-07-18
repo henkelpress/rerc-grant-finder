@@ -24,7 +24,8 @@ const applicantOptions = [
   ["business|businesses|entrepreneur|entrepreneurs|tourism|destination marketing", "Business or tourism group"],
   ["school|schools|college|colleges|university|universities|library|libraries|museum|museums", "School, library, or museum"],
   ["utility|utilities|authority|authorities|district|districts", "Utility or public authority"],
-  ["landowner|landowners|individual|individuals|families", "Landowner or individual"]
+  ["landowner|landowners|individual|individuals|families", "Landowner or individual"],
+  ["eligible|applicant|applicants|public agency|public agencies|sponsor|sponsors|organization|organizations|customer|customers|owner|owners|student|students|farmer|farmers|fishermen|worker|workers|sportsmen|resident|residents|member|members|partner|partners|representative|representatives|planner|planners|consultant|consultants|recipient|recipients|institution|institutions|entity|entities|government|governments|community|communities|state|states|varies|see program|check with the program", "Other or varies by program"]
 ];
 
 const topicOptions = [
@@ -140,13 +141,25 @@ function appliesToPlace(geography, selectedPlace) {
   });
 }
 
+const appalachianPlaces = new Set([
+  "Alabama", "Georgia", "Kentucky", "Maryland", "Mississippi", "New York", "North Carolina",
+  "Ohio", "Pennsylvania", "South Carolina", "Tennessee", "Virginia", "West Virginia"
+]);
+
+function isBroadArea(item, selectedPlace) {
+  const geography = cleanText(item.geography).toLowerCase();
+  if (geography.includes("appalachian region")) return appalachianPlaces.has(selectedPlace);
+  if (geography.includes("multi-state")) return !territoryPlaces.has(selectedPlace);
+  return ["north america", "see program", "select localities across the country"].some((term) => geography.includes(term));
+}
+
 function matchesGeography(item, selectedPlace) {
   if (!selectedPlace || item.item_type === "Case Study") return true;
   const geography = cleanText(item.geography);
   const territoryMultiState = territoryPlaces.has(selectedPlace) &&
     geography.toLowerCase().includes("multi-state") &&
     /(territor|insular|island area|office of insular affairs)/i.test(corpus(item));
-  return isNational(geography) || appliesToPlace(geography, selectedPlace) || territoryMultiState;
+  return isNational(geography) || appliesToPlace(geography, selectedPlace) || territoryMultiState || isBroadArea(item, selectedPlace);
 }
 
 function scoreItem(item, text, selectedPlace, selectedPlaceType, applicants, topics, selectedStage) {
@@ -164,6 +177,7 @@ function scoreItem(item, text, selectedPlace, selectedPlaceType, applicants, top
     if (item.status === "Cycle closed") score -= 18;
     if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) score += 15;
     if (selectedPlace && isNational(cleanText(item.geography))) score += territoryPlaces.has(selectedPlace) ? 2 : 8;
+    if (selectedPlace && isBroadArea(item, selectedPlace)) score += 2;
     if (applicants.length && matchesAny(cleanText(item.eligible_users).toLowerCase(), applicants)) score += 12;
     if (topics.length) score += Math.min(18, topics.filter((group) => matchesAny(topicText, [group])).length * 7);
     if (selectedStage !== "Any step") score += cleanText(item.project_stage).toLowerCase() === "mixed" ? 4 : 10;
@@ -223,6 +237,7 @@ function matchReason(item) {
     return "Source-backed community example";
   }
   if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) return "Serves your selected area";
+  if (selectedPlace && isBroadArea(item, selectedPlace)) return "May serve multiple areas; check the provider's service area";
   if (topics.length) return "Matches one or more selected priorities";
   return "Broad match for rural community work";
 }

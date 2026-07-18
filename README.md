@@ -6,10 +6,10 @@ Live site: <https://henkelpress.github.io/rerc-grant-finder/>
 
 ## Current Catalog
 
-- 1,197 public records
+- 1,196 public records
 - 659 funding options
 - 61 guides, tools, data sources, training programs, and other resources
-- 477 official federal community examples
+- 476 official federal community examples
 - Coverage for all 50 states, the District of Columbia, Puerto Rico, American Samoa, Guam, the Northern Mariana Islands, and the U.S. Virgin Islands
 
 People can name a community for the appendix, choose its state or territory, select All, Funding, Resources, or Case studies, answer a few project questions, and export the matched results as a real Word DOCX or CSV. The full Word appendix, Excel workbook, and CSV include all three content types and their official URLs.
@@ -45,7 +45,7 @@ RERCie Local Grant-Writing Guide is an optional Windows app. It helps people rev
 
 [SHA-256 checksum](https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Setup.exe.sha256) | [Release QA](https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Release-QA.json)
 
-RERCie is a community-built tool. It is not an EPA grant program, does not decide eligibility, and does not submit applications. The installer is not yet digitally signed, so Windows may show a safety notice. Download it only from this repository's release page.
+RERCie is a community-built tool. It is not an EPA grant program, does not decide eligibility, and does not submit applications. The installer is not yet digitally signed, so Windows may show a safety notice. Installer lifecycle testing ran on the build computer, not a separate clean Windows virtual machine. Download it only from this repository's release page.
 
 The reviewed source is in `rercie/`. Model weights are not stored in this repository or installer.
 

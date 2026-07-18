@@ -62,12 +62,14 @@ def main() -> int:
     assert not (ROOT / "scripts" / "qa_public_site_cases.cjs").exists()
     assert not (ROOT / "scripts" / "qa_public_site_final.cjs").exists()
     assert "qa_public_site.cjs" in (ROOT / ".github" / "workflows" / "qa.yml").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "deploy-pages.yml").read_text(encoding="utf-8")
+    assert "__pycache__" in workflow and "*.pyc" in workflow
 
     case_raw = (ROOT / "case_studies.js").read_text(encoding="utf-8").strip()
     case_prefix = "window.RERC_CASE_STUDIES="
     assert case_raw.startswith(case_prefix) and case_raw.endswith(";")
     cases = json.loads(case_raw[len(case_prefix):-1])["items"]
-    assert len(cases) == 477
+    assert len(cases) == 476
     assert all(case["source_url"].startswith(("https://www.epa.gov/", "https://toolkit.climate.gov/", "https://www.rd.usda.gov/")) for case in cases)
     assert not any(re.search(r"[A-Za-z]:\\\\|protos|private_internal|needs_image_review", json.dumps(case), re.I) for case in cases)
 
@@ -78,12 +80,12 @@ def main() -> int:
     assert static_docx.stat().st_size > 100_000
     assert static_xlsx.stat().st_size > 100_000
     assert static_csv.stat().st_size > 100_000
-    assert len(static_csv.read_text(encoding="utf-8-sig").splitlines()) == 1198
+    assert len(static_csv.read_text(encoding="utf-8-sig").splitlines()) == 1197
     with zipfile.ZipFile(static_docx) as package:
         names = set(package.namelist())
         assert "word/comments.xml" not in names
         document_xml = package.read("word/document.xml").decode("utf-8")
-        assert document_xml.count("<w:hyperlink") == 1197
+        assert document_xml.count("<w:hyperlink") == 1196
         app_xml = package.read("docProps/app.xml").decode("utf-8")
         core_xml = package.read("docProps/core.xml").decode("utf-8")
         assert "Microsoft Office Word" in app_xml and "Macintosh" not in app_xml
@@ -101,12 +103,17 @@ def main() -> int:
         "data.js": sha256(ROOT / "data.js"),
         "case_studies.js": sha256(ROOT / "case_studies.js"),
     }
+    assert re.fullmatch(r"[0-9a-f]{40}", package_report["source_commit"])
+    assert package_report["site_sha256"] == {
+        name: sha256(ROOT / name)
+        for name in ("index.html", "styles.css", "app.js", "data.js", "case_studies.js", "README.md")
+    }
     assert package_report["docx"]["sha256"] == sha256(static_docx)
     assert package_report["xlsx"]["sha256"] == sha256(static_xlsx)
     assert package_report["csv"]["sha256"] == sha256(static_csv)
 
     source_health = json.loads((ROOT / "case_studies.source_health.json").read_text(encoding="utf-8"))
-    assert source_health["status"] == "PASS" and source_health["unique_urls"] == 304
+    assert source_health["status"] == "PASS" and source_health["unique_urls"] == 303
     assert source_health["counts"]["hard_failure"] == 0
     assert source_health["case_studies_sha256"] == hashlib.sha256((ROOT / "case_studies.js").read_bytes()).hexdigest()
 

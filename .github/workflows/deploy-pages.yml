@@ -43,7 +43,10 @@ jobs:
           python -m http.server 8877 --bind 127.0.0.1 > /tmp/rerc-http.log 2>&1 &
           node scripts/qa_public_site.cjs http://127.0.0.1:8877/ browser-qa
       - name: Remove build-only dependencies
-        run: rm -rf node_modules browser-qa
+        run: |
+          rm -rf node_modules browser-qa
+          find . -type d -name __pycache__ -prune -exec rm -rf {} +
+          find . -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
