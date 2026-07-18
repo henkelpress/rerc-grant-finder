@@ -148,8 +148,10 @@ def add_record_table(document: Document, row: dict[str, str], index: int) -> Non
     title = document.add_heading(row["Title"], level=2)
     title.paragraph_format.space_before = Pt(8)
     title.paragraph_format.space_after = Pt(3)
+    title.paragraph_format.keep_with_next = True
     meta = document.add_paragraph()
     meta.paragraph_format.space_after = Pt(4)
+    meta.paragraph_format.keep_with_next = True
     meta.add_run(row["Organization"]).bold = True
     details = [row["Status"], row["Geography"], row["Availability or Year"]]
     meta.add_run(" | " + " | ".join(item for item in details if item))
@@ -170,10 +172,13 @@ def add_record_table(document: Document, row: dict[str, str], index: int) -> Non
         ("Official source", row["Official URL"]),
         ("Record ID", row["Record ID"]),
     ]
+    record_rows = []
     for label, value in fields:
         if not value:
             continue
-        cells = table.add_row().cells
+        table_row = table.add_row()
+        record_rows.append(table_row)
+        cells = table_row.cells
         cells[0].text = label
         cells[0].paragraphs[0].runs[0].font.bold = True
         set_cell_shading(cells[0], LIGHT_GREEN if index % 2 else LIGHT_BLUE)
@@ -182,6 +187,15 @@ def add_record_table(document: Document, row: dict[str, str], index: int) -> Non
             cells[1].paragraphs[0].add_run(f" ({value})")
         else:
             cells[1].text = value
+        for cell in cells:
+            for paragraph in cell.paragraphs:
+                paragraph.paragraph_format.keep_with_next = True
+        tr_properties = table_row._tr.get_or_add_trPr()
+        tr_properties.append(OxmlElement("w:cantSplit"))
+    if record_rows:
+        for cell in record_rows[-1].cells:
+            for paragraph in cell.paragraphs:
+                paragraph.paragraph_format.keep_with_next = False
 
 
 

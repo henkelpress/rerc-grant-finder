@@ -86,6 +86,8 @@ def main() -> int:
         assert "word/comments.xml" not in names
         document_xml = package.read("word/document.xml").decode("utf-8")
         assert document_xml.count("<w:hyperlink") == 1196
+        assert document_xml.count("<w:cantSplit") > 4000
+        assert document_xml.count("<w:keepNext") > 4000
         app_xml = package.read("docProps/app.xml").decode("utf-8")
         core_xml = package.read("docProps/core.xml").decode("utf-8")
         assert "Microsoft Office Word" in app_xml and "Macintosh" not in app_xml
