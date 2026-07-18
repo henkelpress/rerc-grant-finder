@@ -102,7 +102,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 
 .hero .eyebrow { color: #d5f3df; }
 
-h1, h2, h3, p { overflow-wrap: anywhere; }
+h1, h2, h3, h4, p { overflow-wrap: anywhere; }
 
 h1 {
   max-width: 760px;
@@ -112,7 +112,7 @@ h1 {
 }
 
 h2 { margin: 0 0 8px; font-size: 1.75rem; line-height: 1.15; }
-h3 { margin: 0; font-size: 1.12rem; line-height: 1.25; }
+h3, h4 { margin: 0; font-size: 1.12rem; line-height: 1.25; }
 
 .hero-copy {
   max-width: 680px;
@@ -410,8 +410,8 @@ fieldset { margin: 0; padding: 0; border: 0; }
 .resource .pill { color: var(--river); background: var(--sky); }
 .closed .pill.status { color: var(--closed); background: #fff4cf; }
 
-.result-card h3 a { color: var(--ink); text-decoration: none; }
-.result-card h3 a:hover, .result-card h3 a:focus { color: var(--rerc-green); text-decoration: underline; }
+.result-card h4 a { color: var(--ink); text-decoration: none; }
+.result-card h4 a:hover, .result-card h4 a:focus { color: var(--rerc-green); text-decoration: underline; }
 .organization { margin: 4px 0 10px; color: var(--muted); font-weight: 700; }
 .summary { margin: 0 0 10px; }
 .details { margin: 0; color: var(--muted); font-size: 1rem; }

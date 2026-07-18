@@ -56,8 +56,8 @@ def main() -> int:
     assert not any(item["case_place"] == item["case_state"] for item in items)
     assert all(item["case_place_type"] in {"town_or_city", "county_or_region", "tribal_community", "statewide_or_multi_community"} for item in items)
     assert Counter(item["case_place_type"] for item in items) == {
-        "town_or_city": 360,
-        "county_or_region": 47,
+        "town_or_city": 359,
+        "county_or_region": 48,
         "statewide_or_multi_community": 55,
         "tribal_community": 14,
     }
@@ -72,6 +72,7 @@ def main() -> int:
         "Buffelgrass Removal, Fire, and Climate Adaptation": "county_or_region",
         "Forest Thinning to Restore Fire Resilience at Lassen Volcanic National Park": "county_or_region",
         "Great Lakes Restoration Initiative Pollinator Task Force": "county_or_region",
+        "Alligator River National Wildlife Refuge / Albemarle-Pamlico Peninsula Climate Adaptation Project": "county_or_region",
         "Expanding an Indigenous Environmental Monitoring Network: Community-driven Stewardship of Land and Water": "tribal_community",
     }
     place_types_by_title = {item["title"]: item["case_place_type"] for item in items}
@@ -92,12 +93,17 @@ def main() -> int:
         "Ambler, PA: Repowering a Historic Landmark": ("Ambler", "Pennsylvania", "town_or_city"),
         "Richmond, VA: Cheers to a Revitalized Neighborhood": ("Richmond", "Virginia", "town_or_city"),
         "Wood for Life, a Collaborative Partnership to Provide Wood to the Navajo Nation and Hopi Tribe": ("Navajo Nation and Hopi Tribe", "Arizona", "tribal_community"),
+        "Alligator River National Wildlife Refuge / Albemarle-Pamlico Peninsula Climate Adaptation Project": ("Albemarle-Pamlico Peninsula", "North Carolina", "county_or_region"),
     }
     assert all((by_title[title]["case_place"], by_title[title]["case_state"], by_title[title]["case_place_type"]) == expected for title, expected in expected_geography.items())
     assert "two- and three-bedroom homes" in by_title["South Dakota Governor's House Program - Providing Affordable Housing for 30 Years"]["summary"]
     assert "restored its floodplain" in by_title["250 Birge St., Brattleboro, Vt."]["summary"]
     assert by_title["250 Birge St., Brattleboro, Vt."]["topic_tags"] == "Brownfields; Land Revitalization; Public Park; Floodplain Restoration; Flood Resilience"
-    assert "The Nature Conservancy and the U.S. Fish and Wildlife Service" in by_title["Alligator River National Wildlife Refuge/ Albemarle-Pamlico Peninsula Climate Adaptation Project"]["summary"]
+    assert "Dare and Hyde Counties" in by_title["Alligator River National Wildlife Refuge / Albemarle-Pamlico Peninsula Climate Adaptation Project"]["summary"]
+    st_paul = by_title["Expanding an Indigenous Environmental Monitoring Network: Community-driven Stewardship of Land and Water"]["summary"]
+    assert "St. Paul Island" in st_paul and "[E]mpowering" not in st_paul and "ISN History" not in st_paul
+    great_lakes = by_title["Great Lakes Restoration Initiative Pollinator Task Force"]["summary"]
+    assert not great_lakes.endswith('".') and '".' not in great_lakes
     planning = [item for item in items if item["case_program"] in {"Recreation Economy for Rural Communities", "Local Foods, Local Places"}]
     assert len({item["summary"] for item in planning}) == len(planning)
     assert all(item["case_place"].lower() in item["summary"].lower() or item["case_place"] == "Multiple communities" for item in planning)

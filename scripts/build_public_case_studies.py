@@ -89,6 +89,7 @@ PLACE_OVERRIDES = {
     "Virginia Beach Becomes Sea Level Wise": "Virginia Beach",
     "Integrating Climate Change into the Planning and Operations of the Apostle Islands National Lakeshore, WI": "Apostle Islands National Lakeshore",
     "WaterFire Arts Center, Providence, R.I.": "Providence",
+    "Alligator River National Wildlife Refuge/ Albemarle-Pamlico Peninsula Climate Adaptation Project": "Albemarle-Pamlico Peninsula",
 }
 
 PLACE_TYPE_OVERRIDES = {
@@ -122,10 +123,15 @@ PLACE_TYPE_OVERRIDES = {
     "Buffelgrass Removal, Fire, and Climate Adaptation": "county_or_region",
     "Forest Thinning to Restore Fire Resilience at Lassen Volcanic National Park": "county_or_region",
     "Great Lakes Restoration Initiative Pollinator Task Force": "county_or_region",
+    "Alligator River National Wildlife Refuge/ Albemarle-Pamlico Peninsula Climate Adaptation Project": "county_or_region",
     "Expanding an Indigenous Environmental Monitoring Network: Community-driven Stewardship of Land and Water": "tribal_community",
 }
 STATE_OVERRIDES = {
     "WaterFire Arts Center, Providence, R.I.": "Rhode Island",
+}
+
+TITLE_OVERRIDES = {
+    "Alligator River National Wildlife Refuge/ Albemarle-Pamlico Peninsula Climate Adaptation Project": "Alligator River National Wildlife Refuge / Albemarle-Pamlico Peninsula Climate Adaptation Project",
 }
 
 TOPIC_OVERRIDES = {
@@ -135,7 +141,9 @@ TOPIC_OVERRIDES = {
 }
 
 SUMMARY_OVERRIDES = {
-    "Alligator River National Wildlife Refuge/ Albemarle-Pamlico Peninsula Climate Adaptation Project": "The Nature Conservancy and the U.S. Fish and Wildlife Service evaluated adaptation strategies for coastal refuge lands threatened by sea-level rise on North Carolina's Albemarle-Pamlico Peninsula. The project tested shoreline stabilization and habitat restoration approaches to improve resilience.",
+    "Alligator River National Wildlife Refuge/ Albemarle-Pamlico Peninsula Climate Adaptation Project": "The Nature Conservancy and the U.S. Fish and Wildlife Service evaluated adaptation strategies for coastal refuge lands threatened by sea-level rise across North Carolina's Albemarle-Pamlico Peninsula in Dare and Hyde Counties. The project tested shoreline stabilization and habitat restoration approaches to improve regional resilience.",
+    "Expanding an Indigenous Environmental Monitoring Network: Community-driven Stewardship of Land and Water": "St. Paul Island and Indigenous partners expanded a Tribally governed environmental monitoring network that combines Indigenous knowledge, community priorities, and climate data. The shared platform supports local decisions about land, water, wildlife, and changing coastal conditions.",
+    "Great Lakes Restoration Initiative Pollinator Task Force": "EPA funded the Great Lakes Restoration Initiative Pollinator Task Force to coordinate native bee conservation across the Great Lakes Basin. The partnership supports actions that improve native bee abundance, distribution, diversity, and resilience.",
     "250 Birge St., Brattleboro, Vt.": "Brattleboro cleaned a former industrial property at 250 Birge Street, restored its floodplain, and created a public park along Whetstone Brook. The project reduced flood risk while returning contaminated riverfront land to community use.",
     "South Dakota Governor's House Program - Providing Affordable Housing for 30 Years": "The South Dakota Governor's House Program combines affordable home production with correctional workforce training. Participants build energy-efficient two- and three-bedroom homes that can be placed in communities across South Dakota.",
     "Hillsboro, OR: Navigating a New River Launch": "An abandoned riverside property in Hillsboro was assessed and redeveloped as a public launch on the Tualatin River. The project created safer access for paddling and other outdoor recreation.",
@@ -572,10 +580,11 @@ def build_record(case_path: Path, checked_on: str) -> dict | None:
     if summary[-1] not in ".!?":
         summary += "."
     item_id = "RERC-CASE-" + re.sub(r"[^A-Z0-9]+", "-", compact(case.get("case_id")).upper()).strip("-")
+    display_title = TITLE_OVERRIDES.get(title, title)
     return {
         "item_id": item_id,
         "item_type": "Case Study",
-        "title": title,
+        "title": display_title,
         "organization": program_name,
         "status": (
             "Planning assistance example"

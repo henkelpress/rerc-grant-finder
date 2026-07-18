@@ -255,7 +255,7 @@ function renderCard(item) {
           <span class="pill">Case study</span>
           <span>${escapeHtml(item.case_program)}</span>
         </div>
-        <h3>${escapeHtml(item.title)}</h3>
+        <h4>${escapeHtml(item.title)}</h4>
         <p class="organization">${escapeHtml(item.case_place)}, ${escapeHtml(item.case_state)}${year}</p>
         <p class="summary">${escapeHtml(publicSummary(item))}</p>
         <p class="match-reason"><strong>Why it fits:</strong> ${escapeHtml(matchReason(item))}</p>
@@ -277,7 +277,7 @@ function renderCard(item) {
         <span class="pill status">${escapeHtml(item.status)}</span>
         <span>${escapeHtml(item.support_type)}</span>
       </div>
-      <h3>${escapeHtml(item.title)}</h3>
+      <h4>${escapeHtml(item.title)}</h4>
       <p class="organization">${escapeHtml(item.organization)}</p>
       <p class="summary">${escapeHtml(publicSummary(item))}</p>
       <p class="match-reason"><strong>Why it fits:</strong> ${escapeHtml(matchReason(item))}</p>

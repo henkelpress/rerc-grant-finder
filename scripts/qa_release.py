@@ -56,6 +56,8 @@ def main() -> int:
     assert all(value in index for value in ("town_or_city", "county_or_region", "tribal_community", "statewide_or_multi_community"))
     assert "topicCorpus(item)" in app and "broadFundingStage" in app
     assert "cleanText(item.case_place_type) !== selectedPlaceType" in app
+    assert "<h4>${escapeHtml(item.title)}</h4>" in app
+    assert "later standalone retest could not run" in index.lower()
     assert "outline: 3px solid #003d2d" in (ROOT / "styles.css").read_text(encoding="utf-8")
     assert (ROOT / ".gitattributes").read_text(encoding="utf-8").count("eol=lf") >= 8
     assert (ROOT / "scripts" / "qa_public_site.cjs").is_file()
@@ -149,6 +151,10 @@ def main() -> int:
     assert local_report["model"] == "gemma-3-1b-it-Q4_K_M.gguf"
     assert local_report["source_sha256"] == hashlib.sha256((ROOT / "rercie" / "rercie_core.py").read_bytes()).hexdigest()
     assert local_report["raw_model_prose_exposed"] is False
+    assert local_report["evidence_scope"].startswith("Package-bound")
+    assert local_report["later_standalone_rerun"]["status"] == "NOT_RUN"
+    assert source_qa["checks"]["local_generation"]["later_standalone_rerun_status"] == "NOT_RUN_NO_SERVICE"
+    assert any("later standalone Gemma inference rerun" in item for item in source_qa["disclosed_limits"])
 
     sys.path.insert(0, str(ROOT / "rercie"))
     import rercie as app

@@ -86,7 +86,9 @@
                                             "deterministic_final_scaffold":  true,
                                             "manual_local_gemma_test_required_before_release":  false,
                                             "manual_local_gemma_test_status":  "PASS",
-                                            "verified_excerpt_count":  1
+                                            "verified_excerpt_count":  1,
+                                            "evidence_scope":  "Package-bound local Gemma generation test completed before final packaging.",
+                                            "later_standalone_rerun_status":  "NOT_RUN_NO_SERVICE"
                                         },
                    "docx_export":  {
                                        "status":  "PASS",
@@ -152,7 +154,8 @@
                              "No clean Windows virtual-machine test has been completed for this version.",
                              "The public installer is not code-signed, so Windows may show a safety notice.",
                              "Microsoft Defender scanning may be unavailable when that Windows feature is disabled on the build machine.",
-                             "Users must review every generated draft and verify current funding rules at the official source."
+                             "Users must review every generated draft and verify current funding rules at the official source.",
+                             "A later standalone Gemma inference rerun was not completed because no local inference service was available; the package-bound local generation test remains the applicable evidence."
                          ],
     "release_binding":  {
                             "source_commit":  null,
