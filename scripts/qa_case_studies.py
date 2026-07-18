@@ -50,7 +50,7 @@ def main() -> int:
     assert len({item["summary"] for item in items}) == len(items)
     assert not any(re.search(r"helps communities compare approaches|official example from|is an EPA RERC|used Local Foods, Local Places technical assistance", item["summary"], re.I) for item in items)
     assert not any(re.search(r"\b(un-\s+derutilized|fabrica\u019fion)", item["summary"] + " " + item["topic_tags"], re.I) for item in items)
-    assert not any(re.search(r"\.\s+(and|or)\b|residents walk through a greenhouse|\bSt\.$", item["summary"], re.I) for item in items)
+    assert not any(re.search(r"\.\s+(and|or|provide|enhance|help|explore)\b|residents walk through a greenhouse|\bSt\.$", item["summary"], re.I) for item in items)
     assert not any(re.search(r"appears in the official|case record for|is an official|an USDA", item["summary"], re.I) for item in items)
     assert not any(any(len(sentence.split()) > 49 for sentence in re.split(r"(?<=[.!?])\s+", item["summary"])) for item in items)
     assert not any(item["case_place"] == item["case_state"] for item in items)
