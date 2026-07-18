@@ -85,7 +85,7 @@ def main() -> int:
     manual_review = [item for item in results if needs_manual_review(item)]
     bot_blocked = [item for item in manual_review if item.get("status") == 403]
     report = {
-        "status": "PASS" if not failed else "REVIEW",
+        "status": "REVIEW" if failed else ("MANUAL_REVIEW" if manual_review else "PASS"),
         "unique_urls_checked": len(urls),
         "failed_urls": len(failed),
         "manual_review_urls": len(manual_review),

@@ -119,12 +119,25 @@ PLACE_TYPE_OVERRIDES = {
     "Drought Response and Recovery Project for Water Utilities in Tuolumne Utilities District, CA": "county_or_region",
     "Drought Response and Recovery Project for Water Utilities in Hays and Russell, KS": "statewide_or_multi_community",
     "Integrating Climate Change into the Planning and Operations of the Apostle Islands National Lakeshore, WI": "county_or_region",
+    "Buffelgrass Removal, Fire, and Climate Adaptation": "county_or_region",
+    "Forest Thinning to Restore Fire Resilience at Lassen Volcanic National Park": "county_or_region",
+    "Great Lakes Restoration Initiative Pollinator Task Force": "county_or_region",
+    "Expanding an Indigenous Environmental Monitoring Network: Community-driven Stewardship of Land and Water": "tribal_community",
 }
 STATE_OVERRIDES = {
     "WaterFire Arts Center, Providence, R.I.": "Rhode Island",
 }
 
+TOPIC_OVERRIDES = {
+    "250 Birge St., Brattleboro, Vt.": [
+        "Brownfields", "Land Revitalization", "Public Park", "Floodplain Restoration", "Flood Resilience"
+    ],
+}
+
 SUMMARY_OVERRIDES = {
+    "Alligator River National Wildlife Refuge/ Albemarle-Pamlico Peninsula Climate Adaptation Project": "The Nature Conservancy and the U.S. Fish and Wildlife Service evaluated adaptation strategies for coastal refuge lands threatened by sea-level rise on North Carolina's Albemarle-Pamlico Peninsula. The project tested shoreline stabilization and habitat restoration approaches to improve resilience.",
+    "250 Birge St., Brattleboro, Vt.": "Brattleboro cleaned a former industrial property at 250 Birge Street, restored its floodplain, and created a public park along Whetstone Brook. The project reduced flood risk while returning contaminated riverfront land to community use.",
+    "South Dakota Governor's House Program - Providing Affordable Housing for 30 Years": "The South Dakota Governor's House Program combines affordable home production with correctional workforce training. Participants build energy-efficient two- and three-bedroom homes that can be placed in communities across South Dakota.",
     "Hillsboro, OR: Navigating a New River Launch": "An abandoned riverside property in Hillsboro was assessed and redeveloped as a public launch on the Tualatin River. The project created safer access for paddling and other outdoor recreation.",
     "Ambler, PA: Repowering a Historic Landmark": "Ambler restored the former Keasbey and Mattison Boiler House for new use after decades of industrial activity. Brownfields work helped return a long-vacant landmark to the community.",
     "Richmond, VA: Cheers to a Revitalized Neighborhood": "Richmond reused a former industrial site in Fulton Hill for a brewery, distribution facility, and tasting room. The project brought new investment and activity to the neighborhood.",
@@ -232,7 +245,7 @@ def repair_text(value: object) -> str:
             break
         text = best
     text = text.replace("ÆŸ", "ti").replace("\u019f", "ti")
-    text = re.sub(r"(?<=[a-z])-[ ]+(?=[a-z])", "", text)
+    text = re.sub(r"\bun-\s+derutilized\b", "underutilized", text, flags=re.I)
     return text.strip()
 
 
@@ -540,7 +553,7 @@ def build_record(case_path: Path, checked_on: str) -> dict | None:
             state.lower(),
         }
     ]
-    themes = list(dict.fromkeys(themes))[:8]
+    themes = TOPIC_OVERRIDES.get(title, list(dict.fromkeys(themes))[:8])
     if not themes:
         fallback_theme = clean_theme(case.get("case_type"))
         themes = [fallback_theme] if fallback_theme else []

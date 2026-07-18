@@ -105,7 +105,8 @@ def main() -> int:
         "data.js": sha256(ROOT / "data.js"),
         "case_studies.js": sha256(ROOT / "case_studies.js"),
     }
-    assert re.fullmatch(r"[0-9a-f]{40}", package_report["source_commit"])
+    assert re.fullmatch(r"[0-9a-f]{40}", package_report["catalog_source_commit"])
+    assert "source commit used to generate" in package_report["release_binding_note"]
     assert package_report["site_sha256"] == {
         name: sha256(ROOT / name)
         for name in ("index.html", "styles.css", "app.js", "data.js", "case_studies.js", "README.md")

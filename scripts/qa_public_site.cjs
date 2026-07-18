@@ -41,7 +41,7 @@ async function main() {
       cases: await page.locator("#caseStudyCount").innerText(),
     };
     checks.applicantUnreachable = await page.evaluate(() => fundingResources
-      .filter((item) => !matchesAny(corpus(item), applicantOptions.map(([value]) => value)))
+      .filter((item) => !matchesAny(cleanText(item.eligible_users).toLowerCase(), applicantOptions.map(([value]) => value)))
       .map((item) => item.item_id));
     checks.desktopNoOverflow = await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1);
     checks.duplicateIds = await page.evaluate(() => {
@@ -84,7 +84,16 @@ async function main() {
     await page.locator('[data-mode="Case Study"]').click();
     await page.selectOption("#placeTypeSelect", "town_or_city");
     checks.townCaseMatches = number(await page.locator("#matchCount").innerText());
-    checks.townCasesExact = checks.townCaseMatches === 364;
+    checks.townCasesExact = checks.townCaseMatches === 360;
+
+    await page.locator("#resetButton").click();
+    await page.locator('[data-mode="Case Study"]').click();
+    await page.fill("#communityName", "St. Paul, Virginia");
+    checks.namedCommunityTopTitles = (await page.locator(".result-card h3").allInnerTexts()).slice(0, 10);
+    checks.namedCommunityBoostVisible = await page.locator(".result-card").filter({ hasText: "Directly references your community" }).count() > 0;
+    await page.fill("#communityName", "Gallup, New Mexico");
+    checks.unmatchedCommunityTopTitles = (await page.locator(".result-card h3").allInnerTexts()).slice(0, 10);
+    checks.communityRankingChanges = JSON.stringify(checks.namedCommunityTopTitles) !== JSON.stringify(checks.unmatchedCommunityTopTitles);
 
     await page.locator("#resetButton").click();
     await page.locator('[data-mode="Funding"]').click();
@@ -213,7 +222,7 @@ async function main() {
     if (checks.duplicateIds.length) failures.push("duplicate_ids");
     if (checks.focusRule !== "rgb(0, 61, 45)") failures.push("focus_indicator");
     if (checks.caseMatches !== 476 || !checks.caseCardsOnly || checks.caseLinks < 1 || checks.caseLinkLabel !== "Read the example") failures.push("case_studies");
-    if (checks.virginiaTrailCases < 1 || !checks.sameStateBoostVisible || checks.tribalCaseMatches < 10 || checks.townCaseMatches !== 364 || !checks.townCasesExact) failures.push("case_matching");
+    if (checks.virginiaTrailCases < 1 || !checks.sameStateBoostVisible || checks.tribalCaseMatches !== 14 || checks.townCaseMatches !== 360 || !checks.townCasesExact || !checks.namedCommunityBoostVisible || !checks.communityRankingChanges) failures.push("case_matching");
     if (checks.cleanupCaseMatches !== 113 || !checks.cleanupCasesAreBrownfields || checks.mixedFundingStageMatches < 1) failures.push("case_stage");
     if (checks.electricEnergyTopicMatches < 1 || checks.communityFacilitiesTopicMatches < 1) failures.push("topic_reachability");
     if (!checks.topicBoundaries.cultureDoesNotMatchAgriculture || !checks.topicBoundaries.landDoesNotMatchMaryland || !checks.topicBoundaries.artsMatch) failures.push("topic_boundaries");

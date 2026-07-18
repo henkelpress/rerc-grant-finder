@@ -56,10 +56,10 @@ def main() -> int:
     assert not any(item["case_place"] == item["case_state"] for item in items)
     assert all(item["case_place_type"] in {"town_or_city", "county_or_region", "tribal_community", "statewide_or_multi_community"} for item in items)
     assert Counter(item["case_place_type"] for item in items) == {
-        "town_or_city": 364,
-        "county_or_region": 44,
+        "town_or_city": 360,
+        "county_or_region": 47,
         "statewide_or_multi_community": 55,
-        "tribal_community": 13,
+        "tribal_community": 14,
     }
     assert sum(item["case_place_type"] == "tribal_community" for item in items) >= 10
     expected_place_types = {
@@ -69,6 +69,10 @@ def main() -> int:
         "Lapwai, Idaho Local Foods, Local Places Summary Report": "tribal_community",
         "Mission, South Dakota Local Foods, Local Places Summary Report": "tribal_community",
         "Akwesasne, New York (2022)": "tribal_community",
+        "Buffelgrass Removal, Fire, and Climate Adaptation": "county_or_region",
+        "Forest Thinning to Restore Fire Resilience at Lassen Volcanic National Park": "county_or_region",
+        "Great Lakes Restoration Initiative Pollinator Task Force": "county_or_region",
+        "Expanding an Indigenous Environmental Monitoring Network: Community-driven Stewardship of Land and Water": "tribal_community",
     }
     place_types_by_title = {item["title"]: item["case_place_type"] for item in items}
     assert all(place_types_by_title.get(title) == expected for title, expected in expected_place_types.items())
@@ -76,7 +80,7 @@ def main() -> int:
     assert all(item["project_stage"] == "Cleanup" for item in items if item["case_program"] == "EPA Brownfields Success Stories")
     assert not any(item["case_year"] == "2026" for item in items if item["case_program"] == "EPA Examples of Smart Growth Communities and Projects")
 
-    debris = re.compile(r"image lessons learned|figure\s+\d|courtesy|years awarded|site descrip|grant types?:|grants and resources:|\u019f|\(pdf\)|\b\d+(?:\.\d+)?\s*MB\b|proposed site plan|R1 Success Story:|Brownfields Success Story|Job Placement Rate:|Current Uses?:|Year Awarded:|Residents walk through a greenhouse", re.I)
+    debris = re.compile(r"image lessons learned|figure\s+\d|courtesy|years awarded|site descrip|grant types?:|grants and resources:|\u019f|\(pdf\)|\b\d+(?:\.\d+)?\s*MB\b|proposed site plan|R1 Success Story:|Brownfields Success Story|Job Placement Rate:|Current Uses?:|Year Awarded:|Residents walk through a greenhouse|twoand|Industriallumber|Fish and Wildlife Service \(USFWS\) to evaluate", re.I)
     suspicious_place = re.compile(r"\b(plan|action|company|industrial development|successful transformation|workers in|brownfield to)\b", re.I)
     assert not any(debris.search(item["summary"]) or item["summary"][:1].islower() for item in items)
     assert not any(":" in item["case_place"] or suspicious_place.search(item["case_place"]) for item in items)
@@ -90,6 +94,10 @@ def main() -> int:
         "Wood for Life, a Collaborative Partnership to Provide Wood to the Navajo Nation and Hopi Tribe": ("Navajo Nation and Hopi Tribe", "Arizona", "tribal_community"),
     }
     assert all((by_title[title]["case_place"], by_title[title]["case_state"], by_title[title]["case_place_type"]) == expected for title, expected in expected_geography.items())
+    assert "two- and three-bedroom homes" in by_title["South Dakota Governor's House Program - Providing Affordable Housing for 30 Years"]["summary"]
+    assert "restored its floodplain" in by_title["250 Birge St., Brattleboro, Vt."]["summary"]
+    assert by_title["250 Birge St., Brattleboro, Vt."]["topic_tags"] == "Brownfields; Land Revitalization; Public Park; Floodplain Restoration; Flood Resilience"
+    assert "The Nature Conservancy and the U.S. Fish and Wildlife Service" in by_title["Alligator River National Wildlife Refuge/ Albemarle-Pamlico Peninsula Climate Adaptation Project"]["summary"]
     planning = [item for item in items if item["case_program"] in {"Recreation Economy for Rural Communities", "Local Foods, Local Places"}]
     assert len({item["summary"] for item in planning}) == len(planning)
     assert all(item["case_place"].lower() in item["summary"].lower() or item["case_place"] == "Multiple communities" for item in planning)

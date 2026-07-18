@@ -17,11 +17,11 @@ const places = [
 const territoryPlaces = new Set(["American Samoa","Guam","Northern Mariana Islands","Puerto Rico","U.S. Virgin Islands"]);
 
 const applicantOptions = [
-  ["local government|local governments|municipal|municipality|municipalities|county|counties|city|cities|town|towns|village|villages", "Local government"],
-  ["tribe|tribes|tribal|native", "Tribe or Native community"],
-  ["nonprofit|nonprofits|non-profit|non-profits|community organization|community organizations", "Nonprofit or community group"],
+  ["local government|local governments|municipal|municipality|municipalities|county|counties|city|cities|town|towns|village|villages|political subdivision|political subdivisions", "Local government"],
+  ["tribe|tribes|tribal|native|indian nation|indian nations|sovereign", "Tribe or Native community"],
+  ["nonprofit|nonprofits|non-profit|non-profits|community organization|community organizations|land trust|land trusts", "Nonprofit or community group"],
   ["state agency|state agencies|state government", "State agency"],
-  ["business|businesses|entrepreneur|entrepreneurs|tourism|destination marketing", "Business or tourism group"],
+  ["business|businesses|entrepreneur|entrepreneurs|tourism|destination marketing|convention|visitors bureau|visitor bureau", "Business or tourism group"],
   ["school|schools|college|colleges|university|universities|library|libraries|museum|museums", "School, library, or museum"],
   ["utility|utilities|authority|authorities|district|districts", "Utility or public authority"],
   ["landowner|landowners|individual|individuals|families", "Landowner or individual"],
@@ -162,9 +162,10 @@ function matchesGeography(item, selectedPlace) {
   return isNational(geography) || appliesToPlace(geography, selectedPlace) || territoryMultiState || isBroadArea(item, selectedPlace);
 }
 
-function scoreItem(item, text, selectedPlace, selectedPlaceType, applicants, topics, selectedStage) {
+function scoreItem(item, text, selectedCommunity, selectedPlace, selectedPlaceType, applicants, topics, selectedStage) {
   const topicText = topicCorpus(item);
   let score = item.item_type === "Case Study" ? 52 : 45;
+  if (selectedCommunity && matchesAny(text, [selectedCommunity])) score += item.item_type === "Case Study" ? 24 : 14;
   if (item.item_type === "Case Study") {
     if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) score += 18;
     if (selectedPlaceType && cleanText(item.case_place_type) === selectedPlaceType) score += 12;
@@ -187,6 +188,7 @@ function scoreItem(item, text, selectedPlace, selectedPlaceType, applicants, top
 }
 
 function getMatches() {
+  const selectedCommunity = elements.communityName.value.trim().toLowerCase();
   const selectedPlace = elements.stateSelect.value;
   const selectedPlaceType = elements.placeTypeSelect.value;
   const applicants = selectedValues(elements.applicantOptions);
@@ -213,7 +215,7 @@ function getMatches() {
     return true;
   }).map((item) => ({
     ...item,
-    score: scoreItem(item, corpus(item), selectedPlace, selectedPlaceType, applicants, topics, selectedStage)
+    score: scoreItem(item, corpus(item), selectedCommunity, selectedPlace, selectedPlaceType, applicants, topics, selectedStage)
   }));
 
   const sort = elements.sortSelect.value;
@@ -227,9 +229,11 @@ function getMatches() {
 }
 
 function matchReason(item) {
+  const selectedCommunity = elements.communityName.value.trim().toLowerCase();
   const selectedPlace = elements.stateSelect.value;
   const selectedPlaceType = elements.placeTypeSelect.value;
   const topics = selectedValues(elements.topicOptions);
+  if (selectedCommunity && matchesAny(corpus(item), [selectedCommunity])) return "Directly references your community";
   if (item.item_type === "Case Study") {
     if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) return "Example from your selected state or territory";
     if (selectedPlaceType && cleanText(item.case_place_type) === selectedPlaceType) return "Similar community type";
@@ -287,6 +291,7 @@ function renderCard(item) {
 
 function activeFilterSummary() {
   const values = [];
+  if (elements.communityName.value.trim()) values.push(elements.communityName.value.trim());
   if (elements.stateSelect.value) values.push(elements.stateSelect.value);
   if (elements.placeTypeSelect.value) values.push(elements.placeTypeSelect.options[elements.placeTypeSelect.selectedIndex].text);
   if (elements.keywordSearch.value.trim()) values.push(`Search: ${elements.keywordSearch.value.trim()}`);

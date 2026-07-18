@@ -377,7 +377,8 @@ def validate(records: list[dict[str, str]], docx: Path, xlsx: Path, csv_path: Pa
         "funding": 659,
         "resources": 61,
         "community_examples": 476,
-        "source_commit": subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip(),
+        "catalog_source_commit": subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip(),
+        "release_binding_note": "This is the source commit used to generate the files. See the GitHub release and RELEASE_MANIFEST.json for the final release commit.",
         "site_sha256": {
             name: sha256(ROOT / name)
             for name in ("index.html", "styles.css", "app.js", "data.js", "case_studies.js", "README.md")
