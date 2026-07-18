@@ -1,27 +1,36 @@
 {
   "status": "PASS",
   "updated": "2026-07-18",
-  "records": 1197,
+  "records": 1196,
   "funding": 659,
   "resources": 61,
-  "community_examples": 477,
+  "community_examples": 476,
+  "source_commit": "c78f1bf6cf5fa6048358fd4e153e48a77c370631",
+  "site_sha256": {
+    "index.html": "731b0d84668787059659cfd4be1f5209be447e4a9fade94297b79d20cdb5ac7d",
+    "styles.css": "8550864d8cd7cfcfd5f5aa3b5c0b51c425d3f77a6861026a71bc97c7dce9c0ce",
+    "app.js": "5dedb7c412d7e763d84bda1ee176fde6febc24acbfbea86c11dd30f5e09b41ba",
+    "data.js": "4eaf53b91031a7317b4cfb61b0df8de6a5190d3ec986b0a30600f8659759be03",
+    "case_studies.js": "10dc8c605f13abeec5c9ebb9e7b593bbcea16ed9637676f1138f65fce06d2525",
+    "README.md": "044de5202d0f0e203ca3d9c1fb5a50765be18c110b9f49389fc6e729af4f2b59"
+  },
   "source_sha256": {
-    "data.js": "e2aeb4764c14fdf046e05d79006783b33747f7fd7c87d68afd96f8664263a2c2",
-    "case_studies.js": "97db5437e0a9762fd641ac32c2eb5888f0b9112016ad3a7cb1fbf39c7c76c3de"
+    "data.js": "4eaf53b91031a7317b4cfb61b0df8de6a5190d3ec986b0a30600f8659759be03",
+    "case_studies.js": "10dc8c605f13abeec5c9ebb9e7b593bbcea16ed9637676f1138f65fce06d2525"
   },
   "docx": {
     "file": "RERC_Community_Explorer_Appendix_2026-07-18.docx",
-    "bytes": 332554,
-    "sha256": "779d1b5d0e562220a34178cb556e3a85de782042596c69a40a3ab8b64331f05e"
+    "bytes": 362011,
+    "sha256": "d788216ea04602437ceffc67db9f152fe75990940c967e4c07498b462c8284e2"
   },
   "xlsx": {
     "file": "RERC_Community_Explorer_Master_2026-07-18.xlsx",
-    "bytes": 328618,
-    "sha256": "2bb44d8383a2d66df98e94f39194cf65bca634774b459f7e60b619765f52fb74"
+    "bytes": 342346,
+    "sha256": "8812766a247320db16ac8559f35771283571e838ce486cb0fcd45d7f7c1fac9f"
   },
   "csv": {
     "file": "RERC_Community_Explorer_Master_2026-07-18.csv",
-    "bytes": 836183,
-    "sha256": "3bd2d8054c6fac4cb8237e664ef8c495996c87c14a39f447034911e5347d6bb4"
+    "bytes": 836901,
+    "sha256": "94f2c56ae41022b6f8e8a1b5a4c6fa297bb5b1aad7b2d1fb69be8f0ee8a6f198"
   }
 }
