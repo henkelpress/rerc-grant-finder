@@ -52,6 +52,16 @@ def main() -> int:
     assert not any(item["case_place"] == item["case_state"] for item in items)
     assert all(item["case_place_type"] in {"town_or_city", "county_or_region", "tribal_community", "statewide_or_multi_community"} for item in items)
     assert sum(item["case_place_type"] == "tribal_community" for item in items) >= 10
+    expected_place_types = {
+        "A Successful Transformation: From Wasted Lot to Reading Hot‐Spot": "town_or_city",
+        "Richmond Creamery, Richmond, Vt.": "town_or_city",
+        "South Dakota Governor's House Program - Providing Affordable Housing for 30 Years": "statewide_or_multi_community",
+        "Lapwai, Idaho Local Foods, Local Places Summary Report": "tribal_community",
+        "Mission, South Dakota Local Foods, Local Places Summary Report": "tribal_community",
+        "Akwesasne, New York (2022)": "tribal_community",
+    }
+    place_types_by_title = {item["title"]: item["case_place_type"] for item in items}
+    assert all(place_types_by_title.get(title) == expected for title, expected in expected_place_types.items())
     assert all(item["project_stage"] in {"Planning", "Implementation", "Cleanup"} for item in items)
     assert all(item["project_stage"] == "Cleanup" for item in items if item["case_program"] == "EPA Brownfields Success Stories")
     assert not any(item["case_year"] == "2026" for item in items if item["case_program"] == "EPA Examples of Smart Growth Communities and Projects")

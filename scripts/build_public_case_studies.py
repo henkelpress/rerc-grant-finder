@@ -325,8 +325,7 @@ def normalized_place_type(case: dict, place: str, state: str) -> str:
         [
             title,
             place,
-            repair_text(case.get("case_type")),
-            " ".join(repair_text(item) for item in case.get("themes", [])),
+            raw,
         ]
     ).lower()
     if re.search(r"\b(tribal|tribe|native village|reservation|pueblo|navajo|hopi|passamaquoddy)\b", context):
