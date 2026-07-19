@@ -4,6 +4,7 @@
   "app_version": "0.4.0",
   "model": "gemma-3-1b-it-Q4_K_M.gguf",
   "source_sha256": "2e9dbf8e9e89c4eea123becb96f085b6f8a0c8fcb86aedc6f7e43ba95d98192c",
+  "source_normalized_sha256": "4dbbde8ec99fed6d8e8c8a69bec0dccb8add34a8f519705f9737466facbe5fa1",
   "verified_excerpt_count": 1,
   "raw_model_prose_exposed": false,
   "deterministic_scaffold": true,

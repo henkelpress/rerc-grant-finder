@@ -357,7 +357,9 @@ def main() -> int:
     assert local_report["app_version"] == expected_app_version
     assert local_report.get("historical") is not True
     assert local_report["model"] == "gemma-3-1b-it-Q4_K_M.gguf"
-    assert local_report["source_sha256"] == git_blob_sha256(head_commit, "rercie/rercie_core.py")
+    assert local_report['source_normalized_sha256'] == git_blob_sha256(
+        head_commit, 'rercie/rercie_core.py'
+    )
     assert local_report["raw_model_prose_exposed"] is False
     assert local_report["evidence_scope"].startswith(("Package-bound", "Source-bound"))
     assert local_report["later_standalone_rerun"]["status"] == "PASS"

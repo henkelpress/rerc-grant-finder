@@ -56,6 +56,13 @@ def main() -> int:
         "app_version": app.APP_VERSION,
         "model": app.DEFAULT_MODEL,
         "source_sha256": hashlib.sha256((ROOT / "rercie" / "rercie_core.py").read_bytes()).hexdigest(),
+        "source_normalized_sha256": hashlib.sha256(
+            (ROOT / "rercie" / "rercie_core.py")
+            .read_text(encoding="utf-8")
+            .replace("\r\n", "\n")
+            .replace("\r", "\n")
+            .encode("utf-8")
+        ).hexdigest(),
         "verified_excerpt_count": len(result["evidenceExcerpts"]),
         "raw_model_prose_exposed": result["rawModelProseExposed"],
         "deterministic_scaffold": True,

@@ -24,6 +24,11 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def git_blob_sha256(commit: str, name: str) -> str:
+    payload = subprocess.check_output(['git', 'cat-file', 'blob', f'{commit}:{name}'], cwd=ROOT)
+    return hashlib.sha256(payload).hexdigest()
+
+
 def load_assignment(path: Path):
     text = path.read_text(encoding="utf-8").strip()
     payload = text.split("=", 1)[1].strip()
@@ -114,7 +119,12 @@ def main() -> int:
     local_gemma = json.loads((PACKAGING / "LOCAL_GEMMA_QA.json").read_text(encoding="utf-8"))
     assert local_gemma["status"] == "PASS" and local_gemma["app_version"] == "0.4.0"
     assert local_gemma["model"] == "gemma-3-1b-it-Q4_K_M.gguf"
-    assert local_gemma["source_sha256"] == sha256(RERCIE / "rercie_core.py")
+    head_commit = subprocess.check_output(
+        ['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True
+    ).strip()
+    assert local_gemma['source_normalized_sha256'] == git_blob_sha256(
+        head_commit, 'rercie/rercie_core.py'
+    )
     assert local_gemma["raw_model_prose_exposed"] is False
     assert local_gemma["unsupported_eligibility_claim_absent"] is True
     assert local_gemma["later_standalone_rerun"]["status"] == "PASS"
@@ -186,7 +196,7 @@ def main() -> int:
             "installer_wizard": {"status": "PENDING_RELEASE_TEST", "per_user_install": True, "uninstall_entry": True},
             "package_integrity": {"status": "PENDING_BUILD", "integrity_checked_binaries": 0},
             "live_catalog": {"status": "PASS", "total_items": counts["public_total"], "funding_items": counts["funding"], "resource_items": counts["resources"], "case_study_items": counts["case_studies"], "territory_filter_checked": True, "case_study_unique_urls_checked": 303, "case_study_hard_failed_urls": 0, "case_study_reachable_urls": 271, "case_study_restricted_urls": 32, "case_study_manual_review_urls": 0},
-            "local_generation": {"status": "PASS", "model": "Google Gemma 3 1B Instruct Q4_K_M", "source_sha256": local_gemma["source_sha256"], "verified_excerpt_count": local_gemma["verified_excerpt_count"], "raw_model_prose_exposed": False, "later_standalone_rerun_status": "PASS"},
+            "local_generation": {"status": "PASS", "model": "Google Gemma 3 1B Instruct Q4_K_M", "source_sha256": local_gemma["source_sha256"], "source_normalized_sha256": local_gemma["source_normalized_sha256"], "verified_excerpt_count": local_gemma["verified_excerpt_count"], "raw_model_prose_exposed": False, "later_standalone_rerun_status": "PASS"},
             "docx_export": {"status": "PASS", "bytes": smoke["docx_bytes"], "office_open_xml": True},
             "api_privacy_regression": {"status": "PASS", "key_sent_to_gemma": False, "handoff_checks": smoke["handoff_checks"], "https_profile_check": "https_only_bounded" in smoke["profile_checks"]},
             "service_identity_checks": {"status": "PASS", **identity, "packaged_authenticated_health": "PENDING_BUILD"},
@@ -200,7 +210,7 @@ def main() -> int:
             "Users must review every generated draft and verify current funding rules at the official source.",
         ],
         "release_binding": {"source_commit": None, "integrity_manifest_sha256": None, "installer_sha256": None, "status": "PENDING_BUILD"},
-        "verification_inputs": {"browser_contract_sha256": hashlib.sha256(json.dumps(browser_contract, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest(), "local_gemma_report_sha256": sha256(PACKAGING / "LOCAL_GEMMA_QA.json")},
+        "verification_inputs": {"browser_contract_sha256": hashlib.sha256(json.dumps(browser_contract, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest(), "local_gemma_report_sha256": git_blob_sha256(head_commit, "rercie/packaging/LOCAL_GEMMA_QA.json")},
     }
     output = PACKAGING / "QA_EVIDENCE.json"
     output.write_text(json.dumps(evidence, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
