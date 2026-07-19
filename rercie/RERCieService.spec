@@ -1,5 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from pathlib import Path
+
+asset_root = Path.cwd().parent / "assets"
+if not asset_root.is_dir():
+    asset_root = Path.cwd().parent / "site-src" / "assets"
+
 a = Analysis(
     ["rercie.py"],
     pathex=[],
@@ -31,7 +37,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon="../assets/rercie.ico",
+    icon=str(asset_root / "rerc-e.ico"),
 )
 
 collect = COLLECT(
