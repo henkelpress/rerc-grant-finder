@@ -9,7 +9,6 @@
       "version": "0.4.0",
       "catalog_formats": 2,
       "territories": 5,
-      "docx_bytes": 3533,
       "handoff_schema": "rercie-handoff",
       "handoff_version": 1,
       "handoff_max_bytes": 262144,
@@ -28,7 +27,8 @@
         "key_direct_fallback",
         "no_key_to_gemma"
       ],
-      "model": "gemma-3-1b-it-Q4_K_M.gguf"
+      "model": "gemma-3-1b-it-Q4_K_M.gguf",
+      "docx_minimum_bytes": 3000
     },
     "native_launcher": {
       "status": "PENDING_BUILD",
@@ -78,7 +78,7 @@
     },
     "docx_export": {
       "status": "PASS",
-      "bytes": 3533,
+      "minimum_bytes": 3000,
       "office_open_xml": true
     },
     "api_privacy_regression": {
