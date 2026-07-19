@@ -40,7 +40,7 @@ Gemma writing and files in `local_knowledge` stay on this computer. RERC-e first
 
 Do not add private files to a public copy of this project. Local reference files belong in `local_knowledge`.
 
-Imported plans stay on this computer. The browser sends the plan only to RERC-e's authenticated loopback service. RERC-e does not put plan notes in a web address or send them to the public explorer. A launcher-opened plan is copied into RERC-e's local runtime folder, checked once, and removed after the local service reads it.
+Imported plans stay on this computer. The `.rercie` handoff is a local file export. RERC-e processes it through its authenticated loopback service only after you open or import it. RERC-e does not put plan notes in a web address or send them to the public explorer. A launcher-opened plan is copied into RERC-e's local runtime folder, checked once, and removed after the local service reads it.
 
 ## Community Explorer Plan Format
 

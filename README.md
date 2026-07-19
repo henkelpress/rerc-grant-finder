@@ -26,7 +26,7 @@ People can name a community for the appendix, choose its state or territory, sel
 - `downloads/`
 
 
-## Community Examples
+## Case Studies
 
 The community-example layer includes only public text and links from official EPA, U.S. Climate Resilience Toolkit, and USDA Rural Development pages. Private records, local paths, administrative notes, and images are excluded. The 2026-07-18 automated check reached 271 of 303 unique pages directly. USDA Rural Development blocked automated access to 32 pages, so those links require manual review; no case-study link returned a hard failure.
 

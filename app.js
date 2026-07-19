@@ -286,7 +286,7 @@ function matchEvidence(item) {
 
   if (item.item_type === "Case Study") {
     if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) {
-      addUnique(reasons, "Example from your selected state or territory.");
+      addUnique(reasons, "Case study from your selected state or territory.");
     }
     if (selectedPlaceType && cleanText(item.case_place_type) === selectedPlaceType) {
       addUnique(reasons, "Matches your selected community type.");
@@ -545,7 +545,7 @@ function render() {
     "All": "Funding, resources, and examples",
     "Funding": "Funding",
     "Resource": "Resources",
-    "Case Study": "Community examples"
+    "Case Study": "Case studies"
   }[mode];
 
   elements.communityTitle.textContent = `${modeLabel} for ${label}`;
@@ -651,7 +651,7 @@ async function exportWord() {
   const body = [];
   let relationshipNumber = 1;
 
-  body.push(wordParagraphXml([wordRunXml("Appendix C: Funding, Resources, and Community Examples")], "Heading1"));
+  body.push(wordParagraphXml([wordRunXml("Appendix C: Funding, Resources, and Case Studies")], "Heading1"));
   body.push(wordParagraphXml([
     wordRunXml("Recreation Economy "),
     wordRunXml("for", { italic: true }),
@@ -661,7 +661,7 @@ async function exportWord() {
   body.push(wordParagraphXml([wordRunXml(profile)]));
   body.push(wordParagraphXml([
     wordRunXml("This explorer does not determine eligibility. ", { bold: true }),
-    wordRunXml("Program rules and dates can change. Community examples show approaches, not guaranteed results. Confirm current requirements and local fit before making a decision.")
+    wordRunXml("Program rules and dates can change. Case studies show approaches, not guaranteed results. Confirm current requirements and local fit before making a decision.")
   ], "Notice"));
 
   const addSection = (title, items) => {
@@ -706,7 +706,7 @@ async function exportWord() {
 
   addSection("Funding Opportunities", funding);
   addSection("Resources", resources);
-  addSection("Community Examples", cases);
+  addSection("Case Studies", cases);
 
   const documentXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
@@ -742,7 +742,7 @@ async function exportWord() {
   const now = new Date().toISOString();
   const coreXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
-    "<dc:title>RERC Community Funding, Resources, and Examples Appendix</dc:title><dc:creator>Recreation Economy for Rural Communities</dc:creator><cp:lastModifiedBy>RERC Community Explorer</cp:lastModifiedBy>" +
+    "<dc:title>RERC Community Funding, Resources, and Case Studies Appendix</dc:title><dc:creator>Recreation Economy for Rural Communities</dc:creator><cp:lastModifiedBy>RERC Community Explorer</cp:lastModifiedBy>" +
     '<dcterms:created xsi:type="dcterms:W3CDTF">' + now + '</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">' + now + "</dcterms:modified></cp:coreProperties>";
   const appXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">' +

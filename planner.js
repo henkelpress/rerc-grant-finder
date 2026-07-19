@@ -31,7 +31,7 @@
       noSaved: "No items saved yet.",
       noDeadlines: "No reviewed deadlines were found in the saved plan.",
       noProfile: "Choose a community and load its public profile.",
-      profileUnavailable: "No projected public profile was found for this community.",
+      profileUnavailable: "No public profile was found for this community.",
       profileLoaded: "Community profile loaded.",
       profileSource: "Source",
       profileVintage: "Data year",
@@ -121,7 +121,7 @@
       noSaved: "Todavía no hay elementos guardados.",
       noDeadlines: "No se encontraron fechas revisadas en el plan guardado.",
       noProfile: "Elija una comunidad y cargue su perfil público.",
-      profileUnavailable: "No se encontró un perfil público proyectado para esta comunidad.",
+      profileUnavailable: "No se encontró un perfil público para esta comunidad.",
       profileLoaded: "Perfil de la comunidad cargado.",
       profileSource: "Fuente",
       profileVintage: "Año de los datos",
@@ -2140,7 +2140,7 @@
       }),
       installerUrl: INSTALLER_URL,
       boundary:
-        "This handoff file contains only user-approved local notes and public catalog data. It does not call a localhost service or contain an API key or session token.",
+        "This handoff file contains only user-approved local notes and public catalog data. It is a local file export; RERC-e processes it locally only after you open or import it. It does not contain an API key or session token.",
     };
     downloadBlob(
       new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" }),
