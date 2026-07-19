@@ -8,7 +8,7 @@ The Windows installer includes the RERC-e app and the pinned `llama.cpp` runtime
 
 ## Install RERC-e on Windows
 
-1. Download `RERC-e-Setup.exe` from the latest GitHub release.
+1. Check the latest GitHub release for a signed `RERC-e-Setup.exe`.
 2. Open the installer and follow the setup screens.
 3. Keep the Start Menu shortcut. You can also choose a desktop shortcut.
 4. Select **Meet RERC-e** on the last screen.
@@ -22,7 +22,7 @@ No command line is needed. Open RERC-e from the Start Menu. The launcher can ope
 
 RERC-e 0.5.0 can also open a Community Explorer plan. Use **Open Community Explorer plan** inside RERC-e, or open an installed `.rercie` file from Windows. RERC-e checks the file before filling any fields and shows what it imported.
 
-Package-bound local Gemma generation passed. A later standalone retest could not run because the local service was not open; this does not replace the package-bound test, and the limitation is retained in release evidence.
+RERC-e 0.5.0 passed package-bound and standalone source-bound local Gemma generation QA. Public installer distribution remains on hold until EPR, P.C. can apply an authorized Timberwing Systems publisher signature and the signed installer passes Windows security checks.
 
 ## What RERC-e Does
 
@@ -79,7 +79,7 @@ RERC-e is a community-built tool. It is not an EPA grant program. It does not de
 
 ## Build the Installer: Developers Only
 
-Most people should use RERC-e-Setup.exe. The steps below are only for developers who are building the installer.
+Most people should use a signed `RERC-e-Setup.exe` from this repository's release page. The steps below are only for developers who are building the installer.
 
 The source tree does not contain generated executables, the `llama.cpp` runtime, or model weights. `build_installer.ps1` runs the source smoke test, builds the hidden Python service with PyInstaller, compiles the native Windows launcher, verifies the pinned runtime archive, writes the integrity manifest, and creates `RERC-e-Setup.exe` with Inno Setup.
 
