@@ -24,6 +24,10 @@ EXPECTED_CSP = (
     "form-action 'self'; upgrade-insecure-requests"
 )
 
+def git_blob_sha256(commit: str, name: str) -> str:
+    blob = subprocess.run(["git", "show", f"{commit}:{name}"], cwd=ROOT, check=True, capture_output=True).stdout
+    return hashlib.sha256(blob).hexdigest()
+
 
 class SiteContractParser(HTMLParser):
     def __init__(self) -> None:
@@ -282,15 +286,16 @@ def main() -> int:
         assert all(name in workbook_xml for name in ("Funding", "Resources", "Community Examples"))
     sha256 = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
     package_report = json.loads((downloads / "RERC_Community_Explorer_QA_2026-07-19.json").read_text(encoding="utf-8"))
+    head_commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip()
     assert package_report["status"] == "PASS"
     assert package_report["source_sha256"] == {
-        "data.js": sha256(ROOT / "data.js"),
-        "case_studies.js": sha256(ROOT / "case_studies.js"),
+        "data.js": git_blob_sha256(head_commit, "data.js"),
+        "case_studies.js": git_blob_sha256(head_commit, "case_studies.js"),
     }
     assert re.fullmatch(r"[0-9a-f]{40}", package_report["catalog_source_commit"])
     assert "source commit used to generate" in package_report["release_binding_note"]
     assert package_report["site_sha256"] == {
-        name: sha256(ROOT / name)
+        name: git_blob_sha256(head_commit, name)
         for name in ("index.html", "styles.css", "rercie.css", "app.js", "planner.js", "data.js", "case_studies.js", "community_profiles.js", "favicon.svg", "vendor/jszip.min.js", "vendor/lucide.min.js", "assets/hero-outdoor.jpg", "assets/rercie-otter.jpg", "README.md")
     }
     assert package_report["docx"]["sha256"] == sha256(static_docx)
@@ -352,7 +357,7 @@ def main() -> int:
     assert local_report["app_version"] == expected_app_version
     assert local_report.get("historical") is not True
     assert local_report["model"] == "gemma-3-1b-it-Q4_K_M.gguf"
-    assert local_report["source_sha256"] == hashlib.sha256((ROOT / "rercie" / "rercie_core.py").read_bytes()).hexdigest()
+    assert local_report["source_sha256"] == git_blob_sha256(head_commit, "rercie/rercie_core.py")
     assert local_report["raw_model_prose_exposed"] is False
     assert local_report["evidence_scope"].startswith(("Package-bound", "Source-bound"))
     assert local_report["later_standalone_rerun"]["status"] == "PASS"

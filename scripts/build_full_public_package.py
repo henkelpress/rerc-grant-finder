@@ -356,6 +356,10 @@ def build_csv(records: list[dict[str, str]], path: Path) -> None:
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
+def git_blob_sha256(commit: str, name: str) -> str:
+    blob = subprocess.run(["git", "show", f"{commit}:{name}"], cwd=ROOT, check=True, capture_output=True).stdout
+    return hashlib.sha256(blob).hexdigest()
+
 
 def validate(records: list[dict[str, str]], docx: Path, xlsx: Path, csv_path: Path) -> dict:
     assert len(records) == 1196
@@ -370,6 +374,7 @@ def validate(records: list[dict[str, str]], docx: Path, xlsx: Path, csv_path: Pa
     assert workbook["Resources"].max_row == 62
     assert workbook["Community Examples"].max_row == 477
     assert docx.stat().st_size > 100_000 and xlsx.stat().st_size > 100_000 and csv_path.stat().st_size > 100_000
+    source_commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip()
     return {
         "status": "PASS",
         "updated": DATE_TAG,
@@ -377,15 +382,15 @@ def validate(records: list[dict[str, str]], docx: Path, xlsx: Path, csv_path: Pa
         "funding": 659,
         "resources": 61,
         "community_examples": 476,
-        "catalog_source_commit": subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip(),
+        "catalog_source_commit": source_commit,
         "release_binding_note": "This is the source commit used to generate the files. See the GitHub release and RELEASE_MANIFEST.json for the final release commit.",
         "site_sha256": {
-            name: sha256(ROOT / name)
+            name: git_blob_sha256(source_commit, name)
             for name in ("index.html", "styles.css", "rercie.css", "app.js", "planner.js", "data.js", "case_studies.js", "community_profiles.js", "favicon.svg", "vendor/jszip.min.js", "vendor/lucide.min.js", "assets/hero-outdoor.jpg", "assets/rercie-otter.jpg", "README.md")
         },
         "source_sha256": {
-            "data.js": sha256(ROOT / "data.js"),
-            "case_studies.js": sha256(ROOT / "case_studies.js"),
+            "data.js": git_blob_sha256(source_commit, "data.js"),
+            "case_studies.js": git_blob_sha256(source_commit, "case_studies.js"),
         },
         "docx": {"file": docx.name, "bytes": docx.stat().st_size, "sha256": sha256(docx)},
         "xlsx": {"file": xlsx.name, "bytes": xlsx.stat().st_size, "sha256": sha256(xlsx)},
