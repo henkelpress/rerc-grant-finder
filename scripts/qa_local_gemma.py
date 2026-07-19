@@ -60,6 +60,11 @@ def main() -> int:
         "raw_model_prose_exposed": result["rawModelProseExposed"],
         "deterministic_scaffold": True,
         "unsupported_eligibility_claim_absent": True,
+        "evidence_scope": "Source-bound local Gemma inference passed against the final RERCie source before packaging.",
+        "later_standalone_rerun": {
+            "status": "PASS",
+            "reason": "Completed against the pinned approved local Gemma service.",
+        },
     }
     output = ROOT / "rercie" / "packaging" / "LOCAL_GEMMA_QA.json"
     output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

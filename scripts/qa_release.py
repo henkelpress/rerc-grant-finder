@@ -6,10 +6,51 @@ import re
 import subprocess
 import sys
 import zipfile
+from html.parser import HTMLParser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PREFIX = "window.RERC_CATALOG = "
+COMMUNITY_PROFILES_PREFIX = "window.RERC_COMMUNITY_PROFILES="
+EXPECTED_RERCIE_VERSION = "0.4.0"
+EXPECTED_NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org/search"
+EXPECTED_REFERRER_POLICY = "strict-origin-when-cross-origin"
+EXPECTED_CSP = (
+    "default-src 'self'; script-src 'self'; style-src 'self'; "
+    "img-src 'self' data:; "
+    "connect-src 'self' https://nominatim.openstreetmap.org; "
+    "frame-src https://www.openstreetmap.org; "
+    "font-src 'self'; object-src 'none'; base-uri 'self'; "
+    "form-action 'self'; upgrade-insecure-requests"
+)
+
+
+class SiteContractParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.elements: list[tuple[str, dict[str, str]]] = []
+
+    def handle_starttag(
+        self,
+        tag: str,
+        attrs: list[tuple[str, str | None]],
+    ) -> None:
+        self.elements.append(
+            (tag, {name: value or "" for name, value in attrs})
+        )
+
+
+def parse_site_contract(html: str) -> SiteContractParser:
+    parser = SiteContractParser()
+    parser.feed(html)
+    parser.close()
+    return parser
+
+
+def parse_javascript_assignment(path: Path, prefix: str) -> object:
+    raw = path.read_text(encoding="utf-8").strip()
+    assert raw.startswith(prefix) and raw.endswith(";")
+    return json.loads(raw[len(prefix):-1])
 
 
 def run(*args: str) -> None:
@@ -19,7 +60,12 @@ def run(*args: str) -> None:
 def main() -> int:
     run(sys.executable, "-m", "py_compile", "rercie/rercie_core.py", "rercie/rercie_quality.py", "rercie/rercie.py")
     run(sys.executable, "rercie/rercie.py", "--smoke")
+    sys.path.insert(0, str(ROOT / "rercie"))
+    import rercie as app
+    expected_app_version = app.app.APP_VERSION
+    assert expected_app_version == EXPECTED_RERCIE_VERSION
     run("node", "--check", "app.js")
+    run("node", "--check", "planner.js")
     run(sys.executable, "scripts/qa_case_studies.py")
 
     raw = (ROOT / "data.js").read_text(encoding="utf-8").strip()
@@ -40,25 +86,159 @@ def main() -> int:
     assert not any((item.get("summary") or "").strip() in {"", "-"} for item in items)
 
     index = (ROOT / "index.html").read_text(encoding="utf-8")
-    for label in (">All<", ">Funding<", ">Resources<", ">Case studies<"):
-        assert label in index
-    app = (ROOT / "app.js").read_text(encoding="utf-8")
-    assert "item.eligible_users" in app
-    assert "confirm territory eligibility" in app
-    assert "selectedStage !== \"Any step\"" in app
-    assert "counties" in app and "cities" in app
-    assert 'stageText !== "mixed"' not in app
-    assert "View program details" in app and "Open the resource" in app
+    site_contract = parse_site_contract(index)
+    elements_by_id: dict[str, tuple[str, dict[str, str]]] = {}
+    for tag, attrs in site_contract.elements:
+        element_id = attrs.get("id")
+        if element_id:
+            assert element_id not in elements_by_id
+            elements_by_id[element_id] = (tag, attrs)
+    required_v2_elements = {
+        "matchesWorkspace": "section",
+        "showFunding": "button",
+        "showResources": "button",
+        "showCases": "button",
+        "matchCount": "strong",
+        "fundingMatchCount": "strong",
+        "resourceMatchCount": "strong",
+        "caseStudyMatchCount": "strong",
+        "planWorkspace": "aside",
+        "communitySnapshot": "section",
+        "shareWorkspace": "button",
+    }
+    assert required_v2_elements.keys() <= elements_by_id.keys()
+    assert all(
+        elements_by_id[element_id][0] == expected_tag
+        for element_id, expected_tag in required_v2_elements.items()
+    )
+    mode_elements = [
+        (tag, attrs)
+        for tag, attrs in site_contract.elements
+        if attrs.get("data-mode")
+    ]
+    assert len(mode_elements) == 4
+    mode_controls = {
+        attrs.get("data-mode"): (tag, attrs)
+        for tag, attrs in mode_elements
+    }
+    assert set(mode_controls) == {"All", "Funding", "Resource", "Case Study"}
+    assert mode_controls["All"][0] == "button"
+    assert mode_controls["All"][1].get("aria-pressed") == "true"
+    assert {
+        mode: mode_controls[mode][1].get("id")
+        for mode in ("Funding", "Resource", "Case Study")
+    } == {
+        "Funding": "showFunding",
+        "Resource": "showResources",
+        "Case Study": "showCases",
+    }
+    assert all(
+        mode_controls[mode][0] == "button"
+        and mode_controls[mode][1].get("type") == "button"
+        and mode_controls[mode][1].get("aria-pressed") == "false"
+        for mode in ("Funding", "Resource", "Case Study")
+    )
+    script_sources = {
+        attrs.get("src", "").split("?", 1)[0]
+        for tag, attrs in site_contract.elements
+        if tag == "script" and attrs.get("src")
+    }
+    assert {"community_profiles.js", "app.js", "planner.js"} <= script_sources
+
+    meta_by_name = {
+        attrs.get("name", "").lower(): attrs.get("content", "")
+        for tag, attrs in site_contract.elements
+        if tag == "meta" and attrs.get("name")
+    }
+    meta_by_http_equiv = {
+        attrs.get("http-equiv", "").lower(): attrs.get("content", "")
+        for tag, attrs in site_contract.elements
+        if tag == "meta" and attrs.get("http-equiv")
+    }
+    assert meta_by_name.get("referrer") == EXPECTED_REFERRER_POLICY
+    assert meta_by_http_equiv.get("content-security-policy") == EXPECTED_CSP
+
+    planner = (ROOT / "planner.js").read_text(encoding="utf-8")
+    nominatim_urls = set(
+        re.findall(r"https://nominatim\.openstreetmap\.org[^\"'`\s)]*", planner)
+    )
+    assert nominatim_urls == {EXPECTED_NOMINATIM_ENDPOINT}
+    assert f'new URL("{EXPECTED_NOMINATIM_ENDPOINT}")' in planner
+    assert 'url.searchParams.set("format", "jsonv2")' in planner
+    assert 'url.searchParams.set("countrycodes", "us")' in planner
+    assert 'referrerPolicy: "no-referrer"' in planner
+    assert 'anchor.referrerPolicy = "no-referrer"' in planner
+
+    profile_path = ROOT / "community_profiles.js"
+    assert profile_path.is_file()
+    assert profile_path.stat().st_size <= 20_000_000
+    profiles = parse_javascript_assignment(
+        profile_path,
+        COMMUNITY_PROFILES_PREFIX,
+    )
+    assert isinstance(profiles, list) and 0 < len(profiles) <= 50_000
+    required_profile_strings = {
+        "id",
+        "community",
+        "name",
+        "geoid",
+        "state",
+        "stateCode",
+        "placeType",
+        "source",
+        "vintage",
+        "coverageNote",
+    }
+    allowed_place_types = {
+        "town_or_city",
+        "county_or_region",
+        "tribal_community",
+        "statewide_or_multi_community",
+    }
+    profile_ids: set[str] = set()
+    for profile_record in profiles:
+        assert isinstance(profile_record, dict)
+        assert required_profile_strings <= profile_record.keys()
+        assert all(
+            isinstance(profile_record[field], str)
+            for field in required_profile_strings
+        )
+        assert all(
+            profile_record[field].strip()
+            for field in required_profile_strings - {"coverageNote"}
+        )
+        assert profile_record["placeType"] in allowed_place_types
+        assert profile_record["id"] not in profile_ids
+        profile_ids.add(profile_record["id"])
+        for field in (
+            "population",
+            "medianHouseholdIncome",
+            "povertyRate",
+            "broadbandRate",
+        ):
+            if field in profile_record:
+                assert (
+                    isinstance(profile_record[field], (int, float))
+                    and not isinstance(profile_record[field], bool)
+                )
+
+    app_js = (ROOT / "app.js").read_text(encoding="utf-8")
+    assert "item.eligible_users" in app_js
+    assert "confirm territory eligibility" in app_js
+    assert "selectedStage !== \"Any step\"" in app_js
+    assert "counties" in app_js and "cities" in app_js
+    assert 'stageText !== "mixed"' not in app_js
+    assert "View program details" in app_js and "Open the resource" in app_js
     assert "source-backed examples from Protos" not in index
-    assert "window.RERC_CASE_STUDIES" in app
-    assert "Read the example" in app
+    assert "window.RERC_CASE_STUDIES" in app_js
+    assert "Read the example" in app_js
     assert "placeTypeSelect" in index
     assert all(value in index for value in ("town_or_city", "county_or_region", "tribal_community", "statewide_or_multi_community"))
-    assert "topicCorpus(item)" in app and "broadFundingStage" in app
-    assert "cleanText(item.case_place_type) !== selectedPlaceType" in app
-    assert "<h4>${escapeHtml(item.title)}</h4>" in app
-    assert "later standalone retest could not run" in index.lower()
-    assert "outline: 3px solid #003d2d" in (ROOT / "styles.css").read_text(encoding="utf-8")
+    assert "topicCorpus(item)" in app_js and "broadFundingStage" in app_js
+    assert "cleanText(item.case_place_type) !== selectedPlaceType" in app_js
+    assert "<${headingTag}>${escapeHtml(item.title)}</${headingTag}>" in app_js
+    assert "later standalone retest could not run" not in index.lower()
+    assert "outline: 3px solid var(--gold)" in (ROOT / "styles.css").read_text(encoding="utf-8")
     assert (ROOT / ".gitattributes").read_text(encoding="utf-8").count("eol=lf") >= 8
     assert (ROOT / "scripts" / "qa_public_site.cjs").is_file()
     assert not (ROOT / "scripts" / "qa_public_site_cases.cjs").exists()
@@ -76,9 +256,9 @@ def main() -> int:
     assert not any(re.search(r"[A-Za-z]:\\\\|protos|private_internal|needs_image_review", json.dumps(case), re.I) for case in cases)
 
     downloads = ROOT / "downloads"
-    static_docx = downloads / "RERC_Community_Explorer_Appendix_2026-07-18.docx"
-    static_xlsx = downloads / "RERC_Community_Explorer_Master_2026-07-18.xlsx"
-    static_csv = downloads / "RERC_Community_Explorer_Master_2026-07-18.csv"
+    static_docx = downloads / "RERC_Community_Explorer_Appendix_2026-07-19.docx"
+    static_xlsx = downloads / "RERC_Community_Explorer_Master_2026-07-19.xlsx"
+    static_csv = downloads / "RERC_Community_Explorer_Master_2026-07-19.csv"
     assert static_docx.stat().st_size > 100_000
     assert static_xlsx.stat().st_size > 100_000
     assert static_csv.stat().st_size > 100_000
@@ -101,7 +281,7 @@ def main() -> int:
         workbook_xml = package.read("xl/workbook.xml").decode("utf-8")
         assert all(name in workbook_xml for name in ("Funding", "Resources", "Community Examples"))
     sha256 = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
-    package_report = json.loads((downloads / "RERC_Community_Explorer_QA_2026-07-18.json").read_text(encoding="utf-8"))
+    package_report = json.loads((downloads / "RERC_Community_Explorer_QA_2026-07-19.json").read_text(encoding="utf-8"))
     assert package_report["status"] == "PASS"
     assert package_report["source_sha256"] == {
         "data.js": sha256(ROOT / "data.js"),
@@ -111,7 +291,7 @@ def main() -> int:
     assert "source commit used to generate" in package_report["release_binding_note"]
     assert package_report["site_sha256"] == {
         name: sha256(ROOT / name)
-        for name in ("index.html", "styles.css", "app.js", "data.js", "case_studies.js", "README.md")
+        for name in ("index.html", "styles.css", "rercie.css", "app.js", "planner.js", "data.js", "case_studies.js", "community_profiles.js", "favicon.svg", "vendor/jszip.min.js", "vendor/lucide.min.js", "assets/hero-outdoor.jpg", "assets/rercie-otter.jpg", "README.md")
     }
     assert package_report["docx"]["sha256"] == sha256(static_docx)
     assert package_report["xlsx"]["sha256"] == sha256(static_xlsx)
@@ -140,8 +320,20 @@ def main() -> int:
     installer_script = (ROOT / "rercie" / "packaging" / "RERCie.iss").read_text(encoding="utf-8")
     assert '[InstallDelete]' not in installer_script
     assert 'Name: "{app}\\models"' in installer_script  # Uninstall cleanup remains intentional.
+    assert '#define AppVersion "0.4.0"' in installer_script
+    build_script = (ROOT / "rercie" / "build_installer.ps1").read_text(encoding="utf-8")
+    assert '$Version = "0.4.0"' in build_script
+    installer_manifest = json.loads(
+        (ROOT / "rercie" / "packaging" / "installer_manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert installer_manifest["package"]["version"] == EXPECTED_RERCIE_VERSION
     source_qa = json.loads((ROOT / "rercie" / "packaging" / "QA_EVIDENCE.json").read_text(encoding="utf-8"))
     assert source_qa["status"] == "SOURCE_PASS" and source_qa["evidence_stage"] == "source"
+    assert source_qa["app_version"] == EXPECTED_RERCIE_VERSION
+    assert source_qa["app_version"] == expected_app_version
+    assert source_qa.get("historical") is not True
     assert source_qa["checks"]["package_integrity"]["status"] == "PENDING_BUILD"
     assert source_qa["release_binding"]["status"] == "PENDING_BUILD"
     live_catalog_qa = source_qa["checks"]["live_catalog"]
@@ -156,17 +348,17 @@ def main() -> int:
     assert live_catalog_qa["case_study_manual_review_urls"] == source_health["counts"]["manual_review"]
     local_report = json.loads((ROOT / "rercie" / "packaging" / "LOCAL_GEMMA_QA.json").read_text(encoding="utf-8"))
     assert local_report["status"] == "PASS"
-    assert local_report["app_version"] == "0.3.5"
+    assert local_report["app_version"] == EXPECTED_RERCIE_VERSION
+    assert local_report["app_version"] == expected_app_version
+    assert local_report.get("historical") is not True
     assert local_report["model"] == "gemma-3-1b-it-Q4_K_M.gguf"
     assert local_report["source_sha256"] == hashlib.sha256((ROOT / "rercie" / "rercie_core.py").read_bytes()).hexdigest()
     assert local_report["raw_model_prose_exposed"] is False
-    assert local_report["evidence_scope"].startswith("Package-bound")
-    assert local_report["later_standalone_rerun"]["status"] == "NOT_RUN"
-    assert source_qa["checks"]["local_generation"]["later_standalone_rerun_status"] == "NOT_RUN_NO_SERVICE"
-    assert any("later standalone Gemma inference rerun" in item for item in source_qa["disclosed_limits"])
+    assert local_report["evidence_scope"].startswith(("Package-bound", "Source-bound"))
+    assert local_report["later_standalone_rerun"]["status"] == "PASS"
+    assert source_qa["checks"]["local_generation"]["later_standalone_rerun_status"] == "PASS"
+    assert not any("later standalone Gemma inference rerun was not" in item.lower() for item in source_qa["disclosed_limits"])
 
-    sys.path.insert(0, str(ROOT / "rercie"))
-    import rercie as app
     captured_urls = []
     original_request_json = app.app.request_json
     original_env_value = app.app._local_env_value
@@ -179,13 +371,18 @@ def main() -> int:
         ]
     )
     try:
-        keyless_profile = app.app.fetch_census_community_profile("Taos", "New Mexico", "")
+        try:
+            app.app.fetch_census_community_profile("Taos", "New Mexico", "")
+            raise AssertionError("Direct Census lookup accepted a missing API key.")
+        except PermissionError:
+            pass
+        assert captured_urls == []
+        keyed_profile = app.app.fetch_census_community_profile("Taos", "New Mexico", "CENSUS_QA_KEY")
     finally:
         app.app.request_json = original_request_json
         app.app._local_env_value = original_env_value
-    assert keyless_profile["place"] == "Taos town, New Mexico"
-    assert captured_urls and "key=" not in captured_urls[0]
-
+    assert keyed_profile["place"] == "Taos town, New Mexico"
+    assert captured_urls and "key=CENSUS_QA_KEY" in captured_urls[0]
     profile = {"population": "1046", "source": "Test source"}
     draft_payload = {
         "community": "Test",
@@ -228,7 +425,17 @@ def main() -> int:
         "status": "PASS",
         "version": app.app.APP_VERSION,
         "counts": {**counts, "case_studies": len(cases), "public_total": len(items) + len(cases)},
-        "checks": 71,
+        "check_groups": [
+            "source_syntax",
+            "catalog_integrity",
+            "v2_site_contract",
+            "planner_security_contract",
+            "community_profiles",
+            "case_studies",
+            "downloads",
+            "rercie_0.4.0",
+            "privacy_and_grounding",
+        ],
     }
     print(json.dumps(result, indent=2))
     return 0

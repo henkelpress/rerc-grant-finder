@@ -5,7 +5,7 @@
   #error OutputDir must be defined by the build script.
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.3.5"
+  #define AppVersion "0.4.0"
 #endif
 
 #define AppName "RERCie"
@@ -38,6 +38,7 @@ Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
 CloseApplications=yes
+ChangesAssociations=yes
 RestartApplications=no
 SetupLogging=yes
 UninstallDisplayIcon={app}\{#AppExe}
@@ -46,7 +47,7 @@ VersionInfoVersion={#AppVersion}.0
 VersionInfoCompany=henkelpress
 VersionInfoDescription=RERCie local grant-writing guide
 VersionInfoProductName=RERCie
-AppMutex=Local\RERCie-0.3
+AppMutex=Local\RERCie-Desktop
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -62,6 +63,12 @@ Name: "{autoprograms}\RERCie"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}";
 Name: "{autodesktop}\RERCie"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"; Tasks: desktopicon; Comment: "Use a funding option and project notes to make a first draft"
 Name: "{autoprograms}\RERCie website"; Filename: "{#AppUrl}"
 
+[Registry]
+Root: HKA; Subkey: "Software\Classes\.rercie"; ValueType: string; ValueName: ""; ValueData: "RERCie.Plan"; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\RERCie.Plan"; ValueType: string; ValueName: ""; ValueData: "RERCie Community Explorer Plan"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\RERCie.Plan\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExe},0"
+Root: HKA; Subkey: "Software\Classes\RERCie.Plan\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" ""%1"""
+
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "Meet RERCie"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
 
@@ -72,6 +79,7 @@ Filename: "{app}\{#AppExe}"; Parameters: "--stop"; WorkingDir: "{app}"; Flags: r
 Type: filesandordirs; Name: "{app}\models"
 Type: filesandordirs; Name: "{app}\runtime\logs"
 Type: filesandordirs; Name: "{app}\runtime\pids"
+Type: filesandordirs; Name: "{app}\runtime\handoff"
 Type: files; Name: "{app}\*.partial"
 
 [Code]

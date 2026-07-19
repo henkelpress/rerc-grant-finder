@@ -64,6 +64,17 @@ function cleanText(value) {
   return String(value ?? "").trim();
 }
 
+function safeUrl(value) {
+  const source = cleanText(value);
+  if (!source) return "";
+  try {
+    const url = new URL(source);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
 function summaryTopic(item) {
   const topics = cleanText(item.topic_tags)
     .split(/[;,|]/)
@@ -162,7 +173,21 @@ function matchesGeography(item, selectedPlace) {
   return isNational(geography) || appliesToPlace(geography, selectedPlace) || territoryMultiState || isBroadArea(item, selectedPlace);
 }
 
-function scoreItem(item, text, selectedCommunity, selectedPlace, selectedPlaceType, applicants, topics, selectedStage) {
+function selectedMatchFactors() {
+  return {
+    selectedCommunity: elements.communityName.value.trim().toLowerCase(),
+    selectedPlace: elements.stateSelect.value,
+    selectedPlaceType: elements.placeTypeSelect.value,
+    applicants: selectedValues(elements.applicantOptions),
+    topics: selectedValues(elements.topicOptions),
+    selectedStage: elements.stageSelect.value
+  };
+}
+
+function scoreItem(item, text, factors) {
+  const {
+    selectedCommunity, selectedPlace, selectedPlaceType, applicants, topics, selectedStage
+  } = factors;
   const topicText = topicCorpus(item);
   let score = item.item_type === "Case Study" ? 52 : 45;
   if (selectedCommunity && matchesAny(text, [selectedCommunity])) score += item.item_type === "Case Study" ? 24 : 14;
@@ -188,12 +213,10 @@ function scoreItem(item, text, selectedCommunity, selectedPlace, selectedPlaceTy
 }
 
 function getMatches() {
-  const selectedCommunity = elements.communityName.value.trim().toLowerCase();
-  const selectedPlace = elements.stateSelect.value;
-  const selectedPlaceType = elements.placeTypeSelect.value;
-  const applicants = selectedValues(elements.applicantOptions);
-  const topics = selectedValues(elements.topicOptions);
-  const selectedStage = elements.stageSelect.value;
+  const factors = selectedMatchFactors();
+  const {
+    selectedPlace, selectedPlaceType, applicants, topics, selectedStage
+  } = factors;
   const keyword = elements.keywordSearch.value.trim().toLowerCase();
 
   const matches = catalog.filter((item) => {
@@ -215,7 +238,7 @@ function getMatches() {
     return true;
   }).map((item) => ({
     ...item,
-    score: scoreItem(item, corpus(item), selectedCommunity, selectedPlace, selectedPlaceType, applicants, topics, selectedStage)
+    score: scoreItem(item, corpus(item), factors)
   }));
 
   const sort = elements.sortSelect.value;
@@ -223,46 +246,224 @@ function getMatches() {
     if (sort === "title") return a.title.localeCompare(b.title);
     if (sort === "status") return a.status.localeCompare(b.status) || b.score - a.score;
     if (sort === "type") return a.item_type.localeCompare(b.item_type) || b.score - a.score;
+    if (sort === "deadline") {
+      const aDeadline = parseDeadline(a);
+      const bDeadline = parseDeadline(b);
+      if (aDeadline && bDeadline) return aDeadline - bDeadline || b.score - a.score || a.title.localeCompare(b.title);
+      if (aDeadline) return -1;
+      if (bDeadline) return 1;
+      return b.score - a.score || a.title.localeCompare(b.title);
+    }
     return b.score - a.score || a.title.localeCompare(b.title);
   });
   return matches;
 }
 
-function matchReason(item) {
-  const selectedCommunity = elements.communityName.value.trim().toLowerCase();
-  const selectedPlace = elements.stateSelect.value;
-  const selectedPlaceType = elements.placeTypeSelect.value;
-  const topics = selectedValues(elements.topicOptions);
-  if (selectedCommunity && matchesAny(corpus(item), [selectedCommunity])) return "Directly references your community";
-  if (item.item_type === "Case Study") {
-    if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) return "Example from your selected state or territory";
-    if (selectedPlaceType && cleanText(item.case_place_type) === selectedPlaceType) return "Similar community type";
-    if (topics.length) return "Matches one or more selected priorities";
-    return "Source-backed community example";
-  }
-  if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) return "Serves your selected area";
-  if (selectedPlace && isBroadArea(item, selectedPlace)) return "May serve multiple areas; check the provider's service area";
-  if (topics.length) return "Matches one or more selected priorities";
-  return "Broad match for rural community work";
+function optionLabels(options, selectedGroups, text) {
+  return selectedGroups
+    .filter((group) => matchesAny(text, [group]))
+    .map((group) => options.find(([value]) => value === group)?.[1])
+    .filter(Boolean);
 }
 
-function renderCard(item) {
+function addUnique(list, message) {
+  if (message && !list.includes(message)) list.push(message);
+}
+
+function matchEvidence(item) {
+  const factors = selectedMatchFactors();
+  const {
+    selectedCommunity, selectedPlace, selectedPlaceType, applicants, topics, selectedStage
+  } = factors;
+  const text = corpus(item);
+  const topicText = topicCorpus(item);
+  const reasons = [];
+  const cautions = [];
+
+  if (selectedCommunity && matchesAny(text, [selectedCommunity])) {
+    addUnique(reasons, "Directly references your community.");
+  }
+
+  if (item.item_type === "Case Study") {
+    if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) {
+      addUnique(reasons, "Example from your selected state or territory.");
+    }
+    if (selectedPlaceType && cleanText(item.case_place_type) === selectedPlaceType) {
+      addUnique(reasons, "Matches your selected community type.");
+    }
+    const matchedTopics = optionLabels(topicOptions, topics, topicText);
+    if (matchedTopics.length) {
+      addUnique(reasons, `Matches ${matchedTopics.slice(0, 2).join(" and ")}.`);
+    }
+    if (selectedStage !== "Any step" &&
+        cleanText(item.project_stage).toLowerCase() === selectedStage.toLowerCase()) {
+      addUnique(reasons, `Shows work at the ${selectedStage.toLowerCase()} stage.`);
+    }
+    if (!reasons.length) addUnique(reasons, "Provides a source-backed community example.");
+    addUnique(cautions, "Use this example as a precedent; it does not confirm program eligibility.");
+    return { reasons, cautions };
+  }
+
+  if (item.status === "Open when checked" || item.status === "Available") {
+    addUnique(reasons, "The program was available when last checked.");
+  } else if (item.status === "Recurring") {
+    addUnique(reasons, "The program has a recurring cycle.");
+  } else if (item.status === "Cycle closed") {
+    addUnique(cautions, "This funding cycle is closed; check for the next round.");
+  }
+
+  const geography = cleanText(item.geography);
+  const directPlaceMatch = selectedPlace && appliesToPlace(geography, selectedPlace);
+  const nationalMatch = selectedPlace && isNational(geography);
+  const broadAreaMatch = selectedPlace && isBroadArea(item, selectedPlace);
+  if (directPlaceMatch) {
+    addUnique(reasons, "Serves your selected state or territory.");
+  } else if (nationalMatch && !territoryPlaces.has(selectedPlace)) {
+    addUnique(reasons, "Serves communities nationwide.");
+  } else if (broadAreaMatch) {
+    addUnique(reasons, "Its broader service area may include your community.");
+    addUnique(cautions, "Confirm that your community is inside the program's service area.");
+  }
+  if (territoryPlaces.has(selectedPlace) && matchesGeography(item, selectedPlace) && !directPlaceMatch) {
+    addUnique(cautions, "Confirm that the program accepts applicants from your territory.");
+  }
+
+  const matchedApplicants = optionLabels(applicantOptions, applicants, cleanText(item.eligible_users).toLowerCase());
+  if (matchedApplicants.length) {
+    addUnique(reasons, `Lists ${matchedApplicants.slice(0, 2).join(" and ")} as a potential applicant.`);
+  }
+  const eligibility = cleanText(item.eligible_users);
+  if (!eligibility || /^(varies|see program|check with the program|-)|eligibility varies|eligible applicants$/i.test(eligibility)) {
+    addUnique(cautions, "Applicant eligibility is not confirmed; review the current program rules.");
+  }
+
+  const matchedTopics = optionLabels(topicOptions, topics, topicText);
+  if (matchedTopics.length) {
+    addUnique(reasons, `Matches ${matchedTopics.slice(0, 2).join(" and ")}.`);
+  }
+
+  if (selectedStage !== "Any step") {
+    const stage = cleanText(item.project_stage);
+    if (stage.toLowerCase() === "mixed") {
+      addUnique(reasons, "May support more than one project stage.");
+      addUnique(cautions, `Confirm that ${selectedStage.toLowerCase()} work is eligible.`);
+    } else if (matchesAny(stage.toLowerCase(), [selectedStage.toLowerCase()])) {
+      addUnique(reasons, `Supports the ${selectedStage.toLowerCase()} stage.`);
+    }
+  }
+
+  if (!reasons.length) addUnique(reasons, "Broad match for rural community work.");
+  return { reasons, cautions };
+}
+
+function makeLocalDate(year, month, day) {
+  const date = new Date(year, month - 1, day, 12, 0, 0, 0);
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? date : null;
+}
+
+function parseDeadline(item) {
+  const text = cleanText(item?.deadline_or_availability);
+  if (!text || /\b(rolling|ongoing|check|anticipated|expected|forthcoming|to be announced|tba|varies|not announced|pending|when available|until funds? (?:are )?depleted|open until filled|continuous)\b/i.test(text)) {
+    return null;
+  }
+
+  const candidates = [];
+  const addCandidate = (year, month, day) => {
+    const date = makeLocalDate(Number(year), Number(month), Number(day));
+    if (date) candidates.push(date);
+  };
+
+  for (const match of text.matchAll(/\b(20\d{2})-(\d{1,2})-(\d{1,2})\b/g)) {
+    addCandidate(match[1], match[2], match[3]);
+  }
+  for (const match of text.matchAll(/\b(\d{1,2})\/(\d{1,2})\/(20\d{2})\b/g)) {
+    addCandidate(match[3], match[1], match[2]);
+  }
+
+  const monthNumbers = {
+    january: 1, jan: 1, february: 2, feb: 2, march: 3, mar: 3, april: 4, apr: 4,
+    may: 5, june: 6, jun: 6, july: 7, jul: 7, august: 8, aug: 8, september: 9,
+    sep: 9, sept: 9, october: 10, oct: 10, november: 11, nov: 11, december: 12, dec: 12
+  };
+  const monthPattern = Object.keys(monthNumbers).join("|");
+  const namedDatePattern = new RegExp(`\\b(${monthPattern})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s+(20\\d{2})\\b`, "gi");
+  for (const match of text.matchAll(namedDatePattern)) {
+    addCandidate(match[3], monthNumbers[match[1].toLowerCase()], match[2]);
+  }
+
+  if (!candidates.length) return null;
+  const deadline = candidates.sort((a, b) => b - a)[0];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (/\b(open|available)\b/i.test(cleanText(item.status)) && deadline < today) return null;
+  return deadline;
+}
+
+function hasSubstantiveAnswers() {
+  const factors = selectedMatchFactors();
+  return Boolean(
+    factors.selectedCommunity || factors.selectedPlace || factors.selectedPlaceType ||
+    factors.applicants.length || factors.topics.length || factors.selectedStage !== "Any step" ||
+    elements.keywordSearch.value.trim()
+  );
+}
+
+function displayedMatchLabel(item) {
+  return hasSubstantiveAnswers() ? matchLabel(item.score) : "Starting point";
+}
+
+function renderEvidence(item) {
+  const evidence = matchEvidence(item);
+  const reasons = evidence.reasons.slice(0, 3)
+    .map((reason) => `<li>${escapeHtml(reason)}</li>`)
+    .join("");
+  const cautions = evidence.cautions.length
+    ? `<p class="match-cautions"><strong>Check:</strong> ${escapeHtml(evidence.cautions.join(" "))}</p>`
+    : "";
+  return `<div class="match-reason"><strong>Why it fits:</strong><ul>${reasons}</ul>${cautions}</div>`;
+}
+
+function renderCardActions(item) {
+  const safeItemId = escapeHtml(item.item_id);
+  const safeTitle = escapeHtml(item.title);
+  return `<div class="card-actions" aria-label="Planning actions">
+    <button type="button" class="card-action save-action" data-action="save" data-item-id="${safeItemId}" aria-label="Save ${safeTitle}" aria-pressed="false">Save</button>
+    <button type="button" class="card-action compare-action" data-action="compare" data-item-id="${safeItemId}" aria-label="Compare ${safeTitle}" aria-pressed="false">Compare</button>
+  </div>`;
+}
+
+function renderSourceLink(item, label) {
+  const url = safeUrl(item.source_url);
+  const accessibleLabel = `${label}: ${cleanText(item.title)} (opens in a new tab)`;
+  return url
+    ? `<a class="case-link" href="${escapeHtml(url)}" target="_blank" rel="noopener" aria-label="${escapeHtml(accessibleLabel)}">${escapeHtml(label)}</a>`
+    : '<span class="case-link source-unavailable">Source link unavailable</span>';
+}
+
+function renderCard(item, headingLevel = 3) {
+  const itemId = cleanText(item.item_id);
+  const headingTag = headingLevel === 4 ? "h4" : "h3";
+  const scoreLabel = displayedMatchLabel(item);
   if (item.item_type === "Case Study") {
     const year = item.case_year ? ` | ${escapeHtml(item.case_year)}` : "";
-    return `<article class="result-card case-study">
+    return `<article class="result-card case-study" data-item-id="${escapeHtml(itemId)}">
       <div>
         <div class="card-kicker">
           <span class="pill">Case study</span>
           <span>${escapeHtml(item.case_program)}</span>
         </div>
-        <h4>${escapeHtml(item.title)}</h4>
+        <${headingTag}>${escapeHtml(item.title)}</${headingTag}>
         <p class="organization">${escapeHtml(item.case_place)}, ${escapeHtml(item.case_state)}${year}</p>
         <p class="summary">${escapeHtml(publicSummary(item))}</p>
-        <p class="match-reason"><strong>Why it fits:</strong> ${escapeHtml(matchReason(item))}</p>
-        <p class="details"><strong>Topics:</strong> ${escapeHtml(item.topic_tags || "Community development")}</p>
-        <a class="case-link" href="${escapeHtml(item.source_url)}" target="_blank" rel="noopener">Read the example</a>
+        <details class="card-details">
+          <summary>Why it fits and details</summary>
+          ${renderEvidence(item)}
+          <p class="details"><strong>Topics:</strong> ${escapeHtml(item.topic_tags || "Community development")}</p>
+        </details>
+        ${renderSourceLink(item, "Read the example")}
+        ${renderCardActions(item)}
       </div>
-      <div class="score" aria-label="Match level: ${matchLabel(item.score)}"><strong>${matchLabel(item.score)}</strong><span>match level</span></div>
+      <div class="score" aria-label="${escapeHtml(scoreLabel)}"><strong>${escapeHtml(scoreLabel)}</strong><span>${hasSubstantiveAnswers() ? "match level" : "add details to rank"}</span></div>
     </article>`;
   }
   const selectedPlace = elements.stateSelect.value;
@@ -270,22 +471,26 @@ function renderCard(item) {
   const geography = nationalTerritoryListing ? item.geography + " (confirm territory eligibility)" : item.geography;
   const classes = ["result-card", item.item_type === "Resource" ? "resource" : "funding", item.status === "Cycle closed" ? "closed" : ""].join(" ");
   const timing = item.deadline_or_availability || item.amount_or_cost || "Check current availability";
-  return `<article class="${classes}">
+  return `<article class="${classes}" data-item-id="${escapeHtml(itemId)}">
     <div>
       <div class="card-kicker">
         <span class="pill">${escapeHtml(item.item_type)}</span>
         <span class="pill status">${escapeHtml(item.status)}</span>
         <span>${escapeHtml(item.support_type)}</span>
       </div>
-      <h4>${escapeHtml(item.title)}</h4>
+      <${headingTag}>${escapeHtml(item.title)}</${headingTag}>
       <p class="organization">${escapeHtml(item.organization)}</p>
       <p class="summary">${escapeHtml(publicSummary(item))}</p>
-      <p class="match-reason"><strong>Why it fits:</strong> ${escapeHtml(matchReason(item))}</p>
-      <p class="details"><strong>Where:</strong> ${escapeHtml(geography)} &nbsp; <strong>Who:</strong> ${escapeHtml(item.eligible_users || "Eligibility varies")}</p>
-      <p class="details"><strong>Timing or amount:</strong> ${escapeHtml(timing)} &nbsp; <strong>Checked:</strong> ${escapeHtml(item.last_checked)}</p>
-      <a class="case-link" href="${escapeHtml(item.source_url)}" target="_blank" rel="noopener">${item.item_type === "Resource" ? "Open the resource" : "View program details"}</a>
+      <details class="card-details">
+        <summary>Why it fits and details</summary>
+        ${renderEvidence(item)}
+        <p class="details"><strong>Where:</strong> ${escapeHtml(geography)} &nbsp; <strong>Who:</strong> ${escapeHtml(item.eligible_users || "Eligibility varies")}</p>
+        <p class="details"><strong>Timing or amount:</strong> ${escapeHtml(timing)} &nbsp; <strong>Checked:</strong> ${escapeHtml(item.last_checked)}</p>
+      </details>
+      ${renderSourceLink(item, item.item_type === "Resource" ? "Open the resource" : "View program details")}
+      ${renderCardActions(item)}
     </div>
-    <div class="score" aria-label="Match level: ${matchLabel(item.score)}"><strong>${matchLabel(item.score)}</strong><span>match level</span></div>
+    <div class="score" aria-label="${escapeHtml(scoreLabel)}"><strong>${escapeHtml(scoreLabel)}</strong><span>${hasSubstantiveAnswers() ? "match level" : "add details to rank"}</span></div>
   </article>`;
 }
 
@@ -310,7 +515,7 @@ function renderGroup(kind, title, description, items, total, className) {
       <div><p class="eyebrow">${escapeHtml(kind)}</p><h3>${escapeHtml(title)}</h3><p>${escapeHtml(description)}</p></div>
       <strong>${total.toLocaleString()} matches</strong>
     </div>
-    ${items.length ? items.map(renderCard).join("") : `<div class="empty-state"><h3>No ${escapeHtml(kind.toLowerCase())} matches</h3><p>Try fewer answers or a wider search.</p></div>`}
+    ${items.length ? items.map((item) => renderCard(item, 4)).join("") : `<div class="empty-state"><h4>No ${escapeHtml(kind.toLowerCase())} matches</h4><p>Try fewer answers or a wider search.</p></div>`}
   </section>`;
 }
 
@@ -345,14 +550,16 @@ function render() {
 
   elements.communityTitle.textContent = `${modeLabel} for ${label}`;
   elements.communitySummary.textContent = currentMatches.length
-    ? "Match levels compare your answers. They do not confirm eligibility or guarantee that another community's approach will work in your place."
+    ? (hasSubstantiveAnswers()
+      ? "Match levels compare your answers. They do not confirm eligibility or guarantee that another community's approach will work in your place."
+      : "These are starting points. Add community details and priorities to rank them for your needs.")
     : "Try fewer choices or a wider search.";
   elements.matchCount.textContent = currentMatches.length.toLocaleString();
   elements.fundingMatchCount.textContent = fundingMatches.toLocaleString();
   elements.resourceMatchCount.textContent = resourceMatches.toLocaleString();
   elements.caseStudyMatchCount.textContent = caseMatches.toLocaleString();
   elements.activeFilters.textContent = activeFilterSummary();
-  elements.matchAnnouncement.textContent = `${currentMatches.length} matches shown for ${label}.`;
+  elements.matchAnnouncement.textContent = `${currentMatches.length} total matches; ${visible.length} cards displayed for ${label}.`;
   if (!visible.length) {
     elements.results.innerHTML = `<div class="empty-state"><h3>No matches yet</h3><p>Clear one or more answers, or turn on closed rounds to see future options.</p></div>`;
   } else if (mode === "All") {
@@ -365,12 +572,14 @@ function render() {
       renderGroup("Case studies", "Examples from other communities", "Source-backed examples to help teams compare approaches and ask better questions.", shownCases, caseMatches, "case-group")
     ].join("");
   } else {
-    elements.results.innerHTML = visible.map(renderCard).join("");
+    elements.results.innerHTML = visible.map((item) => renderCard(item, 3)).join("");
   }
+  window.dispatchEvent(new CustomEvent("rerc:render", { detail: { matches: currentMatches } }));
 }
 
 function csvCell(value) {
-  const text = cleanText(value);
+  let text = cleanText(value);
+  if (/^\s*[=+\-@]/.test(text)) text = `'${text}`;
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
@@ -394,7 +603,7 @@ function exportCsv() {
     item.item_type === "Case Study" ? `${item.case_place}, ${item.case_state}` : item.geography,
     item.eligible_users, item.project_stage, item.topic_tags, item.support_type,
     item.item_type === "Case Study" ? item.case_year : (item.deadline_or_availability || item.amount_or_cost),
-    publicSummary(item), item.source_url
+    publicSummary(item), safeUrl(item.source_url)
   ].map(csvCell).join(",")));
   downloadBlob(`\uFEFF${lines.join("\r\n")}`, "text/csv;charset=utf-8", "RERC-community-funding-resources-and-case-studies.csv");
 }
@@ -483,12 +692,13 @@ async function exportWord() {
           wordRunXml(item.last_checked || "Not recorded")
         ]));
       }
-      if (item.source_url) {
+      const sourceUrl = safeUrl(item.source_url);
+      if (sourceUrl) {
         const relationshipId = "rId" + relationshipNumber++;
-        relationships.push('<Relationship Id="' + relationshipId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="' + xmlEscape(item.source_url) + '" TargetMode="External"/>');
+        relationships.push('<Relationship Id="' + relationshipId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="' + xmlEscape(sourceUrl) + '" TargetMode="External"/>');
         body.push(wordParagraphXml([
           wordRunXml(item.item_type === "Case Study" ? "Read the example: " : "Current program information: ", { bold: true }),
-          wordHyperlinkXml(item.source_url, relationshipId)
+          wordHyperlinkXml(sourceUrl, relationshipId)
         ]));
       }
     });
@@ -573,6 +783,16 @@ function reset() {
   render();
 }
 
+function chooseMode(nextMode) {
+  mode = nextMode;
+  document.querySelectorAll("[data-mode]").forEach((candidate) => {
+    const active = candidate.dataset.mode === mode;
+    candidate.classList.toggle("active", active);
+    candidate.setAttribute("aria-pressed", String(active));
+  });
+  render();
+}
+
 function initialize() {
   elements.fundingCount.textContent = fundingResources.filter((item) => item.item_type === "Funding").length.toLocaleString();
   elements.resourceCount.textContent = fundingResources.filter((item) => item.item_type === "Resource").length.toLocaleString();
@@ -581,14 +801,11 @@ function initialize() {
   elements.stageSelect.innerHTML = stages.map((stage) => `<option>${escapeHtml(stage)}</option>`).join("");
   buildCheckList(elements.applicantOptions, applicantOptions, "applicant");
   buildCheckList(elements.topicOptions, topicOptions, "topic");
-  function chooseMode(nextMode) {
-    mode = nextMode;
-    document.querySelectorAll("[data-mode]").forEach((candidate) => {
-      const active = candidate.dataset.mode === mode;
-      candidate.classList.toggle("active", active);
-      candidate.setAttribute("aria-pressed", String(active));
-    });
-    render();
+  if (!elements.sortSelect.querySelector('option[value="deadline"]')) {
+    const deadlineOption = document.createElement("option");
+    deadlineOption.value = "deadline";
+    deadlineOption.textContent = "Deadline: soonest first";
+    elements.sortSelect.appendChild(deadlineOption);
   }
   document.querySelectorAll("[data-mode]").forEach((button) => button.addEventListener("click", () => chooseMode(button.dataset.mode)));
   elements.showFunding.addEventListener("click", () => chooseMode("Funding"));
@@ -605,5 +822,18 @@ function initialize() {
   elements.exportWord.addEventListener("click", exportWord);
   render();
 }
+
+window.RERCExplorer = {
+  catalog,
+  elements,
+  getMatches: () => currentMatches,
+  render,
+  matchEvidence,
+  publicSummary,
+  parseDeadline,
+  safeUrl,
+  chooseMode,
+  getMode: () => mode
+};
 
 initialize();

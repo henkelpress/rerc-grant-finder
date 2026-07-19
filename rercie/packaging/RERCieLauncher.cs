@@ -20,7 +20,7 @@ namespace RERCieDesktop
 {
     internal static class Config
     {
-        public const string Version = "0.3.5";
+        public const string Version = "0.4.0";
         public const string AppUrl = "http://127.0.0.1:8789";
         public const string AppHealthUrl = AppUrl + "/health";
         public const string ModelHealthUrl = "http://127.0.0.1:8788/health";
@@ -32,6 +32,9 @@ namespace RERCieDesktop
         public const string VcRuntimeUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe";
         public const string ModelPageUrl = "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF";
         public const string ModelLicenseUrl = "https://ai.google.dev/gemma/terms";
+        public const int MaxPlanBytes = 256 * 1024;
+        public const string PlanSchema = "rercie-handoff";
+        public const int PlanVersion = 1;
     }
 
     internal sealed class IntegrityEntry
@@ -65,6 +68,8 @@ namespace RERCieDesktop
         public static readonly string ServiceDir = Path.Combine(Root, "service");
         public static readonly string ServiceExe = Path.Combine(ServiceDir, "RERCieService.exe");
         public static readonly string PidDir = Path.Combine(RuntimeDir, "pids");
+        public static readonly string HandoffDir = Path.Combine(RuntimeDir, "handoff");
+        public static readonly string PendingHandoffPath = Path.Combine(HandoffDir, "pending.rercie");
         public static readonly string IntegrityPath = Path.Combine(Root, "file_integrity.json");
         private static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
 
@@ -93,6 +98,58 @@ namespace RERCieDesktop
                 FileInfo file = new FileInfo(fullPath);
                 if (!file.Exists || file.Length != entry.bytes || !string.Equals(Sha256(fullPath), entry.sha256, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("A RERCie file did not pass its safety check: " + relative + ". Run the installer again.");
+            }
+        }
+
+        public static void StagePlanFile(string sourcePath)
+        {
+            if (string.IsNullOrWhiteSpace(sourcePath)) throw new InvalidOperationException("Choose a Community Explorer plan first.");
+            string fullPath = Path.GetFullPath(sourcePath);
+            string extension = Path.GetExtension(fullPath);
+            if (!string.Equals(extension, ".rercie", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(extension, ".json", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("RERCie can open only .rercie or .json Community Explorer plans.");
+            FileInfo source = new FileInfo(fullPath);
+            if (!source.Exists || source.Length <= 0 || source.Length > Config.MaxPlanBytes)
+                throw new InvalidOperationException("The Community Explorer plan must be a non-empty file no larger than 256 KB.");
+            byte[] bytes = File.ReadAllBytes(fullPath);
+            if (bytes.Length <= 0 || bytes.Length > Config.MaxPlanBytes)
+                throw new InvalidOperationException("The Community Explorer plan must be a non-empty file no larger than 256 KB.");
+            string text;
+            try
+            {
+                text = new UTF8Encoding(false, true).GetString(bytes);
+                if (text.Length > 0 && text[0] == '\ufeff') text = text.Substring(1);
+            }
+            catch (DecoderFallbackException)
+            {
+                throw new InvalidOperationException("The Community Explorer plan must be UTF-8 JSON text.");
+            }
+            IDictionary<string, object> plan;
+            try { plan = Json.DeserializeObject(text) as IDictionary<string, object>; }
+            catch { plan = null; }
+            object schema;
+            object version;
+            int parsedVersion;
+            if (plan == null
+                || !plan.TryGetValue("schema", out schema)
+                || !string.Equals(Convert.ToString(schema), Config.PlanSchema, StringComparison.Ordinal)
+                || !plan.TryGetValue("version", out version)
+                || !int.TryParse(Convert.ToString(version), out parsedVersion)
+                || parsedVersion != Config.PlanVersion)
+                throw new InvalidOperationException("This is not a supported RERCie Community Explorer plan.");
+
+            Directory.CreateDirectory(HandoffDir);
+            string temporaryPath = Path.Combine(HandoffDir, Guid.NewGuid().ToString("N") + ".tmp");
+            try
+            {
+                File.WriteAllBytes(temporaryPath, bytes);
+                if (File.Exists(PendingHandoffPath)) File.Delete(PendingHandoffPath);
+                File.Move(temporaryPath, PendingHandoffPath);
+            }
+            finally
+            {
+                try { if (File.Exists(temporaryPath)) File.Delete(temporaryPath); } catch { }
             }
         }
 
@@ -423,10 +480,12 @@ namespace RERCieDesktop
         private readonly Button startButton = new Button();
         private readonly Button openButton = new Button();
         private readonly Button stopButton = new Button();
+        private readonly bool startupPlanStaged;
         private bool busy;
 
-        public MainForm()
+        public MainForm(bool hasStartupPlan)
         {
+            startupPlanStaged = hasStartupPlan;
             Text = "RERCie";
             ClientSize = new Size(700, 520);
             MinimumSize = new Size(716, 559);
@@ -474,7 +533,7 @@ namespace RERCieDesktop
 
             statusLabel.Location = new Point(260, 360);
             statusLabel.Size = new Size(410, 44);
-            statusLabel.Text = "Checking RERCie...";
+            statusLabel.Text = startupPlanStaged ? "Community Explorer plan ready. Checking RERCie..." : "Checking RERCie...";
             statusLabel.ForeColor = Color.FromArgb(70, 80, 75);
             statusLabel.AccessibleName = "RERCie status";
             statusLabel.AccessibleDescription = statusLabel.Text;
@@ -551,6 +610,7 @@ namespace RERCieDesktop
                 bool appReady = Runtime.AppReady();
 
                 statusLabel.Text = appReady ? "RERCie is ready. Open it in your browser." : modelReady ? "The local model is ready. Start RERCie when you are ready." : "Select Download and start. RERCie will check the model before it runs.";
+                if (startupPlanStaged) statusLabel.Text += " Your Community Explorer plan will open with it.";
             }
             catch (Exception error)
             {
@@ -601,7 +661,7 @@ namespace RERCieDesktop
                 }
                 await StartServicesAsync();
                 progressBar.Value = 100;
-                statusLabel.Text = "RERCie is ready. Your browser is opening.";
+                statusLabel.Text = startupPlanStaged ? "RERCie is ready. Your Community Explorer plan is opening." : "RERCie is ready. Your browser is opening.";
                 Runtime.OpenBrowser(Runtime.AppBrowserUrl());
             }
             catch (Exception error)
@@ -799,6 +859,10 @@ namespace RERCieDesktop
                         model_sha256 = Config.ModelSha256,
                         model_source = Config.ModelPageUrl,
                         model_download_bytes = Config.ModelBytes,
+                        plan_schema = Config.PlanSchema,
+                        plan_version = Config.PlanVersion,
+                        plan_max_bytes = Config.MaxPlanBytes,
+                        plan_extensions = new[] { ".rercie", ".json" },
                         launcher = Application.ExecutablePath
                     });
                     File.WriteAllText(args[smokeIndex + 1], json, new UTF8Encoding(false));
@@ -811,18 +875,58 @@ namespace RERCieDesktop
                 }
             }
 
+            string planPath = null;
+            foreach (string argument in args)
+            {
+                if (argument.StartsWith("--", StringComparison.Ordinal)) continue;
+                string extension = Path.GetExtension(argument);
+                if (string.Equals(extension, ".rercie", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(extension, ".json", StringComparison.OrdinalIgnoreCase))
+                {
+                    planPath = argument;
+                    break;
+                }
+            }
+            bool planStaged = false;
+            if (!string.IsNullOrWhiteSpace(planPath))
+            {
+                try
+                {
+                    Runtime.StagePlanFile(planPath);
+                    planStaged = true;
+                }
+                catch (Exception error)
+                {
+                    MessageBox.Show(error.Message, "RERCie could not open this plan", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return 2;
+                }
+            }
+
             bool created;
-            using (Mutex mutex = new Mutex(true, "Local\\RERCie-0.3", out created))
+            using (Mutex mutex = new Mutex(true, "Local\\RERCie-Desktop", out created))
             {
                 if (!created)
                 {
-                    if (!Runtime.AppReady()) return 1;
+                    if (!Runtime.AppReady())
+                    {
+                        if (planStaged)
+                        {
+                            MessageBox.Show("The plan is ready. Use the open RERCie window to start the app.", "Community Explorer plan ready", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            return 0;
+                        }
+                        return 1;
+                    }
+                    Runtime.OpenBrowser(Runtime.AppBrowserUrl());
+                    return 0;
+                }
+                if (planStaged && Runtime.AppReady())
+                {
                     Runtime.OpenBrowser(Runtime.AppBrowserUrl());
                     return 0;
                 }
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
-                Application.Run(new MainForm());
+                Application.Run(new MainForm(planStaged));
             }
             return 0;
         }

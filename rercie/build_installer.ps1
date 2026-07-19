@@ -9,7 +9,7 @@ Set-StrictMode -Version Latest
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $Here
 Set-Location -LiteralPath $Here
-$Version = "0.3.5"
+$Version = "0.4.0"
 $RuntimeName = "llama-b9987-bin-win-cpu-x64.zip"
 $RuntimeUrl = "https://github.com/ggerganov/llama.cpp/releases/download/b9987/$RuntimeName"
 $RuntimeSha256 = "6847d537b3cd5099051989d08c7eca4296e7a0f1755dbf0540c82e37768320f3"
@@ -32,12 +32,26 @@ function Get-Sha256([string]$Path) {
 
 $sourceQaPath = Join-Path $Here "packaging\QA_EVIDENCE.json"
 $sourceQa = Get-Content -LiteralPath $sourceQaPath -Raw | ConvertFrom-Json
-if ($sourceQa.status -ne "SOURCE_PASS") { throw "QA_EVIDENCE.json must have top-level SOURCE_PASS status before a release build." }
+if ($sourceQa.status -ne "SOURCE_PASS") { throw "QA_EVIDENCE.json status is $($sourceQa.status). Complete and review RERCie $Version source QA before building." }
+if ($sourceQa.app_version -ne $Version) { throw "QA_EVIDENCE.json is for version $($sourceQa.app_version), not release $Version. Run and review current source QA before building." }
+if ($sourceQa.PSObject.Properties["historical"] -and $sourceQa.historical) { throw "Historical QA evidence cannot authorize a current release build." }
+if ($sourceQa.evidence_stage -ne "source") { throw "QA_EVIDENCE.json must be current source-stage evidence." }
 $requiredQaChecks = @("source_smoke", "display_scaling", "live_catalog", "community_lookup", "local_generation", "docx_export", "api_privacy_regression", "service_identity_checks", "licensing_and_runtime")
 foreach ($checkName in $requiredQaChecks) {
     $check = $sourceQa.checks.PSObject.Properties[$checkName]
     if (-not $check -or $check.Value.status -ne "PASS") { throw "Required QA check is not PASS: $checkName" }
 }
+
+$localQaPath = Join-Path $Here "packaging\LOCAL_GEMMA_QA.json"
+$localQa = Get-Content -LiteralPath $localQaPath -Raw | ConvertFrom-Json
+if ($localQa.status -ne "PASS" -or $localQa.app_version -ne $Version) { throw "LOCAL_GEMMA_QA.json must contain a current PASS for RERCie $Version." }
+if ($localQa.PSObject.Properties["historical"] -and $localQa.historical) { throw "Historical local Gemma evidence cannot authorize a current release build." }
+if ($localQa.model -ne "gemma-3-1b-it-Q4_K_M.gguf") { throw "LOCAL_GEMMA_QA.json does not identify the approved Gemma model." }
+if ($localQa.source_sha256 -ne (Get-Sha256 (Join-Path $Here "rercie_core.py"))) { throw "LOCAL_GEMMA_QA.json does not match the current RERCie source." }
+
+$sourceInstallerManifestPath = Join-Path $Here "packaging\installer_manifest.json"
+$sourceInstallerManifest = Get-Content -LiteralPath $sourceInstallerManifestPath -Raw | ConvertFrom-Json
+if ($sourceInstallerManifest.package.version -ne $Version) { throw "installer_manifest.json must identify RERCie $Version." }
 
 $bannedModelPattern = ("qw" + "en|qw" + "en2[.]5|LICENSE-" + "QW" + "EN")
 $bannedModelReferences = @(& git -C $RepoRoot grep -I -n -i -E $bannedModelPattern -- README.md index.html rercie)
@@ -119,9 +133,7 @@ Copy-Item -LiteralPath (Join-Path $Here "licenses\GEMMA_TERMS.txt") -Destination
 curl.exe -L --fail --retry 3 --output (Join-Path $PackageRoot "runtime\llama\LICENSE-llama.cpp") $LicenseUrl
 if ($LASTEXITCODE -ne 0) { throw "The llama.cpp license download failed." }
 
-foreach ($name in @("installer_manifest.json", "QA_EVIDENCE.json")) {
-    Copy-Item -LiteralPath (Join-Path $Here "packaging\$name") -Destination $PackageRoot
-}
+Copy-Item -LiteralPath $sourceQaPath -Destination $PackageRoot
 foreach ($name in @("README.md", "MODEL_NOTICE.md", "THIRD_PARTY_NOTICES.md")) {
     Copy-Item -LiteralPath (Join-Path $Here $name) -Destination $PackageRoot
 }
@@ -151,6 +163,12 @@ $integrityPath = Join-Path $PackageRoot "file_integrity.json"
 
 $sourceCommit = (& git -C $RepoRoot rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or $sourceCommit -notmatch "^[0-9a-f]{40}$") { throw "The build must run from a Git checkout with a valid source commit." }
+$packageManifest = Get-Content -LiteralPath $sourceInstallerManifestPath -Raw | ConvertFrom-Json
+$packageManifest.package.version = $Version
+$packageManifest.package | Add-Member -NotePropertyName generated_utc -NotePropertyValue ([DateTime]::UtcNow.ToString("o")) -Force
+$packageManifest.package | Add-Member -NotePropertyName source_commit -NotePropertyValue $sourceCommit -Force
+$packageManifestPath = Join-Path $PackageRoot "installer_manifest.json"
+[IO.File]::WriteAllText($packageManifestPath, ($packageManifest | ConvertTo-Json -Depth 6), [Text.UTF8Encoding]::new($false))
 $qaPath = Join-Path $PackageRoot "QA_EVIDENCE.json"
 $qa = Get-Content -LiteralPath $qaPath -Raw | ConvertFrom-Json
 $qa.status = "PACKAGE_BUILD"
@@ -204,7 +222,7 @@ $smokeProcess = Start-Process -FilePath (Join-Path $PackageRoot "RERCie.exe") -A
 if ($smokeProcess.ExitCode -ne 0) { throw "The native launcher smoke test failed." }
 if (-not (Test-Path -LiteralPath $smokePath -PathType Leaf)) { throw "The native launcher smoke report was not created." }
 $smoke = Get-Content -LiteralPath $smokePath -Raw | ConvertFrom-Json
-if ($smoke.status -ne "PASS" -or $smoke.powershell_required -ne $false) { throw "The native launcher smoke report was not valid." }
+if ($smoke.status -ne "PASS" -or $smoke.version -ne $Version -or $smoke.powershell_required -ne $false) { throw "The native launcher smoke report was not valid for RERCie $Version." }
 if ($smoke.model_name -ne "gemma-3-1b-it-Q4_K_M.gguf" -or $smoke.model_sha256 -ne "8ccc5cd1f1b3602548715ae25a66ed73fd5dc68a210412eea643eb20eb75a135") { throw "The launcher smoke report does not identify the approved Gemma model." }
 
 $downloadProbePath = Join-Path $BuildRoot "launcher-download-probe.json"
@@ -244,7 +262,7 @@ try {
     $installedSmokeProcess = Start-Process -FilePath (Join-Path $testInstallDir "RERCie.exe") -ArgumentList @("--smoke-output", ('"' + $installedSmokePath + '"')) -Wait -PassThru
     if ($installedSmokeProcess.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $installedSmokePath)) { throw "The installed launcher smoke test failed." }
     $installedSmoke = Get-Content -LiteralPath $installedSmokePath -Raw | ConvertFrom-Json
-    if ($installedSmoke.status -ne "PASS" -or $installedSmoke.powershell_required -ne $false -or $installedSmoke.model_name -ne "gemma-3-1b-it-Q4_K_M.gguf") { throw "The installed launcher smoke evidence is invalid." }
+    if ($installedSmoke.status -ne "PASS" -or $installedSmoke.version -ne $Version -or $installedSmoke.powershell_required -ne $false -or $installedSmoke.model_name -ne "gemma-3-1b-it-Q4_K_M.gguf") { throw "The installed launcher smoke evidence is invalid for RERCie $Version." }
     $modelDir = Join-Path $testInstallDir "models"
     [IO.Directory]::CreateDirectory($modelDir) | Out-Null
     $modelSentinel = Join-Path $modelDir "upgrade-preservation-test.txt"
@@ -292,7 +310,7 @@ $releaseQa = [ordered]@{
     disclosed_limits = @(
         "The installer is not code-signed, so Windows may show a safety notice.",
         "The isolated test ran on the build computer rather than a clean Windows virtual machine.",
-        "Package-bound local Gemma generation passed before final packaging; a later standalone inference rerun was not completed because no local inference service was available.",
+        "Source-bound local Gemma inference passed against the final RERCie source before packaging.",
         "Users must review generated drafts and verify current rules on official funding pages."
     )
 }

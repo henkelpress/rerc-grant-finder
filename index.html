@@ -2,214 +2,243 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Find funding, planning resources, and real community examples for rural recreation economies.">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Build a practical community plan with funding, planning resources, and community examples.">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://nominatim.openstreetmap.org; frame-src https://www.openstreetmap.org; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests">
   <title>RERC Community Explorer</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="styles.css?v=20260717-1">
   <link rel="stylesheet" href="rercie.css?v=20260717-1">
+  <link rel="stylesheet" href="styles.css?v=20260718-v2">
 </head>
 <body>
-  <a class="skip-link" href="#finder">Skip to the explorer</a>
-  <header class="hero">
-    <div class="hero-photo" aria-hidden="true"></div>
-    <div class="hero-shade" aria-hidden="true"></div>
-    <div class="agency-bar">
-      <span class="agency-name">Recreation Economy <em>for</em> Rural Communities</span>
-      <nav class="agency-links" aria-label="RERC links">
-        <a href="https://www.epa.gov/smartgrowth/recreation-economy-rural-communities" target="_blank" rel="noopener">About RERC</a>
-        <a href="https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Setup.exe">Download RERCie</a>
-      </nav>
-    </div>
-    <div class="hero-inner">
-      <p class="eyebrow">RERC community field guide</p>
-      <h1>Funding, tools, and examples for rural communities.</h1>
-      <p class="hero-copy">Describe your place and priorities. Build one practical list of ways to fund the work, plan the project, and learn from other communities.</p>
-      <div class="hero-actions">
-        <a class="primary-action" href="#finder">Start with your community</a>
-        <a class="secondary-hero-action" href="#caseStudiesIntro">Explore community examples</a>
-      </div>
-    </div>
-    <p class="photo-credit">Outdoor recreation photo: <a href="https://www.nps.gov/aboutus/disclaimer.htm" target="_blank" rel="noopener">National Park Service</a></p>
+  <a class="skip-link" href="#finder">Skip to the community explorer</a>
+  <header class="agency-header">
+    <a class="program-identity" href="https://www.epa.gov/smartgrowth/recreation-economy-rural-communities" target="_blank" rel="noopener">
+      <span class="program-mark" aria-hidden="true">RERC</span>
+      <span><strong>Recreation Economy <em>for</em> Rural Communities</strong><small>Community Explorer</small></span>
+    </a>
+    <span class="independent-label">Independent community-built tool</span>
+    <nav class="agency-actions" aria-label="Program and site tools">
+      <a href="#catalogDownloads"><i data-lucide="download" aria-hidden="true"></i><span>Full catalog</span></a>
+      <a href="#rercie"><i data-lucide="sparkles" aria-hidden="true"></i><span>RERCie</span></a>
+      <button id="openLanguage" type="button" aria-haspopup="dialog"><i data-lucide="languages" aria-hidden="true"></i><span>English</span></button>
+    </nav>
   </header>
 
-  <section class="intro-band" aria-label="About this tool">
-    <div>
-      <strong>Move from an idea to a workable next step.</strong>
-      <span>Use the same community profile to compare funding, hands-on help, and official examples from communities across the country.</span>
+  <section class="photo-scene" aria-labelledby="sceneTitle">
+    <div class="scene-copy">
+      <p class="eyebrow">Start with your place</p>
+      <h1 id="sceneTitle">Turn a community goal into a practical plan.</h1>
+      <p>Find funding, hands-on help, and examples from communities like yours. Save the best matches and take your plan with you.</p>
+      <a class="primary-action" href="#communityFilters"><i data-lucide="map-pin" aria-hidden="true"></i>Build your community profile</a>
     </div>
-    <dl class="catalog-counts">
-      <div><dt id="fundingCount">0</dt><dd>funding options</dd></div>
-      <div><dt id="resourceCount">0</dt><dd>planning resources</dd></div>
-      <div><dt id="caseStudyCount">0</dt><dd>community examples</dd></div>
-      <div><dt>U.S.-wide</dt><dd>50 states, D.C. + 5 territories</dd></div>
-    </dl>
+    <div class="scene-catalog" aria-label="Explorer catalog summary">
+      <div><strong id="fundingCount">0</strong><span>Funding</span></div>
+      <div><strong id="resourceCount">0</strong><span>Resources</span></div>
+      <div><strong id="caseStudyCount">0</strong><span>Examples</span></div>
+    </div>
+    <p class="photo-credit">Outdoor recreation photo: <a href="https://www.nps.gov/aboutus/disclaimer.htm" target="_blank" rel="noopener">National Park Service</a></p>
   </section>
 
-  <section id="caseStudiesIntro" class="pathways" aria-labelledby="pathwaysTitle">
-    <div class="pathways-heading">
-      <p class="eyebrow">Three ways forward</p>
-      <h2 id="pathwaysTitle">Find what your community needs now.</h2>
-    </div>
-    <div class="pathway">
-      <span class="pathway-number" aria-hidden="true">01</span>
-      <h3>Fund the work</h3>
-      <p>Review grants, loans, rebates, and other ways to pay for eligible projects.</p>
-      <a id="showFunding" href="#finder">Browse funding</a>
-    </div>
-    <div class="pathway">
-      <span class="pathway-number" aria-hidden="true">02</span>
-      <h3>Plan the project</h3>
-      <p>Find guides, data, training, and technical help that can make the work stronger.</p>
-      <a id="showResources" href="#finder">Browse resources</a>
-    </div>
-    <div class="pathway">
-      <span class="pathway-number" aria-hidden="true">03</span>
-      <h3>Learn from other places</h3>
-      <p>See source-backed examples from communities that faced similar goals and challenges.</p>
-      <a id="showCases" href="#finder">Browse case studies</a>
-    </div>
-  </section>
+  <nav id="workflowSteps" class="workflow-steps" aria-label="Community planning steps">
+    <button type="button" class="active" data-workflow-step="community" aria-current="step"><span>1</span><span><strong>Community</strong><small>Tell us about your place</small></span></button>
+    <button type="button" data-workflow-step="priorities"><span>2</span><span><strong>Priorities</strong><small>Choose your goals</small></span></button>
+    <button type="button" data-workflow-step="matches"><span>3</span><span><strong>Matches</strong><small>Review what fits</small></span></button>
+    <button type="button" data-workflow-step="plan"><span>4</span><span><strong>Plan</strong><small>Save your next steps</small></span></button>
+  </nav>
+  <main id="finder" class="explorer-shell">
+    <div class="explorer-main">
+      <button id="toggleFilters" class="filter-toggle" type="button" aria-expanded="false" aria-controls="communityFilters"><i data-lucide="sliders-horizontal" aria-hidden="true"></i><span>Show community questions</span></button>
 
-  <main id="finder" class="finder-layout">
-    <button id="toggleFilters" class="filter-toggle" type="button" aria-expanded="false" aria-controls="communityFilters">Show filters</button>
-    <aside id="communityFilters" class="filters" aria-label="Community questions">
-      <div class="filter-heading">
-        <p class="step-label"><span>1</span> Your place</p>
-        <h2>Build a community profile</h2>
-        <p>Your answers narrow the list. They do not determine eligibility.</p>
-      </div>
+      <form id="communityFilters" class="filters wizard-flow" aria-labelledby="filterTitle">
+        <header class="wizard-heading">
+          <p class="eyebrow">Community profile</p>
+          <h2 id="filterTitle">First, tell us about your community.</h2>
+          <p id="filterNote">A few answers help us find stronger matches. They do not decide whether you are eligible.</p>
+        </header>
 
-      <label for="communityName">Community name</label>
-      <input id="communityName" type="text" autocomplete="address-level2" placeholder="Example: Taos, New Mexico">
+        <section class="wizard-panel" data-wizard-panel="community" aria-labelledby="communityPanelTitle">
+          <div class="panel-heading">
+            <span class="panel-step" aria-hidden="true">1</span>
+            <div><h3 id="communityPanelTitle">Your place</h3><p>Enter a community and choose its location.</p></div>
+          </div>
+          <div class="field-grid">
+            <label class="field field-wide" for="communityName"><span>Community name</span><input id="communityName" type="text" autocomplete="address-level2" placeholder="Example: Taos, New Mexico"></label>
+            <label class="field" for="stateSelect"><span>State, D.C., or U.S. territory</span><select id="stateSelect"></select></label>
+            <label class="field" for="placeTypeSelect"><span>Community type</span><select id="placeTypeSelect"><option value="">Any community type</option><option value="town_or_city">Town or city</option><option value="county_or_region">County or region</option><option value="tribal_community">Tribal community</option><option value="statewide_or_multi_community">Statewide or multi-community</option></select></label>
+          </div>
+          <div class="profile-actions">
+            <button id="loadCommunityProfile" class="primary-button" type="button"><i data-lucide="search" aria-hidden="true"></i>Look up community</button>
+            <p id="profileStatus" class="status-message" role="status" aria-live="polite">Enter a place to add public community facts.</p>
+          </div>
+          <section id="communityProfileSummary" class="profile-summary" aria-labelledby="profileSummaryTitle" hidden>
+            <div class="section-heading"><div><p class="eyebrow">Community snapshot</p><h3 id="profileSummaryTitle">What we found</h3></div><button id="refreshProfile" class="icon-text-button" type="button"><i data-lucide="refresh-cw" aria-hidden="true"></i>Refresh</button></div>
+            <div id="profileSummaryContent" class="profile-summary-content"></div>
+          </section>
+        </section>
+        <section class="wizard-panel" data-wizard-panel="priorities" aria-labelledby="priorityPanelTitle">
+          <div class="panel-heading"><span class="panel-step" aria-hidden="true">2</span><div><h3 id="priorityPanelTitle">Your priorities</h3><p>Choose what you want to do and who will lead it.</p></div></div>
+          <label class="field" for="keywordSearch"><span>Search words or project name</span><input id="keywordSearch" type="search" placeholder="Trail, downtown, business, water"></label>
+          <div class="question-grid">
+            <fieldset><legend>Who will lead the work?</legend><div id="applicantOptions" class="check-list"></div></fieldset>
+            <fieldset><legend>What are you working on?</legend><div id="topicOptions" class="check-list"></div></fieldset>
+          </div>
+          <div class="field-grid compact-fields">
+            <label class="field" for="stageSelect"><span>What step are you on?</span><select id="stageSelect"></select></label>
+            <label class="toggle-row" for="includeClosed"><input id="includeClosed" type="checkbox"><span><strong>Plan for later rounds</strong><small>Include closed opportunities.</small></span></label>
+          </div>
+          <div id="prioritySummaryContent" class="priority-summary" aria-live="polite"></div>
+          <button id="resetButton" class="secondary-button" type="button"><i data-lucide="rotate-ccw" aria-hidden="true"></i>Reset answers</button>
+        </section>
+      </form>
 
-      <label for="stateSelect">State, D.C., or U.S. territory</label>
-      <select id="stateSelect"></select>
-
-      <label for="placeTypeSelect">Community type for examples</label>
-      <select id="placeTypeSelect">
-        <option value="">Any community type</option>
-        <option value="town_or_city">Town or city</option>
-        <option value="county_or_region">County or region</option>
-        <option value="tribal_community">Tribal community</option>
-        <option value="statewide_or_multi_community">Statewide or multi-community</option>
-      </select>
-
-      <div class="filter-divider">
-        <p class="step-label"><span>2</span> Your priorities</p>
-      </div>
-
-      <label for="keywordSearch">Search words or project name</label>
-      <input id="keywordSearch" type="search" placeholder="trail, downtown, business, water">
-
-      <fieldset>
-        <legend>Who will lead the work?</legend>
-        <div id="applicantOptions" class="check-list"></div>
-      </fieldset>
-
-      <fieldset>
-        <legend>What are you working on?</legend>
-        <div id="topicOptions" class="check-list"></div>
-      </fieldset>
-
-      <label for="stageSelect">What step are you on?</label>
-      <select id="stageSelect"></select>
-
-      <label class="toggle-row" for="includeClosed">
-        <input id="includeClosed" type="checkbox">
-        <span>Show closed rounds to plan ahead</span>
-      </label>
-
-      <button id="resetButton" class="secondary-action" type="button">Reset answers</button>
-    </aside>
-
-    <section class="results-workspace" aria-label="Matched funding, resources, and case studies">
-      <div class="results-heading">
-        <div>
-          <p class="step-label"><span>3</span> Your matches</p>
-          <h2 id="communityTitle">Funding, resources, and examples for rural communities</h2>
-          <p id="communitySummary">Choose a place and answer the questions. Your list will update as you go.</p>
-        </div>
+      <section id="matchesWorkspace" class="matches-workspace" aria-labelledby="communityTitle">
+        <header class="results-heading">
+          <div><p class="eyebrow">Your matches</p><h2 id="communityTitle">Funding, resources, and examples for rural communities</h2><p id="communitySummary">Choose a place and answer the questions. Your list will update as you go.</p></div>
+          <div class="match-actions">
+            <button id="showSavedOnly" class="secondary-button" type="button" aria-pressed="false"><i data-lucide="bookmark" aria-hidden="true"></i>Saved <span id="savedCountBadge" class="count-badge">0</span></button>
+            <button id="openCompare" class="secondary-button" type="button" aria-haspopup="dialog"><i data-lucide="columns-3" aria-hidden="true"></i>Compare <span id="compareCountBadge" class="count-badge">0</span></button>
+          </div>
+        </header>
         <div class="mode-tabs" role="group" aria-label="Choose what to show">
-          <button type="button" data-mode="All" class="active" aria-pressed="true">All</button>
-          <button type="button" data-mode="Funding" aria-pressed="false">Funding</button>
-          <button type="button" data-mode="Resource" aria-pressed="false">Resources</button>
-          <button type="button" data-mode="Case Study" aria-pressed="false">Case studies</button>
+          <button type="button" data-mode="All" class="active" aria-pressed="true"><i data-lucide="layout-grid" aria-hidden="true"></i>All</button>
+          <button id="showFunding" type="button" data-mode="Funding" aria-pressed="false"><i data-lucide="circle-dollar-sign" aria-hidden="true"></i>Funding</button>
+          <button id="showResources" type="button" data-mode="Resource" aria-pressed="false"><i data-lucide="book-open" aria-hidden="true"></i>Resources</button>
+          <button id="showCases" type="button" data-mode="Case Study" aria-pressed="false"><i data-lucide="landmark" aria-hidden="true"></i>Examples</button>
         </div>
-      </div>
+        <div class="result-stats" aria-label="Match totals">
+          <div><strong id="matchCount">0</strong><span>All matches</span></div>
+          <div><strong id="fundingMatchCount">0</strong><span>Funding</span></div>
+          <div><strong id="resourceMatchCount">0</strong><span>Resources</span></div>
+          <div><strong id="caseStudyMatchCount">0</strong><span>Examples</span></div>
+        </div>
+        <p id="matchAnnouncement" class="sr-only" aria-live="polite" aria-atomic="true"></p>
+        <div class="results-toolbar">
+          <label for="sortSelect"><span>Sort</span><select id="sortSelect"><option value="score">Most relevant</option><option value="title">Name</option><option value="status">Status</option><option value="type">Type</option></select></label>
+          <label for="limitSelect"><span>Show</span><select id="limitSelect"><option value="30" selected>30</option><option value="60">60</option><option value="120">120</option><option value="all">All</option></select></label>
+          <div class="legacy-exports" aria-label="Quick match exports"><button id="exportWord" type="button"><i data-lucide="file-text" aria-hidden="true"></i>Word</button><button id="exportCsv" type="button"><i data-lucide="sheet" aria-hidden="true"></i>CSV</button></div>
+        </div>
+        <div id="activeFilters" class="active-filters"></div>
+        <section id="results" class="results" aria-label="Matching catalog records"></section>
+      </section>
+    </div>
 
-      <div class="result-stats">
-        <div><strong id="matchCount">0</strong><span>matches</span></div>
-        <div><strong id="fundingMatchCount">0</strong><span>funding</span></div>
-        <div><strong id="resourceMatchCount">0</strong><span>resources</span></div>
-        <div><strong id="caseStudyMatchCount">0</strong><span>case studies</span></div>
-      </div>
-      <p id="matchAnnouncement" class="sr-only" aria-live="polite" aria-atomic="true"></p>
-
-      <div class="toolbar">
-        <label for="sortSelect">Sort</label>
-        <select id="sortSelect">
-          <option value="score">Most relevant</option>
-          <option value="title">Name</option>
-          <option value="status">Status</option>
-          <option value="type">Type</option>
-        </select>
-        <label for="limitSelect">Show</label>
-        <select id="limitSelect">
-          <option value="30" selected>30</option>
-          <option value="60">60</option>
-          <option value="120">120</option>
-          <option value="all">All</option>
-        </select>
-        <button id="exportWord" type="button">Export Word appendix</button>
-        <button id="exportCsv" type="button">Export CSV</button>
-      </div>
-
-      <div id="activeFilters" class="active-filters"></div>
-      <section id="results" class="results"></section>
-    </section>
+    <aside id="planWorkspace" class="plan-rail" aria-labelledby="planRailTitle">
+      <header class="plan-rail-heading">
+        <div><p class="eyebrow">Your plan</p><h2 id="planRailTitle">Build the next steps.</h2></div>
+        <button id="shareWorkspace" class="icon-button" type="button" aria-label="Share this workspace" aria-haspopup="dialog"><i data-lucide="share-2" aria-hidden="true"></i></button>
+      </header>
+      <section id="communitySnapshot" class="rail-section" aria-labelledby="snapshotTitle">
+        <div class="section-heading"><h3 id="snapshotTitle">Community snapshot</h3><button id="locateCommunity" class="icon-button" type="button" aria-label="Locate community on map"><i data-lucide="locate-fixed" aria-hidden="true"></i></button></div>
+        <p class="empty-copy">Add a community to see a quick public profile.</p>
+      </section>
+      <section class="rail-section map-section" aria-labelledby="mapTitle">
+        <div class="section-heading"><h3 id="mapTitle">Community map</h3><span id="mapStatus" class="map-status" role="status">Waiting for a place</span></div>
+        <div id="communityMap" class="community-map" role="region" aria-label="Map of the selected community"></div>
+      </section>
+      <section class="rail-section" aria-labelledby="roadmapTitle">
+        <div class="section-heading"><h3 id="roadmapTitle">Project roadmap</h3><span id="roadmapCount" class="count-badge">0</span></div>
+        <div id="roadmap" class="roadmap"><p class="empty-copy">Save matches to build a roadmap.</p></div>
+      </section>
+      <section class="rail-section" aria-labelledby="deadlinesTitle">
+        <div class="section-heading"><h3 id="deadlinesTitle">Deadlines</h3><button id="exportCalendar" class="icon-text-button" type="button"><i data-lucide="calendar-plus" aria-hidden="true"></i>Calendar</button></div>
+        <div id="deadlineList" class="deadline-list"><p class="empty-copy">Reviewed dates from saved funding will appear here.</p></div>
+      </section>
+      <section class="rail-section project-notes" aria-labelledby="projectDetailsTitle">
+        <h3 id="projectDetailsTitle">Project details</h3>
+        <label class="field" for="projectTitle"><span>Project title</span><input id="projectTitle" type="text" maxlength="120" placeholder="Example: Riverfront trail connection"></label>
+        <label class="field" for="projectNotes"><span>Notes</span><textarea id="projectNotes" rows="5" maxlength="5000" placeholder="Add goals, partners, or next steps. Notes stay on this device unless you export them."></textarea></label>
+      </section>
+      <section class="rail-section plan-exports" aria-labelledby="exportTitle">
+        <h3 id="exportTitle">Take your plan with you</h3>
+        <div class="action-grid">
+          <button id="exportPlanWord" class="primary-button" type="button"><i data-lucide="file-text" aria-hidden="true"></i>Word plan</button>
+          <button id="exportPlanCsv" class="secondary-button" type="button"><i data-lucide="sheet" aria-hidden="true"></i>CSV list</button>
+          <button id="exportWorkspaceFile" class="secondary-button" type="button"><i data-lucide="package-down" aria-hidden="true"></i>Save workspace</button>
+          <label class="file-button" for="importWorkspaceFile"><i data-lucide="package-open" aria-hidden="true"></i>Open workspace<input id="importWorkspaceFile" type="file" accept=".rerc-workspace,.json,application/json"></label>
+          <button id="exportRercie" class="rercie-button" type="button"><i data-lucide="sparkles" aria-hidden="true"></i>Open in RERCie</button>
+        </div>
+        <button id="deleteLocalData" class="danger-link" type="button">Delete my saved data</button>
+      </section>
+    </aside>
   </main>
 
-  <section class="download-band" aria-label="Full catalog downloads">
-    <div>
-      <p class="eyebrow">Use the full collection</p>
-      <h2>Download the full community explorer collection.</h2>
-      <p>The Word, Excel, and CSV files include all funding opportunities, resources, and community examples, with official links.</p>
-    </div>
+  <aside id="savedTray" class="saved-tray" aria-labelledby="savedTrayTitle" hidden>
+    <header><div><p class="eyebrow">Saved shortlist</p><h2 id="savedTrayTitle">Your selected matches <span id="savedTrayCount" class="count-badge">0</span></h2></div><button id="toggleSavedTray" class="icon-button" type="button" aria-label="Close saved matches"><i data-lucide="x" aria-hidden="true"></i></button></header>
+    <div id="savedTrayItems" class="saved-tray-items"><p class="empty-copy">Use Save on any result to add it here.</p></div>
+    <button id="compareSaved" class="primary-button" type="button"><i data-lucide="columns-3" aria-hidden="true"></i>Compare selected</button>
+  </aside>
+  <section id="catalogDownloads" class="download-band" aria-labelledby="downloadsTitle">
+    <div><p class="eyebrow">Full collection</p><h2 id="downloadsTitle">Download every catalog record.</h2><p>These files include all funding opportunities, resources, and community examples with official links.</p></div>
     <div class="download-actions">
-      <a href="downloads/RERC_Community_Explorer_Appendix_2026-07-18.docx" download>Full Word appendix</a>
-      <a href="downloads/RERC_Community_Explorer_Master_2026-07-18.xlsx" download>Full Excel workbook</a>
-      <a href="downloads/RERC_Community_Explorer_Master_2026-07-18.csv" download>Full CSV</a>
+      <a href="downloads/RERC_Community_Explorer_Appendix_2026-07-19.docx" download><i data-lucide="file-text" aria-hidden="true"></i>Word appendix</a>
+      <a href="downloads/RERC_Community_Explorer_Master_2026-07-19.xlsx" download><i data-lucide="sheet" aria-hidden="true"></i>Excel workbook</a>
+      <a href="downloads/RERC_Community_Explorer_Master_2026-07-19.csv" download><i data-lucide="table" aria-hidden="true"></i>CSV file</a>
     </div>
   </section>
 
-  <section class="writer-band" aria-label="RERCie Local Grant-Writing Guide">
+  <section id="rercie" class="writer-band" aria-labelledby="rercieTitle">
     <img class="rercie-mascot" src="assets/rercie-otter.jpg" alt="RERCie, a river otter holding a field notebook and trail map">
     <div class="rercie-copy">
       <p class="eyebrow">Optional Windows tool</p>
-      <h2>Meet RERCie, your local grant-writing guide.</h2>
+      <h2 id="rercieTitle">Meet RERCie, your local grant-writing guide.</h2>
       <p>RERCie helps you review likely matches and start a grant draft with your own notes.</p>
-      <p>The setup guide walks you through each step. Local writing does not need a command line, account, or AI key. Optional Census facts need internet access. A free Census API key is only needed if the service rate-limits the computer.</p>
+      <p>The setup guide walks you through each step. Local writing does not need a command line, account, or AI key. RERCie first checks the public community profile file. A free Census API key is only needed when that file has no exact match and you ask RERCie to check Census directly.</p>
       <p>RERCie is a community-built companion. It is not an EPA grant program, does not determine eligibility, and does not submit applications.</p>
-      <p class="writer-note">First use downloads Google Gemma, about 0.81 GB. Check every fact and funding rule before you apply.</p>
+      <p class="writer-note">The first time you use RERCie, it downloads Google Gemma (about 0.81 GB). Before you apply, verify dates and rules on the official funding page.</p>
     </div>
     <div class="writer-actions">
-      <a href="https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Setup.exe">Download RERCie for Windows</a>
+      <a href="https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Setup.exe"><i data-lucide="download" aria-hidden="true"></i>Download RERCie for Windows</a>
       <span>Windows 10 or 11, 64-bit. No command line.</span>
-      <span class="signing-note">This community-built installer is not yet digitally signed, so Windows may show a safety notice. Installer lifecycle testing ran on the build computer, not a separate clean Windows virtual machine. Package-bound local Gemma generation passed. A later standalone retest could not run because the local service was not open.</span>
-      <span class="verification-links">Technical checks: <a href="https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Setup.exe.sha256">SHA-256</a> | <a href="https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Release-QA.json">release QA</a></span>
+      <span class="signing-note">This independent tool is not digitally signed. Windows may show a safety warning. Review the download details before installing.</span>
+      <span class="verification-links"><a href="https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Setup.exe.sha256">Checksum</a> | <a href="https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Release-QA.json">Release details</a></span>
     </div>
   </section>
 
-  <footer>
-    <p><strong>Recreation Economy <em>for</em> Rural Communities</strong></p>
-    <p>This community-built explorer is not an EPA grant program. Program rules and dates can change. Confirm current requirements before applying or making a decision.</p>
-    <p><a href="https://www.epa.gov/smartgrowth/recreation-economy-rural-communities">Learn about RERC at EPA.gov</a></p>
+  <footer class="site-footer">
+    <div><strong>Recreation Economy <em>for</em> Rural Communities</strong><p>This community-built explorer is not an EPA grant program. Program rules and dates can change. Check the funder's page before you apply or make a decision.</p></div>
+    <a href="https://www.epa.gov/smartgrowth/recreation-economy-rural-communities" target="_blank" rel="noopener">Learn about RERC at EPA.gov</a>
   </footer>
+  <nav class="mobile-nav" aria-label="Explorer navigation">
+    <a href="#communityFilters"><i data-lucide="map-pin" aria-hidden="true"></i><span>Community</span></a>
+    <a href="#matchesWorkspace"><i data-lucide="search" aria-hidden="true"></i><span>Matches</span></a>
+    <button type="button" data-mobile-action="saved"><span class="mobile-icon"><i data-lucide="bookmark" aria-hidden="true"></i><b id="mobileSavedCount">0</b></span><span>Saved</span></button>
+    <a href="#planWorkspace"><i data-lucide="list-checks" aria-hidden="true"></i><span>Plan</span></a>
+  </nav>
+
+  <dialog id="compareDialog" class="app-dialog" aria-labelledby="compareTitle">
+    <form method="dialog" class="dialog-shell">
+      <header><div><p class="eyebrow">Side-by-side review</p><h2 id="compareTitle">Compare saved matches</h2></div><button class="icon-button" value="close" aria-label="Close comparison"><i data-lucide="x" aria-hidden="true"></i></button></header>
+      <div id="comparisonTable" class="comparison-table" tabindex="0"><p class="empty-copy">Choose up to three saved items to compare.</p></div>
+      <footer><button class="secondary-button" value="close">Close</button></footer>
+    </form>
+  </dialog>
+
+  <dialog id="shareDialog" class="app-dialog compact-dialog" aria-labelledby="shareTitle">
+    <form method="dialog" class="dialog-shell">
+      <header><div><p class="eyebrow">Share</p><h2 id="shareTitle">Share this workspace</h2></div><button class="icon-button" value="close" aria-label="Close sharing"><i data-lucide="x" aria-hidden="true"></i></button></header>
+      <p>Shared links include your community, filters, and selected records. Private notes are not included.</p>
+      <label class="field" for="shareLink"><span>Share link</span><input id="shareLink" type="url" readonly></label>
+      <button id="copyShareLink" class="primary-button" type="button"><i data-lucide="copy" aria-hidden="true"></i>Copy link</button>
+      <p id="shareStatus" class="status-message" role="status" aria-live="polite"></p>
+    </form>
+  </dialog>
+  <dialog id="languageDialog" class="app-dialog compact-dialog" aria-labelledby="languageTitle">
+    <form method="dialog" class="dialog-shell">
+      <header><div><p class="eyebrow">Language</p><h2 id="languageTitle">Choose a language</h2></div><button class="icon-button" value="close" aria-label="Close language menu"><i data-lucide="x" aria-hidden="true"></i></button></header>
+      <fieldset class="language-options"><legend class="sr-only">Available languages</legend><label><input type="radio" name="language" value="en" data-language="en" checked><span><strong>English</strong><small>Current language</small></span></label><label><input type="radio" name="language" value="es" data-language="es"><span><strong>Español</strong><small>Spanish interface</small></span></label></fieldset>
+      <p class="dialog-note">Program rules remain in their source language unless a reviewed translation is available.</p>
+      <button class="primary-button" value="close">Done</button>
+    </form>
+  </dialog>
 
   <script src="vendor/jszip.min.js"></script>
   <script src="data.js"></script>
   <script src="case_studies.js"></script>
+  <script src="community_profiles.js"></script>
+  <script src="vendor/lucide.min.js"></script>
   <script src="app.js?v=20260718-2"></script>
+  <script src="planner.js?v=20260718-v2"></script>
 </body>
 </html>

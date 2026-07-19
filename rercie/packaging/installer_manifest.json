@@ -1,7 +1,7 @@
 {
     "package":  {
                     "name":  "RERCie",
-                    "version":  "0.3.5",
+                    "version":  "0.4.0",
                     "installer":  "RERCie-Setup.exe",
                     "entrypoint":  "RERCie.exe",
                     "powershell_required":  false,

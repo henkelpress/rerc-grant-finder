@@ -19,13 +19,17 @@ from typing import Any
 from xml.sax.saxutils import escape
 
 
-APP_VERSION = "0.3.5"
+APP_VERSION = "0.4.0"
 APP_DIR = Path(os.environ.get("RERCIE_APP_ROOT") or (Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent))
 ASSET_DIR = APP_DIR / "assets"
 if not ASSET_DIR.is_dir() and not getattr(sys, "frozen", False):
     ASSET_DIR = Path(__file__).resolve().parent.parent / "assets"
 LOCAL_KNOWLEDGE_DIR = APP_DIR / "local_knowledge"
 PUBLIC_CATALOG_URL = "https://henkelpress.github.io/rerc-grant-finder/data.js"
+PUBLIC_COMMUNITY_PROFILE_URL = "https://henkelpress.github.io/rerc-grant-finder/community_profiles.js"
+COMMUNITY_PROFILE_PREFIX = "window.RERC_COMMUNITY_PROFILES="
+MAX_COMMUNITY_PROFILE_BYTES = 8 * 1024 * 1024
+MAX_COMMUNITY_PROFILE_RECORDS = 50000
 CATALOG_PREFIXES = ("window.RERC_CATALOG = ", "window.GRANT_EXPLORER_DATA = ")
 DEFAULT_MODEL = "gemma-3-1b-it-Q4_K_M.gguf"
 LOCAL_CHAT_URL = os.environ.get("RERCIE_LOCAL_CHAT_URL", "http://127.0.0.1:8788/v1/chat/completions")
@@ -37,6 +41,12 @@ EXPECTED_ORIGIN = f"http://{EXPECTED_HOST}"
 CENSUS_YEAR = "2024"
 CENSUS_ISLAND_YEAR = "2020"
 MAX_REQUEST_BYTES = 6 * 1024 * 1024
+HANDOFF_SCHEMA = "rercie-handoff"
+HANDOFF_VERSION = 1
+MAX_HANDOFF_BYTES = 256 * 1024
+MAX_HANDOFF_RECORDS = 100
+MAX_HANDOFF_ROADMAP_ITEMS = 50
+STARTUP_HANDOFF_PATH = APP_DIR / "runtime" / "handoff" / "pending.rercie"
 
 STATE_FIPS = {
     "Alabama": "01", "Alaska": "02", "Arizona": "04", "Arkansas": "05", "California": "06",
@@ -61,6 +71,63 @@ ISLAND_AREA_DATASETS = {
     "U.S. Virgin Islands": "dhcvi",
 }
 
+HANDOFF_TOP_LEVEL_FIELDS = {
+    "schema", "version", "community", "state", "projectTitle", "projectNotes",
+    "profile", "roadmap", "selectedRecords",
+}
+HANDOFF_PROFILE_FIELD_LIMITS = {
+    "geoid": 32,
+    "place": 300,
+    "geography_type": 80,
+    "population": 40,
+    "median_age": 40,
+    "median_household_income": 40,
+    "poverty_rate_percent": 40,
+    "source": 500,
+    "source_url": 2048,
+    "year": 20,
+    "coverage_note": 2000,
+    "margin_of_error_note": 2000,
+    "suppressed": 20,
+}
+HANDOFF_ROADMAP_FIELD_LIMITS = {
+    "id": 200,
+    "stage": 100,
+    "title": 500,
+    "description": 4000,
+    "status": 100,
+    "dueDate": 40,
+    "owner": 300,
+    "notes": 4000,
+    "sourceUrl": 2048,
+}
+HANDOFF_RECORD_FIELD_LIMITS = {
+    "item_id": 200,
+    "item_type": 40,
+    "title": 500,
+    "organization": 500,
+    "status": 200,
+    "last_checked": 40,
+    "geography": 500,
+    "eligible_users": 3000,
+    "project_stage": 500,
+    "topic_tags": 3000,
+    "support_type": 200,
+    "amount_or_cost": 2000,
+    "match_or_cost": 2000,
+    "deadline_or_availability": 2000,
+    "summary": 5000,
+    "why_it_matters": 5000,
+    "source_url": 2048,
+    "case_place": 300,
+    "case_state": 100,
+    "case_place_type": 100,
+    "case_program": 500,
+    "case_year": 40,
+    "case_partners": 2000,
+}
+HTML_MARKUP_PATTERN = re.compile(r"<\s*/?\s*[A-Za-z!][^>]*>")
+
 SYSTEM_PROMPT = """You are an evidence-extraction assistant. Return JSON only.
 
 Select up to six useful excerpts copied exactly from the supplied evidence. Do not
@@ -68,6 +135,253 @@ paraphrase, summarize, correct, combine, or add text. Each excerpt must be a
 complete sentence or a short self-contained phrase. Return this shape:
 {"excerpts":[{"text":"exact copied text"}]}
 If there is no useful evidence, return {"excerpts":[]}."""
+
+
+def _plain_object(value: Any, label: str) -> dict[str, Any]:
+    if type(value) is not dict:
+        raise ValueError(f"{label} must be a plain JSON object.")
+    return value
+
+
+def _bounded_handoff_string(value: Any, label: str, limit: int, required: bool = False) -> str:
+    if type(value) is not str:
+        raise ValueError(f"{label} must be text.")
+    text = unicodedata.normalize("NFC", value)
+    if len(text) > limit:
+        raise ValueError(f"{label} is too long.")
+    if required and not text.strip():
+        raise ValueError(f"{label} is required.")
+    if HTML_MARKUP_PATTERN.search(text):
+        raise ValueError(f"{label} contains HTML markup. Use plain text only.")
+    return text
+
+
+def _validated_http_url(value: Any, label: str, limit: int = 2048) -> str:
+    url = _bounded_handoff_string(value, label, limit)
+    if not url:
+        return ""
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc or parsed.username or parsed.password:
+        raise ValueError(f"{label} must be a public http or https URL.")
+    return url
+
+
+def _reject_json_constant(value: str) -> Any:
+    raise ValueError(f"Unsupported JSON value: {value}.")
+
+
+def validate_handoff_package(package: Any) -> dict[str, Any]:
+    handoff = _plain_object(package, "The plan")
+    keys = set(handoff)
+    if keys != HANDOFF_TOP_LEVEL_FIELDS:
+        missing = sorted(HANDOFF_TOP_LEVEL_FIELDS - keys)
+        unexpected = sorted(keys - HANDOFF_TOP_LEVEL_FIELDS)
+        details = []
+        if missing:
+            details.append("missing " + ", ".join(missing))
+        if unexpected:
+            details.append("unexpected " + ", ".join(unexpected))
+        raise ValueError("The plan fields are not valid" + (": " + "; ".join(details) if details else "."))
+    if handoff.get("schema") != HANDOFF_SCHEMA or type(handoff.get("schema")) is not str:
+        raise ValueError(f"The plan schema must be {HANDOFF_SCHEMA}.")
+    if type(handoff.get("version")) is not int or handoff.get("version") != HANDOFF_VERSION:
+        raise ValueError(f"The plan version must be {HANDOFF_VERSION}.")
+
+    community = _bounded_handoff_string(handoff.get("community"), "community", 200, required=True)
+    state = _bounded_handoff_string(handoff.get("state"), "state", 100, required=True)
+    if state not in STATE_FIPS:
+        raise ValueError("state must be a supported U.S. state or territory.")
+    project_title = _bounded_handoff_string(handoff.get("projectTitle"), "projectTitle", 300, required=True)
+    project_notes = _bounded_handoff_string(handoff.get("projectNotes"), "projectNotes", 20000)
+
+    raw_profile = _plain_object(handoff.get("profile"), "profile")
+    unexpected_profile = set(raw_profile) - set(HANDOFF_PROFILE_FIELD_LIMITS)
+    if unexpected_profile:
+        raise ValueError("profile contains unsupported fields: " + ", ".join(sorted(unexpected_profile)))
+    profile: dict[str, Any] = {}
+    for key, value in raw_profile.items():
+        if type(value) not in {str, int, float, bool}:
+            raise ValueError(f"profile.{key} must be a text, number, or true/false value.")
+        text = _bounded_handoff_string(str(value), f"profile.{key}", HANDOFF_PROFILE_FIELD_LIMITS[key])
+        profile[key] = text
+    if "source_url" in profile:
+        profile["source_url"] = _validated_http_url(profile["source_url"], "profile.source_url")
+
+    raw_roadmap = handoff.get("roadmap")
+    if type(raw_roadmap) is not list:
+        raise ValueError("roadmap must be a JSON array.")
+    if len(raw_roadmap) > MAX_HANDOFF_ROADMAP_ITEMS:
+        raise ValueError(f"roadmap can contain no more than {MAX_HANDOFF_ROADMAP_ITEMS} items.")
+    roadmap: list[dict[str, str]] = []
+    for index, raw_item in enumerate(raw_roadmap):
+        item = _plain_object(raw_item, f"roadmap[{index}]")
+        unexpected_fields = set(item) - set(HANDOFF_ROADMAP_FIELD_LIMITS)
+        if unexpected_fields:
+            raise ValueError(f"roadmap[{index}] contains unsupported fields: " + ", ".join(sorted(unexpected_fields)))
+        if "stage" not in item or "title" not in item:
+            raise ValueError(f"roadmap[{index}] must include stage and title.")
+        normalized_item: dict[str, str] = {}
+        for key, value in item.items():
+            normalized_item[key] = _bounded_handoff_string(
+                value,
+                f"roadmap[{index}].{key}",
+                HANDOFF_ROADMAP_FIELD_LIMITS[key],
+                required=key in {"stage", "title"},
+            )
+        if normalized_item.get("sourceUrl"):
+            normalized_item["sourceUrl"] = _validated_http_url(
+                normalized_item["sourceUrl"], f"roadmap[{index}].sourceUrl"
+            )
+        roadmap.append(normalized_item)
+
+    raw_records = handoff.get("selectedRecords")
+    if type(raw_records) is not list:
+        raise ValueError("selectedRecords must be a JSON array.")
+    if len(raw_records) > MAX_HANDOFF_RECORDS:
+        raise ValueError(f"selectedRecords can contain no more than {MAX_HANDOFF_RECORDS} records.")
+    selected_records: list[dict[str, str]] = []
+    record_ids: set[str] = set()
+    for index, raw_record in enumerate(raw_records):
+        record = _plain_object(raw_record, f"selectedRecords[{index}]")
+        unexpected_fields = set(record) - set(HANDOFF_RECORD_FIELD_LIMITS)
+        if unexpected_fields:
+            raise ValueError(
+                f"selectedRecords[{index}] contains unsupported fields: " + ", ".join(sorted(unexpected_fields))
+            )
+        required_fields = {"item_id", "item_type", "title", "source_url"}
+        if not required_fields.issubset(record):
+            raise ValueError(f"selectedRecords[{index}] must include item_id, item_type, title, and source_url.")
+        normalized_record: dict[str, str] = {}
+        for key, value in record.items():
+            normalized_record[key] = _bounded_handoff_string(
+                value,
+                f"selectedRecords[{index}].{key}",
+                HANDOFF_RECORD_FIELD_LIMITS[key],
+                required=key in required_fields,
+            )
+        item_type = normalized_record["item_type"].lower()
+        if item_type not in {"funding", "resource", "case study"}:
+            raise ValueError(f"selectedRecords[{index}].item_type is not supported.")
+        normalized_record["source_url"] = _validated_http_url(
+            normalized_record["source_url"], f"selectedRecords[{index}].source_url"
+        )
+        item_id = normalized_record["item_id"]
+        if item_id in record_ids:
+            raise ValueError(f"selectedRecords contains a duplicate item_id: {item_id}.")
+        record_ids.add(item_id)
+        selected_records.append(normalized_record)
+
+    return {
+        "schema": HANDOFF_SCHEMA,
+        "version": HANDOFF_VERSION,
+        "community": community,
+        "state": state,
+        "projectTitle": project_title,
+        "projectNotes": project_notes,
+        "profile": profile,
+        "roadmap": roadmap,
+        "selectedRecords": selected_records,
+    }
+
+
+def validate_handoff_text(raw: str | bytes) -> dict[str, Any]:
+    if isinstance(raw, bytes):
+        encoded = raw
+        try:
+            text = raw.decode("utf-8-sig")
+        except UnicodeDecodeError as exc:
+            raise ValueError("The plan must be UTF-8 JSON text.") from exc
+    elif type(raw) is str:
+        text = raw
+        encoded = raw.encode("utf-8")
+    else:
+        raise ValueError("The plan must be JSON text.")
+    if not encoded or len(encoded) > MAX_HANDOFF_BYTES:
+        raise ValueError(f"The plan must be no larger than {MAX_HANDOFF_BYTES // 1024} KB.")
+    try:
+        package = json.loads(text, parse_constant=_reject_json_constant)
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ValueError("The plan is not valid JSON.") from exc
+    return validate_handoff_package(package)
+
+
+def _selected_record_summary(record: dict[str, str]) -> str:
+    fields = (
+        ("Program", record.get("title")),
+        ("Organization", record.get("organization")),
+        ("Status", record.get("status")),
+        ("Eligible users", record.get("eligible_users")),
+        ("Project stage", record.get("project_stage")),
+        ("Amount or support", record.get("amount_or_cost")),
+        ("Match or cost", record.get("match_or_cost")),
+        ("Deadline or availability", record.get("deadline_or_availability")),
+        ("Summary", record.get("summary")),
+        ("Official page", record.get("source_url")),
+    )
+    return "\n".join(f"{label}: {value}" for label, value in fields if value)
+
+
+def handoff_to_form(handoff: dict[str, Any]) -> dict[str, Any]:
+    funding_records = [
+        record for record in handoff["selectedRecords"]
+        if record.get("item_type", "").lower() == "funding"
+    ]
+    reference_records = [
+        record for record in handoff["selectedRecords"]
+        if record.get("item_type", "").lower() != "funding"
+    ]
+    selected_funding_details = "\n\n---\n\n".join(_selected_record_summary(record) for record in funding_records)
+    notes_parts = [handoff["projectNotes"].strip()] if handoff["projectNotes"].strip() else []
+    if handoff["roadmap"]:
+        roadmap_lines = ["Community Explorer roadmap:"]
+        for item in handoff["roadmap"]:
+            line = f"- {item.get('stage')}: {item.get('title')}"
+            if item.get("description"):
+                line += f" - {item['description']}"
+            if item.get("status"):
+                line += f" (Status: {item['status']})"
+            roadmap_lines.append(line)
+        notes_parts.append("\n".join(roadmap_lines))
+    if reference_records:
+        reference_lines = ["Selected public resources and community examples:"]
+        for record in reference_records:
+            reference_lines.append(
+                f"- {record.get('title')} ({record.get('item_type')}): {record.get('source_url')}"
+            )
+        notes_parts.append("\n".join(reference_lines))
+    return {
+        "status": "imported",
+        "message": (
+            f"Opened the Community Explorer plan for {handoff['community']}. "
+            f"Imported {len(funding_records)} funding record"
+            f"{'' if len(funding_records) == 1 else 's'} and "
+            f"{len(reference_records)} resource or community example"
+            f"{'' if len(reference_records) == 1 else 's'}."
+        ),
+        "community": handoff["community"],
+        "state": handoff["state"],
+        "projectTitle": handoff["projectTitle"],
+        "projectNotes": "\n\n".join(notes_parts),
+        "profile": handoff["profile"],
+        "roadmap": handoff["roadmap"],
+        "selectedRecords": handoff["selectedRecords"],
+        "selectedFundingDetails": selected_funding_details,
+    }
+
+
+def consume_startup_handoff() -> dict[str, Any] | None:
+    if not STARTUP_HANDOFF_PATH.is_file():
+        return None
+    try:
+        size = STARTUP_HANDOFF_PATH.stat().st_size
+        if size <= 0 or size > MAX_HANDOFF_BYTES:
+            raise ValueError(f"The launcher plan must be no larger than {MAX_HANDOFF_BYTES // 1024} KB.")
+        return handoff_to_form(validate_handoff_text(STARTUP_HANDOFF_PATH.read_bytes()))
+    finally:
+        try:
+            STARTUP_HANDOFF_PATH.unlink()
+        except OSError:
+            pass
 
 
 def request_json(url: str, payload: dict[str, Any] | None = None, headers: dict[str, str] | None = None, timeout: int = 30) -> Any:
@@ -78,7 +392,8 @@ def request_json(url: str, payload: dict[str, Any] | None = None, headers: dict[
     if headers:
         request_headers.update(headers)
     request = urllib.request.Request(url, data=body, headers=request_headers)
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    opener = urllib.request.build_opener(_HttpsOnlyRedirectHandler())
+    with opener.open(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -101,14 +416,115 @@ def parse_public_catalog(raw: str) -> dict[str, Any]:
     raise ValueError("The public funding file did not contain funding records.")
 
 
-def fetch_public_catalog() -> dict[str, Any]:
+class _HttpsOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> Any:
+        if urllib.parse.urlsplit(newurl).scheme.lower() != "https":
+            raise ValueError("The public resource redirected away from HTTPS.")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _request_text(url: str, *, timeout: int = 30, max_bytes: int = MAX_REQUEST_BYTES) -> str:
+    if not url.lower().startswith("https://"):
+        raise ValueError("RERCie can only fetch public HTTPS resources.")
+    if max_bytes <= 0:
+        raise ValueError("The public payload size limit must be positive.")
     request = urllib.request.Request(
-        PUBLIC_CATALOG_URL,
+        url,
         headers={"Accept": "application/javascript,text/plain,*/*", "User-Agent": f"RERCie/{APP_VERSION}"},
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return parse_public_catalog(response.read().decode("utf-8"))
+    opener = urllib.request.build_opener(_HttpsOnlyRedirectHandler())
+    with opener.open(request, timeout=timeout) as response:
+        final_url = response.geturl()
+        if not final_url.lower().startswith("https://"):
+            raise ValueError("The public resource redirected away from HTTPS.")
+        content_length = response.headers.get("Content-Length", "").strip()
+        if content_length:
+            try:
+                content_length_value = int(content_length)
+            except ValueError as exc:
+                raise ValueError("The public payload had an invalid size header.") from exc
+            if content_length_value < 0 or content_length_value > max_bytes:
+                raise ValueError("The public payload exceeded the size limit.")
+        payload = response.read(max_bytes + 1)
+    if len(payload) > max_bytes:
+        raise ValueError("The public payload exceeded the size limit.")
+    try:
+        return payload.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("The public payload was not valid UTF-8.") from exc
 
+
+def fetch_public_catalog() -> dict[str, Any]:
+    return parse_public_catalog(_request_text(PUBLIC_CATALOG_URL))
+
+
+def parse_public_community_profiles(raw: str) -> list[dict[str, Any]]:
+    try:
+        raw_bytes = raw.encode("utf-8")
+    except UnicodeEncodeError as exc:
+        raise ValueError("The public community profile file was not valid UTF-8.") from exc
+    if len(raw_bytes) > MAX_COMMUNITY_PROFILE_BYTES:
+        raise ValueError("The public community profile file exceeded the size limit.")
+    match = re.fullmatch(
+        r"window\.RERC_COMMUNITY_PROFILES\s*=\s*(\[.*\])\s*;\s*",
+        raw.strip(),
+        flags=re.DOTALL,
+    )
+    if not match:
+        raise ValueError("The public community profile file was not in the expected format.")
+    try:
+        records = json.loads(match.group(1))
+    except json.JSONDecodeError as exc:
+        raise ValueError("The public community profile file contained invalid JSON.") from exc
+    if not isinstance(records, list):
+        raise ValueError("The public community profile file was not a list.")
+    if len(records) > MAX_COMMUNITY_PROFILE_RECORDS:
+        raise ValueError("The public community profile file contained too many records.")
+    if any(not isinstance(record, dict) for record in records):
+        raise ValueError("The public community profile file contained an invalid record.")
+    return records
+
+
+def _coerce_profile_number(raw: Any) -> str:
+    value = str(raw or "").strip()
+    if value and value.lower() == "nan":
+        return ""
+    return value
+
+
+def _normalize_lookup_name(value: str) -> str:
+    text = unicodedata.normalize("NFKD", value or "").encode("ascii", "ignore").decode("ascii").lower()
+    return re.sub(r"[^a-z0-9]+", " ", text).strip()
+
+
+def fetch_public_community_profile(community: str, state: str) -> dict[str, str]:
+    records = parse_public_community_profiles(
+        _request_text(PUBLIC_COMMUNITY_PROFILE_URL, max_bytes=MAX_COMMUNITY_PROFILE_BYTES)
+    )
+    target_name = _normalize_lookup_name((community or "").split(",", 1)[0])
+    target_state = _normalize_lookup_name(state or "")
+    for record in records:
+        candidate_name = _normalize_lookup_name(str(record.get("community", "")) or str(record.get("name", "")))
+        candidate_state = _normalize_lookup_name(str(record.get("state", "")))
+        if candidate_name == target_name and candidate_state == target_state:
+            source = str(record.get("source") or "RERC Community Explorer profile bundle").strip()
+            profile: dict[str, str] = {
+                "source": source,
+                "source_url": "https://henkelpress.github.io/rerc-grant-finder/",
+                "year": str(record.get("vintage") or ""),
+                "geography_type": str(record.get("placeType") or "community").replace("_", " ").strip(),
+                "place": str(record.get("name") or record.get("community") or ""),
+                "population": _coerce_profile_number(record.get("population")),
+                "median_household_income": _coerce_profile_number(record.get("medianHouseholdIncome")),
+                "poverty_rate_percent": _coerce_profile_number(record.get("povertyRate")),
+                "coverage_note": str(record.get("coverageNote") or "").strip(),
+            }
+            if record.get("geoid"):
+                profile["geoid"] = str(record.get("geoid") or "").strip()
+            if record.get("broadbandRate") is not None:
+                profile["broadband_rate"] = _coerce_profile_number(record.get("broadbandRate"))
+            return profile
+    return {}
 
 def _local_env_value(name: str) -> str:
     value = os.environ.get(name, "").strip()
@@ -171,6 +587,10 @@ def _best_geography_record(rows: Any, community: str) -> dict[str, str]:
     return scored[0][2]
 
 
+def _census_api_key(census_api_key: str = "") -> str:
+    return (census_api_key or _local_env_value("CENSUS_API_KEY")).strip()
+
+
 def _census_url(path: str, params: dict[str, str]) -> str:
     return f"https://api.census.gov/data/{path}?{urllib.parse.urlencode(params)}"
 
@@ -181,13 +601,13 @@ def fetch_census_community_profile(community: str, state: str, census_api_key: s
     fips = STATE_FIPS.get(state)
     if not community or not fips:
         return {}
-    api_key = (census_api_key or _local_env_value("CENSUS_API_KEY")).strip()
+    api_key = _census_api_key(census_api_key)
+    if not api_key:
+        raise PermissionError("A Census API key is required for direct lookup.")
 
     if state in ISLAND_AREA_DATASETS:
         dataset = ISLAND_AREA_DATASETS[state]
-        params = {"get": "NAME,P1_001N", "for": f"state:{fips}"}
-        if api_key:
-            params["key"] = api_key
+        params = {"get": "NAME,P1_001N", "for": f"state:{fips}", "key": api_key}
         rows = request_json(_census_url(f"{CENSUS_ISLAND_YEAR}/dec/{dataset}", params), timeout=30)
         record = dict(zip(rows[0], rows[1], strict=False)) if isinstance(rows, list) and len(rows) > 1 else {}
         if not record:
@@ -206,9 +626,7 @@ def fetch_census_community_profile(community: str, state: str, census_api_key: s
     explicit_county = bool(re.search(r"\b(county|parish|census area)\b", community, re.IGNORECASE))
     geography_types = ("county", "place") if explicit_county else ("place", "county")
     for geography_type in geography_types:
-        params = {"get": fields, "for": f"{geography_type}:*", "in": f"state:{fips}"}
-        if api_key:
-            params["key"] = api_key
+        params = {"get": fields, "for": f"{geography_type}:*", "in": f"state:{fips}", "key": api_key}
         rows = request_json(_census_url(f"{CENSUS_YEAR}/acs/acs5/profile", params), timeout=30)
         record = _best_geography_record(rows, community)
         if not record:
@@ -228,19 +646,57 @@ def fetch_census_community_profile(community: str, state: str, census_api_key: s
         }
     return {}
 
-
 def lookup_community_profile(community: str, state: str, census_api_key: str = "") -> dict[str, Any]:
     if not (community or "").strip() or not (state or "").strip():
         return {"profile": {}, "message": "Enter a community and choose a state or territory first.", "status": "missing_input"}
+
+    api_key = _census_api_key(census_api_key)
+    key_provided = bool(api_key)
     try:
-        profile = fetch_census_community_profile(community, state, census_api_key)
+        profile = fetch_public_community_profile(community, state)
+    except Exception:
+        if not key_provided:
+            return {
+                "profile": {},
+                "message": "No public profile match was available. Add a Census API key for this lookup, or check the spelling and state for your community.",
+                "status": "key_required",
+            }
+        profile = {}
+
+    if profile:
+        return {
+            "profile": profile,
+            "message": f"Community facts found for {profile.get('place', community)}.",
+            "status": "found",
+        }
+
+    if not key_provided:
+        return {
+            "profile": {},
+            "message": "A matching public community profile was not found. Add a Census API key for this lookup, or check the spelling and state for your community.",
+            "status": "key_required",
+        }
+
+    try:
+        profile = fetch_census_community_profile(community, state, api_key)
     except PermissionError as exc:
         return {"profile": {}, "message": str(exc), "status": "key_required"}
     except Exception:
-        return {"profile": {}, "message": "Community facts could not be reached right now. The draft will mark local facts that still need to be added.", "status": "unavailable"}
+        return {
+            "profile": {},
+            "message": "Community facts could not be reached right now. The draft will mark local facts that still need to be added.",
+            "status": "unavailable",
+        }
+
     if not profile:
-        return {"profile": {}, "message": "No exact Census place or county match was found. Check the community name or add local facts in the notes.", "status": "not_found"}
+        return {
+            "profile": {},
+            "message": "No exact Census place or county match was found. Check the community name or add local facts in the notes.",
+            "status": "not_found",
+        }
+
     return {"profile": profile, "message": f"Community facts found for {profile.get('place', community)}.", "status": "found"}
+
 
 def load_local_knowledge(max_total_chars: int = 32000, max_file_chars: int = 9000) -> str:
     LOCAL_KNOWLEDGE_DIR.mkdir(parents=True, exist_ok=True)
@@ -705,6 +1161,9 @@ HTML_PAGE = r'''<!doctype html>
     .community-profile { margin-top:10px; padding:12px; border-left:5px solid var(--river); background:var(--sky); }
     .community-profile strong { display:block; margin-bottom:4px; }
     .community-profile ul { margin:6px 0; padding-left:20px; }
+    .plan-import { margin-bottom:18px; padding:12px; border-left:5px solid var(--sun); background:#fff8df; }
+    .plan-import label { margin-top:0; }
+    .plan-import .status { margin-bottom:0; }
     .working { margin:12px 0; padding:12px; border:1px solid #b8d6c5; background:#eef7f1; }
     .working-row { display:flex; justify-content:space-between; gap:12px; color:var(--forest); font-weight:800; }
     .working progress { display:block; width:100%; height:14px; margin-top:8px; accent-color:var(--green); }
@@ -723,6 +1182,12 @@ HTML_PAGE = r'''<!doctype html>
   <div class="notice"><strong>Keep in mind:</strong> RERCie is a community-built grant-writing guide. It is not an EPA grant program. It does not decide who can apply or submit an application for you.</div>
   <main>
     <section class="panel">
+      <div class="plan-import">
+        <h2>Start from a Community Explorer plan</h2>
+        <label for="planInput">Open Community Explorer plan</label>
+        <input id="planInput" type="file" accept=".rercie,.json,application/json">
+        <p id="planImportStatus" class="status" aria-live="polite">Choose a `.rercie` plan exported by the public explorer.</p>
+      </div>
       <h2>Tell us about the project</h2>
       <p class="section-note">Start with the facts you know. The draft will mark anything that is missing.</p>
       <label for="community">Community</label><input id="community" placeholder="Example: Taos">
@@ -736,9 +1201,9 @@ HTML_PAGE = r'''<!doctype html>
       <label for="sourceNotes">Facts to check on the official page</label><textarea id="sourceNotes" class="small" placeholder="Deadline, eligibility, match, award size, and source link"></textarea>
       <label for="fileInput">Add text files</label><input id="fileInput" type="file" multiple accept=".txt,.md,.csv,.json">
       <label for="projectNotes">Notes and file text</label><textarea id="projectNotes"></textarea>
-      <label class="check" for="usePublicData"><input id="usePublicData" type="checkbox" checked><span>Look for public community facts from the U.S. Census Bureau.</span></label>
+      <label class="check" for="usePublicData"><input id="usePublicData" type="checkbox" checked><span>Look up prebuilt community facts and local Census fallback if needed.</span></label>
       <div class="actions"><button id="lookupCommunity" class="quiet" type="button">Look up community facts</button></div>
-      <details class="lookup-help"><summary>Community lookup help</summary><p class="section-note">Most community lookups work without a key. If the Census Bureau rate-limits this computer, paste a free Census API key below for this session.</p><label for="censusApiKey">Census API key</label><input id="censusApiKey" type="password" autocomplete="off" placeholder="Optional Census API key"><p class="section-note"><a href="https://api.census.gov/data/key_signup.html" target="_blank" rel="noopener">Get a free Census API key</a></p></details>
+      <details class="lookup-help"><summary>Community lookup help</summary><p class="section-note">RERCie first checks the public prebuilt <code>community_profiles.js</code> dataset for an exact community + state/territory match. Use a free Census API key only when that match is not found.</p><label for="censusApiKey">Census API key</label><input id="censusApiKey" type="password" autocomplete="off" placeholder="Optional Census API key for fallback lookup"><p class="section-note"><a href="https://api.census.gov/data/key_signup.html" target="_blank" rel="noopener">Get a free Census API key</a></p></details>
       <div id="communityProfile" class="community-profile" hidden aria-live="polite"></div>
     </section>
     <section class="panel">
@@ -764,6 +1229,7 @@ HTML_PAGE = r'''<!doctype html>
     const states = __STATE_OPTIONS__;
     const stateSelect = document.getElementById("state");
     states.forEach((state) => { const option=document.createElement("option"); option.value=state; option.textContent=state||"Choose a state or territory"; stateSelect.appendChild(option); });
+    const MAX_PLAN_BYTES=256*1024;
     let lastDraft="";
     const status=document.getElementById("status"); const output=document.getElementById("output");
     const sessionToken=new URLSearchParams(location.hash.slice(1)).get("token")||""; history.replaceState(null,"",location.pathname+location.search);
@@ -774,6 +1240,10 @@ HTML_PAGE = r'''<!doctype html>
     function stopWorking(){ document.getElementById("working").hidden=true; if(workingTimer){window.clearInterval(workingTimer);workingTimer=0;} }
     function formatProfileValue(key,value){ if((key==="population"||key==="median_household_income")&&/^\d+$/.test(String(value))){ const number=Number(value).toLocaleString(); return key==="median_household_income"?"$"+number:number; } return String(value); }
     function renderProfile(profile,message,lookupStatus){ const box=document.getElementById("communityProfile"); box.replaceChildren(); box.hidden=false; const heading=document.createElement("strong"); heading.textContent=profile&&profile.place?profile.place:"Community facts"; box.appendChild(heading); if(!profile||!Object.keys(profile).length){ const note=document.createElement("span"); note.textContent=message||"No community facts were found."; box.appendChild(note); if(lookupStatus==="key_required"){document.querySelector(".lookup-help").open=true;} return; } const labels={population:"Population",median_age:"Median age",median_household_income:"Median household income",poverty_rate_percent:"People below the poverty line",geography_type:"Geography used"}; const list=document.createElement("ul"); Object.keys(labels).forEach((key)=>{ if(!profile[key])return; const item=document.createElement("li"); let value=formatProfileValue(key,profile[key]); if(key==="median_age")value+=" years"; if(key==="poverty_rate_percent")value+="%"; item.textContent=labels[key]+": "+value; list.appendChild(item); }); box.appendChild(list); const source=document.createElement(profile.source_url?"a":"span"); source.textContent=profile.source||"U.S. Census Bureau"; if(profile.source_url){source.href=profile.source_url;source.target="_blank";source.rel="noopener";} box.appendChild(source); if(profile.coverage_note){ const coverage=document.createElement("p"); coverage.textContent=profile.coverage_note; box.appendChild(coverage); } }
+    function applyImportedPlan(data){ document.getElementById("community").value=data.community||""; stateSelect.value=data.state||""; document.getElementById("projectTitle").value=data.projectTitle||""; document.getElementById("projectNotes").value=data.projectNotes||""; document.getElementById("selectedGrant").value=data.selectedFundingDetails||""; if(data.profile&&Object.keys(data.profile).length){renderProfile(data.profile,"Community facts imported from the plan.","found");}else{document.getElementById("communityProfile").hidden=true;} const message=(data.message||"Community Explorer plan opened.")+" Review the imported facts and official funding pages before drafting."; const importStatus=document.getElementById("planImportStatus"); importStatus.textContent=message; importStatus.className="status"; setStatus(message); }
+    async function importPlanText(text){ const response=await apiFetch("/api/import-plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({packageText:text})}); const data=await response.json(); if(!response.ok)throw new Error(data.error||"The plan could not be opened."); applyImportedPlan(data); }
+    async function openPlanFile(file){ if(!file)return; const importStatus=document.getElementById("planImportStatus"); if(!/\.(rercie|json)$/i.test(file.name)){throw new Error("Choose a .rercie or .json Community Explorer plan.");} if(file.size<=0||file.size>MAX_PLAN_BYTES){throw new Error("The plan must be a non-empty file no larger than 256 KB.");} importStatus.textContent="Checking the Community Explorer plan..."; const text=await file.text(); if(new TextEncoder().encode(text).length>MAX_PLAN_BYTES)throw new Error("The plan must be no larger than 256 KB."); let parsed; try{parsed=JSON.parse(text);}catch{throw new Error("The plan is not valid JSON.");} if(!parsed||Array.isArray(parsed)||typeof parsed!=="object"||parsed.schema!=="rercie-handoff"||parsed.version!==1){throw new Error("This is not a supported RERCie Community Explorer plan.");} await importPlanText(text); }
+    async function checkStartupPlan(){ try{ const response=await apiFetch("/api/startup-plan"); const data=await response.json(); if(data.status==="none")return; if(!response.ok)throw new Error(data.error||"The plan could not be opened."); applyImportedPlan(data); }catch(error){ const importStatus=document.getElementById("planImportStatus"); importStatus.textContent="The plan passed from Windows could not be opened: "+error.message; importStatus.className="status warning"; setStatus(importStatus.textContent,true); } }
     async function lookupCommunityFacts(){ const button=document.getElementById("lookupCommunity"); button.disabled=true; setStatus("Looking up community facts..."); try{ const body={community:document.getElementById("community").value,state:stateSelect.value,censusApiKey:document.getElementById("censusApiKey").value}; const response=await apiFetch("/api/community-profile",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); const data=await response.json(); if(!response.ok)throw new Error(data.error||"Lookup failed."); renderProfile(data.profile,data.message,data.status); setStatus(data.message,data.status!=="found"); }catch(error){renderProfile({},"Community facts could not be reached right now.","unavailable");setStatus("Community lookup failed: "+error.message,true);}finally{button.disabled=false;} }
     function collectPayload(){ return {community:document.getElementById("community").value,state:stateSelect.value,projectTitle:document.getElementById("projectTitle").value,projectSummary:document.getElementById("projectSummary").value,selectedGrant:document.getElementById("selectedGrant").value,matchCapacity:document.getElementById("matchCapacity").value,sourceNotes:document.getElementById("sourceNotes").value,projectNotes:document.getElementById("projectNotes").value,usePublicData:document.getElementById("usePublicData").checked,provider:document.getElementById("provider").value,model:"gemma-3-1b-it-Q4_K_M.gguf",censusApiKey:document.getElementById("censusApiKey").value}; }
     async function checkRuntime(){ const badge=document.getElementById("runtime"); try{ const response=await apiFetch("/api/runtime"); const data=await response.json(); badge.textContent=data.ready?"Local model ready":"Local model is starting"; badge.className=data.ready?"runtime":"runtime offline"; }catch{ badge.textContent="Could not check local writer"; badge.className="runtime offline"; } }
@@ -781,6 +1251,7 @@ HTML_PAGE = r'''<!doctype html>
     document.getElementById("loadGrants").addEventListener("click",()=>loadGrants().catch((error)=>setStatus(`Could not load funding: ${error.message}`,true)));
     document.getElementById("grantSelect").addEventListener("change",(event)=>{ document.getElementById("selectedGrant").value=event.target.selectedOptions[0]?.dataset?.grant||""; });
     document.getElementById("fileInput").addEventListener("change",async(event)=>{ const parts=[]; for(const file of event.target.files){ if(file.size>2000000){ setStatus(`${file.name} is too large. Use a text file under 2 MB.`,true); continue; } parts.push(`\n--- File: ${file.name} ---\n${await file.text()}`); } const notes=document.getElementById("projectNotes"); notes.value=`${notes.value}\n${parts.join("\n")}`.trim(); if(parts.length) setStatus(`Read ${parts.length} file(s).`); });
+    document.getElementById("planInput").addEventListener("change",(event)=>{ openPlanFile(event.target.files[0]).catch((error)=>{ const importStatus=document.getElementById("planImportStatus"); importStatus.textContent="Could not open the plan: "+error.message; importStatus.className="status warning"; setStatus(importStatus.textContent,true); }).finally(()=>{event.target.value="";}); });
     document.getElementById("lookupCommunity").addEventListener("click",lookupCommunityFacts);
     document.getElementById("draftButton").addEventListener("click",async()=>{ const button=document.getElementById("draftButton"); button.disabled=true; startWorking(); setStatus("RERCie is preparing the draft..."); try{ const response=await apiFetch("/api/draft",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(collectPayload())}); const data=await response.json(); if(!response.ok) throw new Error(data.error||"Draft failed."); lastDraft=data.draft; output.textContent=data.draft; renderProfile(data.publicProfile,data.profileMessage,data.profileStatus); const readyMessage=data.localKnowledgeChars?"Draft ready. Local reference files were used.":"Draft ready."; setStatus(data.warnings?.length?data.warnings.join(" "):readyMessage+" "+(data.safetyNotice||"")+" "+(data.profileMessage||""),Boolean(data.warnings?.length)); }catch(error){ setStatus("Draft failed: "+error.message,true); }finally{ stopWorking(); button.disabled=false; } });
     function downloadBlob(blob,filename){ const link=document.createElement("a"); link.href=URL.createObjectURL(blob); link.download=filename; link.click(); setTimeout(()=>URL.revokeObjectURL(link.href),1000); }
@@ -788,7 +1259,7 @@ HTML_PAGE = r'''<!doctype html>
     document.getElementById("downloadMd").addEventListener("click",()=>{ if(!lastDraft){setStatus("Create a draft first.",true);return;} downloadBlob(new Blob([lastDraft],{type:"text/markdown"}),draftFilename("md")); });
     document.getElementById("downloadDocx").addEventListener("click",async()=>{ if(!lastDraft){setStatus("Create a draft first.",true);return;} setStatus("Building the Word file..."); const response=await apiFetch("/api/export-docx",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({draft:lastDraft,title:document.getElementById("projectTitle").value||"RERCie Draft"})}); if(!response.ok){setStatus("The Word file could not be created.",true);return;} downloadBlob(await response.blob(),draftFilename("docx")); setStatus("Word file ready."); });
     document.getElementById("copyDraft").addEventListener("click",async()=>{ if(!lastDraft){setStatus("Create a draft first.",true);return;} await navigator.clipboard.writeText(lastDraft); setStatus("Draft copied."); });
-    checkRuntime(); loadGrants().catch(()=>setStatus("The public funding list is not available right now. You can paste funding details instead.",true));
+    checkRuntime(); checkStartupPlan(); loadGrants().catch(()=>setStatus("The public funding list is not available right now. You can paste funding details instead.",true));
   </script>
 </body>
 </html>'''.replace("__STATE_OPTIONS__", json.dumps([""] + list(STATE_FIPS.keys())))
@@ -826,7 +1297,7 @@ class RERCieHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(length))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'")
+        self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
         if disposition:
             self.send_header("Content-Disposition", disposition)
         self.end_headers()
@@ -884,6 +1355,12 @@ class RERCieHandler(BaseHTTPRequestHandler):
                 self.send_json(fetch_public_catalog())
             except Exception as exc:
                 self.send_json({"error": html.escape(str(exc))}, status=502)
+        elif self.path == "/api/startup-plan":
+            try:
+                imported = consume_startup_handoff()
+                self.send_json(imported or {"status": "none"})
+            except Exception as exc:
+                self.send_json({"error": str(exc)}, status=400)
         else:
             self.send_json({"error": "Not found"}, status=404)
 
@@ -906,6 +1383,11 @@ class RERCieHandler(BaseHTTPRequestHandler):
             elif self.path == "/api/export-docx":
                 document = build_docx(str(payload.get("draft") or ""), str(payload.get("title") or "RERCie Draft"))
                 self.send_bytes(document, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "RERCie_Draft.docx")
+            elif self.path == "/api/import-plan":
+                package_text = payload.get("packageText")
+                if type(package_text) is not str:
+                    raise ValueError("packageText must be JSON text.")
+                self.send_json(handoff_to_form(validate_handoff_text(package_text)))
             else:
                 self.send_json({"error": "Not found"}, status=404)
         except Exception as exc:
@@ -942,6 +1424,136 @@ def smoke() -> int:
     profile_text = format_public_profile(sample_profile)
     assert "Population: 1,046" in profile_text and "Median household income: $29,554" in profile_text
     assert "CENSUS_KEY_SENTINEL" not in compose_prompt({"projectTitle": "Test"}, sample_profile, "")
+    assert DEFAULT_MODEL == "gemma-3-1b-it-Q4_K_M.gguf"
+    valid_handoff = {
+        "schema": HANDOFF_SCHEMA,
+        "version": HANDOFF_VERSION,
+        "community": "St. Paul",
+        "state": "Virginia",
+        "projectTitle": "Downtown Trail Connection",
+        "projectNotes": "Connect downtown businesses to the regional trail.",
+        "profile": {
+            "place": "St. Paul town, Virginia",
+            "population": "1046",
+            "source": "U.S. Census Bureau",
+            "source_url": "https://data.census.gov/",
+        },
+        "roadmap": [
+            {"stage": "Plan", "title": "Confirm the project scope", "status": "Next"},
+        ],
+        "selectedRecords": [
+            {
+                "item_id": "RERC-FND-TEST",
+                "item_type": "Funding",
+                "title": "Sample Trail Grant",
+                "organization": "Sample Agency",
+                "summary": "Supports eligible trail connections.",
+                "source_url": "https://example.gov/trail-grant",
+            },
+        ],
+    }
+    imported = handoff_to_form(validate_handoff_text(json.dumps(valid_handoff)))
+    assert imported["community"] == "St. Paul"
+    assert "Sample Trail Grant" in imported["selectedFundingDetails"]
+    assert "Community Explorer roadmap" in imported["projectNotes"]
+    invalid_handoff = dict(valid_handoff, schema="wrong-schema")
+    try:
+        validate_handoff_text(json.dumps(invalid_handoff))
+        raise AssertionError("Invalid handoff schema was accepted.")
+    except ValueError:
+        pass
+    try:
+        validate_handoff_text("x" * (MAX_HANDOFF_BYTES + 1))
+        raise AssertionError("Oversized handoff was accepted.")
+    except ValueError:
+        pass
+    unsafe_url_handoff = json.loads(json.dumps(valid_handoff))
+    unsafe_url_handoff["selectedRecords"][0]["source_url"] = "javascript:alert(1)"
+    try:
+        validate_handoff_text(json.dumps(unsafe_url_handoff))
+        raise AssertionError("Unsafe source URL was accepted.")
+    except ValueError:
+        pass
+    markup_handoff = dict(valid_handoff, projectNotes="<img src=x onerror=alert(1)>")
+    try:
+        validate_handoff_text(json.dumps(markup_handoff))
+        raise AssertionError("HTML markup was accepted.")
+    except ValueError:
+        pass
+    try:
+        parse_public_community_profiles("window.RERC_COMMUNITY_PROFILES = {\"bad\": true}")
+        assert False, "Malformed community profile payload should be rejected."
+    except ValueError:
+        pass
+    try:
+        parse_public_community_profiles("window.RERC_COMMUNITY_PROFILES = [\"not a record\"];" )
+        assert False, "Invalid community profile records should be rejected."
+    except ValueError:
+        pass
+    try:
+        parse_public_community_profiles("window.RERC_COMMUNITY_PROFILES=[];" + (" " * MAX_COMMUNITY_PROFILE_BYTES))
+        assert False, "Oversize community profile payload should be rejected."
+    except ValueError:
+        pass
+    try:
+        _request_text("http://example.test/community_profiles.js", max_bytes=1024)
+        raise AssertionError("Non-HTTPS community profile URL was accepted.")
+    except ValueError:
+        pass
+
+    lookup_globals = globals()
+    backup_public_lookup = lookup_globals["fetch_public_community_profile"]
+    backup_census_lookup = lookup_globals["fetch_census_community_profile"]
+    backup_key_lookup = lookup_globals["_census_api_key"]
+    backup_request_text = lookup_globals["_request_text"]
+    try:
+        profile_bundle = "window.RERC_COMMUNITY_PROFILES = " + json.dumps([
+            {"community": "Damascus", "state": "Virginia", "name": "Damascus town, Virginia", "population": 21000},
+            {"community": "Damascus", "state": "Tennessee", "name": "Damascus, Tennessee", "population": 800},
+        ]) + ";"
+        lookup_globals["_request_text"] = lambda url, **kwargs: profile_bundle
+        exact_public_profile = fetch_public_community_profile("Damascus", "Virginia")
+        assert exact_public_profile.get("place") == "Damascus town, Virginia"
+        assert exact_public_profile.get("population") == "21000"
+        assert not fetch_public_community_profile("Damascus", "West Virginia")
+        lookup_globals["_request_text"] = backup_request_text
+
+        lookup_globals["fetch_public_community_profile"] = lambda community, state: {
+            "place": "Damascus town, Virginia",
+            "geography_type": "place",
+            "population": "21000",
+            "median_household_income": "30000",
+            "source": "prebuilt profile",
+            "source_url": "https://henkelpress.github.io/rerc-grant-finder/",
+        }
+        projected = lookup_community_profile("Damascus", "Virginia", "")
+        assert projected["status"] == "found"
+        assert projected["profile"].get("place") == "Damascus town, Virginia"
+
+        lookup_globals["fetch_public_community_profile"] = lambda community, state: {}
+        lookup_globals["_census_api_key"] = lambda census_api_key="": ""
+        lookup_globals["fetch_census_community_profile"] = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("Keyless lookup must not call Census."))
+        no_match_no_key = lookup_community_profile("Unknownville", "Virginia", "")
+        assert no_match_no_key["status"] == "key_required"
+        assert "Add a Census API key" in no_match_no_key["message"]
+
+        lookup_globals["fetch_public_community_profile"] = lambda community, state: (_ for _ in ()).throw(ValueError("malformed payload"))
+        malformed_no_key = lookup_community_profile("Damascus", "Virginia", "")
+        assert malformed_no_key["status"] == "key_required"
+
+        lookup_globals["fetch_public_community_profile"] = lambda community, state: {}
+        lookup_globals["fetch_census_community_profile"] = lambda community, state, census_api_key="": {"place": "Damascus town, Virginia", "source": "census fallback", "geography_type": "place"}
+        lookup_globals["_census_api_key"] = lambda census_api_key="": census_api_key.strip()
+        with_key_fallback = lookup_community_profile("Damascus", "Virginia", "CENSUS_API_KEY_SENTINEL")
+        assert with_key_fallback["status"] == "found"
+        assert with_key_fallback["profile"].get("source") == "census fallback"
+    finally:
+        lookup_globals["fetch_public_community_profile"] = backup_public_lookup
+        lookup_globals["fetch_census_community_profile"] = backup_census_lookup
+        lookup_globals["_census_api_key"] = backup_key_lookup
+
+    no_leak_prompt = compose_prompt({"projectTitle": "Test", "censusApiKey": "CENSUS_API_KEY_SENTINEL"}, sample_profile, "")
+    assert "CENSUS_API_KEY_SENTINEL" not in no_leak_prompt
     unsafe_draft = "A survey found 70% support and an $85,000 budget."
     assert grounding_issues(unsafe_draft, {"projectSummary": "Improve a trail."}, sample_profile)
     unsafe_qualitative = "The town will acquire land, hire a consultant, obtain approvals, and has strong community support."
@@ -955,7 +1567,26 @@ def smoke() -> int:
     assert docx.startswith(b"PK")
     with zipfile.ZipFile(io.BytesIO(docx)) as package:
         assert "word/document.xml" in package.namelist()
-    print(json.dumps({"status":"PASS","version":APP_VERSION,"catalog_formats":2,"territories":5,"docx_bytes":len(docx)},indent=2))
+    print(json.dumps({
+        "status": "PASS",
+        "version": APP_VERSION,
+        "catalog_formats": 2,
+        "territories": 5,
+        "docx_bytes": len(docx),
+        "handoff_schema": HANDOFF_SCHEMA,
+        "handoff_version": HANDOFF_VERSION,
+        "handoff_max_bytes": MAX_HANDOFF_BYTES,
+        "handoff_checks": ["valid", "invalid_schema", "oversize", "unsafe_url", "html_markup"],
+        "profile_checks": [
+            "https_only_bounded",
+            "exact_community_state",
+            "no_match_no_key",
+            "malformed_no_key",
+            "key_direct_fallback",
+            "no_key_to_gemma",
+        ],
+        "model": DEFAULT_MODEL,
+    }, indent=2))
     return 0
 
 

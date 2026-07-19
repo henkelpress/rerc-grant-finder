@@ -1,0 +1,19 @@
+{
+    "status":  "HISTORICAL_PASS",
+    "historical":  true,
+    "current_release_evidence":  false,
+    "historical_note":  "This records the 0.3.5 package-bound Gemma check. It does not certify RERCie 0.4.0.",
+    "tested_date":  "2026-07-18",
+    "app_version":  "0.3.5",
+    "model":  "gemma-3-1b-it-Q4_K_M.gguf",
+    "source_sha256":  "24b410591c7b9223144a47926ad20ae9ddcff37fdeda2bef115612554253fe9f",
+    "verified_excerpt_count":  1,
+    "raw_model_prose_exposed":  false,
+    "deterministic_scaffold":  true,
+    "unsupported_eligibility_claim_absent":  true,
+    "evidence_scope":  "Package-bound local Gemma generation passed before final packaging.",
+    "later_standalone_rerun":  {
+                                   "status":  "NOT_RUN",
+                                   "reason":  "No local inference service was available for the later standalone rerun."
+                               }
+}

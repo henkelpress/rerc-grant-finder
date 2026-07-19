@@ -381,7 +381,7 @@ def validate(records: list[dict[str, str]], docx: Path, xlsx: Path, csv_path: Pa
         "release_binding_note": "This is the source commit used to generate the files. See the GitHub release and RELEASE_MANIFEST.json for the final release commit.",
         "site_sha256": {
             name: sha256(ROOT / name)
-            for name in ("index.html", "styles.css", "app.js", "data.js", "case_studies.js", "README.md")
+            for name in ("index.html", "styles.css", "rercie.css", "app.js", "planner.js", "data.js", "case_studies.js", "community_profiles.js", "favicon.svg", "vendor/jszip.min.js", "vendor/lucide.min.js", "assets/hero-outdoor.jpg", "assets/rercie-otter.jpg", "README.md")
         },
         "source_sha256": {
             "data.js": sha256(ROOT / "data.js"),

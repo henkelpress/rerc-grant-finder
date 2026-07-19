@@ -2,6 +2,8 @@
 
 RERCie Local Grant-Writing Guide is an optional app for the Recreation Economy *for* Rural Communities funding and resource explorer.
 
+Current source version: `0.4.0`.
+
 The Windows installer includes the RERCie app and the pinned `llama.cpp` runtime. The local Gemma writer does not require a command line, an account, or an API key. The Gemma model is downloaded only when the person selects **Download and start**.
 
 ## Install RERCie on Windows
@@ -18,22 +20,53 @@ Upgrades keep a verified local Gemma model, so people do not have to download it
 
 No command line is needed. Open RERCie from the Start Menu. The launcher can open or stop the local tool.
 
+RERCie 0.4.0 can also open a Community Explorer plan. Use **Open Community Explorer plan** inside RERCie, or open an installed `.rercie` file from Windows. RERCie checks the file before filling any fields and shows what it imported.
+
 Package-bound local Gemma generation passed. A later standalone retest could not run because the local service was not open; this does not replace the package-bound test, and the limitation is retained in release evidence.
 
 ## What RERCie Does
 
 - Loads the current public RERC funding list.
 - Accepts project notes and selected text files.
-- Can look up a verified Census place or county profile. For American Samoa, Guam, the Northern Mariana Islands, and the U.S. Virgin Islands, it adds available territory-level Census context.
+- Opens a checked Community Explorer plan with its community, state or territory, project title, project notes, profile, roadmap, and selected public records.
+- Looks up community profiles from the public prebuilt `community_profiles.js` dataset for exact community + state/territory matches first. If no exact match is present, RERCie can use a provided Census API key to query the Census API for fallback place/county matching (including territory-level context for American Samoa, Guam, Northern Mariana Islands, and U.S. Virgin Islands).
 - Creates a first-draft grant narrative with clear fact-check markers.
 - Exports a real Word `.docx` file or Markdown.
 - Includes all 50 states, the District of Columbia, and five U.S. territories.
 
 ## Privacy
 
-Gemma writing and files in `local_knowledge` stay on this computer. The public funding lookup and optional Census lookup use public websites. Most community lookups work without a key. If the Census Bureau rate-limits the computer, RERCie can read an optional `CENSUS_API_KEY` or use a key pasted into the friendly lookup field for that session. The Census key is not sent to Gemma and is not saved by RERCie.
+Gemma writing and files in `local_knowledge` stay on this computer. RERCie first uses the public prebuilt `community_profiles.js` dataset for exact community + state or territory matches. The HTTPS response is bounded to 8 MiB and 50,000 records; invalid, oversized, or malformed profile files are rejected without using their contents. If no exact profile match is available, RERCie falls back to a direct Census API lookup only when a `CENSUS_API_KEY` is available (environment or session field). Without a key, it returns `key_required` and makes no direct Census call. The Census key is not sent to Gemma, saved by RERCie, or included in generated output.
 
 Do not add private files to a public copy of this project. Local reference files belong in `local_knowledge`.
+
+Imported plans stay on this computer. The browser sends the plan only to RERCie's authenticated loopback service. RERCie does not put plan notes in a web address or send them to the public explorer. A launcher-opened plan is copied into RERCie's local runtime folder, checked once, and removed after the local service reads it.
+
+## Community Explorer Plan Format
+
+A plan is UTF-8 JSON saved with the `.rercie` extension. The in-app picker also accepts `.json`. The maximum file size is 256 KB.
+
+The top-level object must contain exactly these fields:
+
+```json
+{
+  "schema": "rercie-handoff",
+  "version": 1,
+  "community": "St. Paul",
+  "state": "Virginia",
+  "projectTitle": "Downtown Trail Connection",
+  "projectNotes": "Confirmed project notes.",
+  "profile": {},
+  "roadmap": [],
+  "selectedRecords": []
+}
+```
+
+`community` is limited to 200 characters, `state` to 100, `projectTitle` to 300, and `projectNotes` to 20,000. A plan can include up to 50 roadmap items and 100 selected records. Each selected record must contain `item_id`, `item_type`, `title`, and `source_url`; `item_type` must be `Funding`, `Resource`, or `Case Study`. Source URLs must use `http` or `https`. Unknown fields, unsupported versions, duplicate record IDs, HTML markup, malformed JSON, and over-limit content are rejected.
+
+Profile fields supported in version 1 are `geoid`, `place`, `geography_type`, `population`, `median_age`, `median_household_income`, `poverty_rate_percent`, `source`, `source_url`, `year`, `coverage_note`, `margin_of_error_note`, and `suppressed`. Roadmap items support `id`, `stage`, `title`, `description`, `status`, `dueDate`, `owner`, `notes`, and `sourceUrl`; `stage` and `title` are required.
+
+Imported content is applied only as plain text. RERCie never renders imported HTML. Funding records fill the funding-details field. Roadmap items and selected resources or community examples are added to the project notes so they are available to the evidence-based draft.
 
 ## Human Review Required
 
@@ -50,10 +83,18 @@ Most people should use RERCie-Setup.exe. The steps below are only for developers
 
 The source tree does not contain generated executables, the `llama.cpp` runtime, or model weights. `build_installer.ps1` runs the source smoke test, builds the hidden Python service with PyInstaller, compiles the native Windows launcher, verifies the pinned runtime archive, writes the integrity manifest, and creates `RERCie-Setup.exe` with Inno Setup.
 
+Release evidence is version-bound. The build refuses QA evidence from another RERCie version or evidence labeled historical. `scripts/qa_local_gemma.py` regenerates the current `LOCAL_GEMMA_QA.json`; reviewers must complete and approve the current `QA_EVIDENCE.json` before its status can become `SOURCE_PASS`. Do not change a version number on old evidence and treat it as a new test.
+
+The build does not regenerate source QA evidence. It generates `file_integrity.json` and `RERCie-Release-QA.json`, generates the packaged `installer_manifest.json` from the reviewed source manifest plus the current version and source commit, and copies then enriches the package copy of `QA_EVIDENCE.json`. Files ending in `_HISTORICAL.json` are retained for provenance and are never release inputs.
+
 ```powershell
 python -m pip install -r .\requirements-build.txt
+python ..\scripts\qa_local_gemma.py
+python ..\scripts\qa_release.py
 .\build_installer.ps1 -AcceptRuntimeDownload
 ```
+
+The local Gemma service must be running for `qa_local_gemma.py`. A pending or failed QA result is a release hold, not a reason to edit the evidence to `PASS`.
 
 The public installer is not yet digitally signed. A production publisher should add a trusted Windows code-signing certificate before broad institutional deployment.
 
