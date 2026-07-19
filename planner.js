@@ -15,7 +15,7 @@
   const MAX_FILE_BYTES = 256 * 1024;
   const MAX_SHARE_LENGTH = 1800;
   const INSTALLER_URL =
-    "https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Setup.exe";
+    "https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERC-e-Setup.exe";
   const PHASES = ["Plan", "Design", "Build", "Operate"];
   const ALLOWED_LANGUAGES = ["en", "es"];
 
@@ -70,15 +70,15 @@
       back: "Back",
       editProfile: "Edit profile",
       stepOf: "Step {step} of {total}",
-      completePlace: "Enter a community name or choose a state or territory to continue.",
+      completePlace: "Enter a community name and choose a state or territory to continue.",
       calendarExported: "Calendar exported.",
       csvExported: "Saved-plan CSV exported.",
       docxExported: "Saved-plan Word document exported.",
       noExportItems: "Save at least one item before exporting a plan.",
-      rercieExported: "RERCie handoff exported.",
+      rercieExported: "RERC-e handoff exported.",
       includeNotes:
-        "Include your project notes in the RERCie handoff? The file stays on this computer unless you share it.",
-      installerFallback: "If RERCie is not installed, download the Windows installer.",
+        "Include your project notes in the RERC-e handoff? The file stays on this computer unless you share it.",
+      installerFallback: "If RERC-e is not installed, download the Windows installer.",
       projectWorkspace: "Community plan",
       communitySnapshot: "Community snapshot",
       roadmap: "Project roadmap",
@@ -160,15 +160,15 @@
       back: "Atrás",
       editProfile: "Editar perfil",
       stepOf: "Paso {step} de {total}",
-      completePlace: "Escriba una comunidad o elija un estado o territorio para continuar.",
+      completePlace: "Escriba una comunidad y elija un estado o territorio para continuar.",
       calendarExported: "Calendario exportado.",
       csvExported: "CSV del plan exportado.",
       docxExported: "Documento Word del plan exportado.",
       noExportItems: "Guarde al menos un elemento antes de exportar el plan.",
-      rercieExported: "Archivo para RERCie exportado.",
+      rercieExported: "Archivo para RERC-e exportado.",
       includeNotes:
-        "¿Quiere incluir sus notas del proyecto en el archivo para RERCie? El archivo permanece en este equipo a menos que lo comparta.",
-      installerFallback: "Si RERCie no está instalado, descargue el instalador para Windows.",
+        "¿Quiere incluir sus notas del proyecto en el archivo para RERC-e? El archivo permanece en este equipo a menos que lo comparta.",
+      installerFallback: "Si RERC-e no está instalado, descargue el instalador para Windows.",
       projectWorkspace: "Plan comunitario",
       communitySnapshot: "Resumen de la comunidad",
       roadmap: "Ruta del proyecto",
@@ -1003,53 +1003,81 @@
     if (opener && opener.isConnected) window.requestAnimationFrame(function () { opener.focus(); });
   }
 
+  function revealCommunityForm(focusMissing) {
+    const filters = byId("communityFilters");
+    const toggle = byId("toggleFilters");
+    if (filters) {
+      filters.hidden = false;
+      filters.classList.add("open");
+      filters.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    if (toggle) {
+      toggle.setAttribute("aria-expanded", "true");
+      const label = toggle.querySelector("span");
+      if (label) label.textContent = "Hide community questions";
+    }
+    if (typeof state.showWizardStep === "function") state.showWizardStep(1, { focus: false });
+    if (focusMissing) {
+      const name = byId("communityName");
+      const stateSelect = byId("stateSelect");
+      const target = name && !name.value.trim() ? name : stateSelect;
+      if (target) window.requestAnimationFrame(function () { target.focus({ preventScroll: true }); });
+    }
+  }
+
+  function syncCommunityGate() {
+    const ready = hasPlaceSelection();
+    document.documentElement.classList.toggle("community-ready", ready);
+    document.querySelectorAll("[data-community-gated]").forEach(function (section) {
+      section.hidden = !ready;
+      section.setAttribute("aria-hidden", ready ? "false" : "true");
+    });
+    document.querySelectorAll("#workflowSteps [data-wizard-step]").forEach(function (button) {
+      const step = Number(button.dataset.wizardStep || 1);
+      button.disabled = !ready && step > 1;
+      button.setAttribute("aria-disabled", button.disabled ? "true" : "false");
+    });
+    if (ready) {
+      const name = byId("communityName");
+      const stateSelect = byId("stateSelect");
+      if (name) { name.setCustomValidity(""); name.removeAttribute("aria-invalid"); }
+      if (stateSelect) { stateSelect.setCustomValidity(""); stateSelect.removeAttribute("aria-invalid"); }
+    }
+    return ready;
+  }
+
+  function requireCommunityInfo() {
+    if (syncCommunityGate()) return true;
+    const name = byId("communityName");
+    const stateSelect = byId("stateSelect");
+    const message = t("completePlace");
+    const nameMissing = !name || !name.value.trim();
+    const stateMissing = !stateSelect || !stateSelect.value;
+    if (name) {
+      name.setCustomValidity(nameMissing ? message : "");
+      if (nameMissing) name.setAttribute("aria-invalid", "true"); else name.removeAttribute("aria-invalid");
+    }
+    if (stateSelect) {
+      stateSelect.setCustomValidity(stateMissing ? message : "");
+      if (stateMissing) stateSelect.setAttribute("aria-invalid", "true"); else stateSelect.removeAttribute("aria-invalid");
+    }
+    setStatus("profileStatus", message, "warning");
+    revealCommunityForm(true);
+    const firstMissing = nameMissing ? name : stateSelect;
+    if (firstMissing && typeof firstMissing.reportValidity === "function") firstMissing.reportValidity();
+    return false;
+  }
+
   function setupWizard() {
     const root = byId("workflowSteps");
-    if (!root) return;
+    const form = byId("communityFilters");
+    if (!root || !form) return;
     const stepButtons = Array.from(root.querySelectorAll("[data-wizard-step], [data-step]"));
     const panels = Array.from(document.querySelectorAll("[data-wizard-panel]"));
-    const total = Math.max(stepButtons.length, panels.length, 3);
-
-    function showStep(nextStep) {
-      state.wizardStep = Math.min(Math.max(Number(nextStep) || 1, 1), total);
-      stepButtons.forEach(function (button, index) {
-        const step = Number(button.dataset.wizardStep || button.dataset.step || index + 1);
-        const active = step === state.wizardStep;
-        button.setAttribute("aria-current", active ? "step" : "false");
-        button.classList.toggle("active", active);
-      });
-      panels.forEach(function (panel, index) {
-        const step = Number(panel.dataset.wizardPanel || index + 1);
-        panel.hidden = step !== state.wizardStep;
-      });
-      root.setAttribute("aria-label", t("stepOf", { step: state.wizardStep, total: total }));
-      root.dataset.currentStep = String(state.wizardStep);
-      if (state.wizardStep === total) {
-        captureProfileFromFilters();
-        if (typeof explorer().render === "function") explorer().render();
-        const workspace = byId("matchesWorkspace");
-        if (workspace) workspace.focus({ preventScroll: true });
-      }
-    }
-
-    root.addEventListener("click", function (event) {
-      const target = event.target.closest("[data-wizard-step], [data-step], [data-wizard-next], [data-wizard-back]");
-      if (!target) return;
-      if (target.hasAttribute("data-wizard-next")) {
-        if (state.wizardStep === 1 && !hasPlaceSelection()) {
-          setStatus("profileStatus", t("completePlace"), "warning");
-          return;
-        }
-        showStep(state.wizardStep + 1);
-      } else if (target.hasAttribute("data-wizard-back")) {
-        showStep(state.wizardStep - 1);
-      } else {
-        showStep(target.dataset.wizardStep || target.dataset.step);
-      }
-    });
-
-    if (!root.querySelector("[data-wizard-next]")) {
-      const controls = document.createElement("div");
+    const total = Math.max(stepButtons.length, 4);
+    let controls = form.querySelector(".wizard-controls");
+    if (!controls) {
+      controls = document.createElement("div");
       controls.className = "wizard-controls";
       const back = document.createElement("button");
       back.type = "button";
@@ -1060,9 +1088,58 @@
       next.dataset.wizardNext = "";
       next.textContent = t("next");
       controls.append(back, next);
-      root.appendChild(controls);
+      form.appendChild(controls);
     }
-    showStep(1);
+
+    function showStep(nextStep, options) {
+      const requested = Math.min(Math.max(Number(nextStep) || 1, 1), total);
+      if (requested > 1 && !requireCommunityInfo()) return false;
+      state.wizardStep = requested;
+      stepButtons.forEach(function (button, index) {
+        const step = Number(button.dataset.wizardStep || button.dataset.step || index + 1);
+        const active = step === state.wizardStep;
+        button.setAttribute("aria-current", active ? "step" : "false");
+        button.classList.toggle("active", active);
+      });
+      panels.forEach(function (panel, index) {
+        const step = Number(panel.dataset.wizardPanel || index + 1);
+        panel.hidden = step !== state.wizardStep;
+      });
+      form.hidden = state.wizardStep >= 3;
+      root.setAttribute("aria-label", t("stepOf", { step: state.wizardStep, total: total }));
+      root.dataset.currentStep = String(state.wizardStep);
+      const back = controls.querySelector("[data-wizard-back]");
+      const next = controls.querySelector("[data-wizard-next]");
+      if (back) back.hidden = state.wizardStep <= 1;
+      if (next) next.hidden = state.wizardStep >= 3;
+      if (state.wizardStep >= 3) {
+        captureProfileFromFilters();
+        if (typeof explorer().render === "function") explorer().render();
+        const destination = byId(state.wizardStep === 4 ? "planWorkspace" : "matchesWorkspace");
+        if (destination) {
+          destination.hidden = false;
+          destination.setAttribute("aria-hidden", "false");
+          destination.scrollIntoView({ behavior: "smooth", block: "start" });
+          if (!options || options.focus !== false) destination.focus({ preventScroll: true });
+        }
+      }
+      syncCommunityGate();
+      return true;
+    }
+
+    function handleNavigation(event) {
+      const target = event.target.closest("[data-wizard-step], [data-step], [data-wizard-next], [data-wizard-back]");
+      if (!target) return;
+      event.preventDefault();
+      if (target.hasAttribute("data-wizard-next")) showStep(state.wizardStep + 1);
+      else if (target.hasAttribute("data-wizard-back")) showStep(state.wizardStep - 1);
+      else showStep(target.dataset.wizardStep || target.dataset.step);
+    }
+
+    root.addEventListener("click", handleNavigation);
+    form.addEventListener("click", handleNavigation);
+    state.showWizardStep = showStep;
+    showStep(1, { focus: false });
   }
 
   function choiceItems(root) {
@@ -1150,7 +1227,7 @@
     if (!nav) {
       nav = document.createElement("nav");
       nav.id = "plannerMobileNav";
-      const explore = mobileNavItem(t("explore"), "search", "#matchesWorkspace");
+      const explore = mobileNavItem(t("explore"), "search", "", "explore");
       explore.dataset.labelKey = "explore";
       const filters = mobileNavItem(t("filters"), "sliders-horizontal", "", "filters");
       filters.dataset.labelKey = "filters";
@@ -1162,7 +1239,7 @@
       badge.textContent = String(state.workspace.savedIds.length);
       badge.setAttribute("aria-label", t("savedCount", { count: state.workspace.savedIds.length }));
       saved.appendChild(badge);
-      const plan = mobileNavItem(t("myPlan"), "clipboard-list", "#planWorkspace");
+      const plan = mobileNavItem(t("myPlan"), "clipboard-list", "", "plan");
       plan.dataset.labelKey = "myPlan";
       nav.append(explore, filters, saved, plan);
       document.body.appendChild(nav);
@@ -1171,9 +1248,9 @@
       nav.querySelectorAll("a, button").forEach(function (item) {
         const href = item.getAttribute("href") || "";
         if (item.dataset.mobileAction === "saved") item.dataset.labelKey = "saved";
-        else if (href === "#communityFilters") item.dataset.labelKey = "filters";
-        else if (href === "#matchesWorkspace") item.dataset.labelKey = "explore";
-        else if (href === "#planWorkspace") item.dataset.labelKey = "myPlan";
+        else if (href === "#communityFilters") { item.dataset.labelKey = "filters"; item.dataset.mobileAction = "filters"; }
+        else if (href === "#matchesWorkspace") { item.dataset.labelKey = "explore"; item.dataset.mobileAction = "explore"; }
+        else if (href === "#planWorkspace") { item.dataset.labelKey = "myPlan"; item.dataset.mobileAction = "plan"; }
       });
     }
     nav.setAttribute("aria-label", t("projectWorkspace"));
@@ -1182,18 +1259,19 @@
     nav.addEventListener("click", function (event) {
       const action = event.target.closest("[data-mobile-action]");
       if (!action) return;
-      if (action.dataset.mobileAction === "filters") {
-        const filtersPanel = byId("communityFilters");
-        const existingToggle = byId("toggleFilters");
-        if (existingToggle && existingToggle.getAttribute("aria-expanded") !== "true") existingToggle.click();
-        if (filtersPanel) {
-          filtersPanel.hidden = false;
-          filtersPanel.scrollIntoView({ behavior: "smooth", block: "start" });
-          const firstInput = filtersPanel.querySelector("input, select, button");
-          if (firstInput) firstInput.focus({ preventScroll: true });
-        }
+      const mobileAction = action.dataset.mobileAction;
+      if (mobileAction === "filters") {
+        event.preventDefault();
+        revealCommunityForm(true);
+        return;
       }
-      if (action.dataset.mobileAction === "saved") {
+      if (mobileAction === "explore" || mobileAction === "plan") {
+        event.preventDefault();
+        if (!requireCommunityInfo()) return;
+        if (typeof state.showWizardStep === "function") state.showWizardStep(mobileAction === "plan" ? 4 : 3);
+        return;
+      }
+      if (mobileAction === "saved") {
         const tray = byId("savedTray");
         const toggle = byId("toggleSavedTray");
         if (tray) tray.hidden = false;
@@ -1210,7 +1288,7 @@
   function hasPlaceSelection() {
     const name = byId("communityName");
     const stateSelect = byId("stateSelect");
-    return Boolean((name && name.value.trim()) || (stateSelect && stateSelect.value));
+    return Boolean(name && name.value.trim() && stateSelect && stateSelect.value);
   }
 
   function selectedValues(root) {
@@ -1307,6 +1385,7 @@
   }
 
   async function loadProjectedProfile() {
+    if (!requireCommunityInfo()) return;
     captureProfileFromFilters();
     const projected = findProjectedProfile();
     if (!projected) {
@@ -2180,6 +2259,12 @@
 
   function setupEventHandlers() {
     document.addEventListener("click", function (event) {
+      const communityEntry = event.target.closest("[data-community-entry]");
+      if (communityEntry) {
+        event.preventDefault();
+        revealCommunityForm(true);
+        return;
+      }
       const action = event.target.closest("[data-action]");
       if (action && action.dataset.itemId) {
         if (action.dataset.action === "planner-save") {
@@ -2270,11 +2355,23 @@
         schedulePersist();
       });
     }
+    const communityName = byId("communityName");
+    const communityState = byId("stateSelect");
+    [communityName, communityState].forEach(function (control) {
+      if (!control) return;
+      control.addEventListener(control === communityName ? "input" : "change", function () {
+        control.setCustomValidity("");
+        control.removeAttribute("aria-invalid");
+        syncCommunityGate();
+      });
+    });
+
     const filters = byId("communityFilters");
     if (filters) {
       filters.addEventListener("change", function () {
         captureProfileFromFilters();
         renderProfileSummary();
+        syncCommunityGate();
       });
     }
     const roadmap = byId("roadmap");

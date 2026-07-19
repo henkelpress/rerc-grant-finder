@@ -71,6 +71,9 @@ p { margin: 0; }
 .workflow-steps small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workflow-steps button.active { color: var(--rerc-green); box-shadow: inset 0 -4px 0 var(--rerc-green); }
 .workflow-steps button.active > span:first-child { color: var(--white); background: var(--rerc-green); border-color: var(--rerc-green); }
+.workflow-steps button:disabled { cursor: not-allowed; color: #76847e; background: #f1f4f2; opacity: 0.72; }
+.workflow-steps button:disabled strong { color: #617069; }
+.workflow-steps button:disabled > span:first-child { background: #f1f4f2; border-color: #9eaaa5; }
 
 .explorer-shell { display: grid; grid-template-columns: minmax(0, 1fr) 390px; max-width: 1500px; margin: 0 auto; background: var(--white); border-bottom: 1px solid var(--line); }
 .explorer-main { min-width: 0; padding: 28px 30px 72px; }
@@ -91,6 +94,12 @@ p { margin: 0; }
 .field textarea { min-height: 118px; resize: vertical; }
 .profile-actions { display: flex; align-items: center; gap: 14px; margin-top: 16px; }
 .status-message { color: var(--muted); font-size: 0.9rem; }
+.required-note { margin-top: 10px; color: var(--muted); font-size: 0.9rem; }
+.field input[aria-invalid="true"], .field select[aria-invalid="true"] { border-color: var(--danger); box-shadow: 0 0 0 2px rgba(155,44,44,0.12); }
+.wizard-controls { display: flex; justify-content: flex-end; gap: 10px; padding: 0 24px 24px; }
+.wizard-controls button { min-width: 112px; padding: 9px 14px; color: var(--white); background: var(--rerc-green); border: 1px solid var(--rerc-green); border-radius: 6px; font-weight: 800; }
+.wizard-controls button[data-wizard-back] { color: var(--rerc-green); background: var(--white); }
+[data-community-gated][hidden] { display: none !important; }
 .profile-summary { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
 .profile-summary-content { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -363,6 +372,6 @@ fieldset legend { margin-bottom: 9px; }
   #plannerMobileNav a, #plannerMobileNav button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border: 0; background: transparent; color: #163d2a; text-decoration: none; font: inherit; font-size: 0.75rem; padding: 3px; }
   #plannerMobileNav svg { width: 20px; height: 20px; }
   .check-list label { display: flex; align-items: center; min-height: 44px; }
-  .wizard-controls { position: sticky; bottom: calc(64px + env(safe-area-inset-bottom)); z-index: 4; display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.5rem 0; background: var(--surface, #fff); }
+  .wizard-controls { position: sticky; bottom: calc(64px + env(safe-area-inset-bottom)); z-index: 4; justify-content: space-between; padding: 0.65rem 16px; background: var(--white); border-top: 1px solid var(--line); }
   .choice-pager-controls { bottom: calc(64px + env(safe-area-inset-bottom)); }
 }

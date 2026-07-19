@@ -1,6 +1,6 @@
 Google Gemma model terms
 
-RERCie does not redistribute the Gemma model. On first use, RERCie downloads the selected Gemma GGUF file from the public ggml-org repository on Hugging Face.
+RERC-e does not redistribute the Gemma model. On first use, RERC-e downloads the selected Gemma GGUF file from the public ggml-org repository on Hugging Face.
 
 Review the current terms before use:
 https://ai.google.dev/gemma/terms

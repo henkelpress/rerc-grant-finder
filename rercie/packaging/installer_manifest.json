@@ -1,11 +1,13 @@
 {
     "package":  {
-                    "name":  "RERCie",
-                    "version":  "0.4.0",
-                    "installer":  "RERCie-Setup.exe",
-                    "entrypoint":  "RERCie.exe",
+                    "name":  "RERC-e",
+                    "version":  "0.5.0",
+                    "installer":  "RERC-e-Setup.exe",
+                    "entrypoint":  "RERC-e.exe",
                     "powershell_required":  false,
-                    "install_scope":  "current_user"
+                    "install_scope":  "current_user",
+                    "publisher":  "Timberwing Systems, an EPR, P.C. initiative",
+                    "license":  "RERC-e-LICENSE.txt"
                 },
     "runtime":  {
                     "project":  "llama.cpp",

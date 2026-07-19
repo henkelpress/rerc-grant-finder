@@ -765,9 +765,7 @@ function buildCheckList(container, options, groupName) {
 }
 
 function reset() {
-  elements.communityName.value = "";
-  elements.stateSelect.value = "";
-  elements.placeTypeSelect.value = "";
+  // Keep the required place while clearing project priorities and result settings.
   elements.keywordSearch.value = "";
   elements.stageSelect.value = "Any step";
   elements.includeClosed.checked = false;
@@ -797,7 +795,7 @@ function initialize() {
   elements.fundingCount.textContent = fundingResources.filter((item) => item.item_type === "Funding").length.toLocaleString();
   elements.resourceCount.textContent = fundingResources.filter((item) => item.item_type === "Resource").length.toLocaleString();
   elements.caseStudyCount.textContent = caseStudies.length.toLocaleString();
-  elements.stateSelect.innerHTML = `<option value="">All states, D.C., and U.S. territories</option>${places.map((place) => `<option>${escapeHtml(place)}</option>`).join("")}`;
+  elements.stateSelect.innerHTML = `<option value="">Choose a state, D.C., or U.S. territory</option>${places.map((place) => `<option>${escapeHtml(place)}</option>`).join("")}`;
   elements.stageSelect.innerHTML = stages.map((stage) => `<option>${escapeHtml(stage)}</option>`).join("");
   buildCheckList(elements.applicantOptions, applicantOptions, "applicant");
   buildCheckList(elements.topicOptions, topicOptions, "topic");
@@ -815,7 +813,8 @@ function initialize() {
   elements.toggleFilters.addEventListener("click", () => {
     const open = document.querySelector(".filters").classList.toggle("open");
     elements.toggleFilters.setAttribute("aria-expanded", String(open));
-    elements.toggleFilters.textContent = open ? "Hide filters" : "Show filters";
+    const label = elements.toggleFilters.querySelector("span");
+    if (label) label.textContent = open ? "Hide community questions" : "Show community questions";
   });
   elements.resetButton.addEventListener("click", reset);
   elements.exportCsv.addEventListener("click", exportCsv);

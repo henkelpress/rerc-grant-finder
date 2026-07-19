@@ -5,11 +5,11 @@
   #error OutputDir must be defined by the build script.
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.4.0"
+  #define AppVersion "0.5.0"
 #endif
 
-#define AppName "RERCie"
-#define AppExe "RERCie.exe"
+#define AppName "RERC-e"
+#define AppExe "RERC-e.exe"
 #define AppUrl "https://henkelpress.github.io/rerc-grant-finder/"
 
 [Setup]
@@ -17,12 +17,12 @@ AppId={{E07265FC-1C63-4B51-99BB-EFA80D9497B8}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
-AppPublisher=henkelpress
+AppPublisher=EPR, P.C. - Timberwing Systems
 AppPublisherURL={#AppUrl}
 AppSupportURL=https://github.com/henkelpress/rerc-grant-finder/issues
 AppUpdatesURL=https://github.com/henkelpress/rerc-grant-finder/releases/latest
-DefaultDirName={localappdata}\Programs\RERCie
-DefaultGroupName=RERCie
+DefaultDirName={localappdata}\Programs\RERC-e
+DefaultGroupName=RERC-e
 DisableProgramGroupPage=yes
 DisableWelcomePage=no
 DisableReadyPage=no
@@ -30,10 +30,11 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir={#OutputDir}
-OutputBaseFilename=RERCie-Setup
-SetupIconFile=..\..\assets\rercie.ico
-WizardImageFile=rercie-wizard.bmp
+OutputBaseFilename=RERC-e-Setup
+SetupIconFile=..\..\site-src\assets\rerc-e.ico
+WizardImageFile=rerc-e-eagle-wizard.bmp
 InfoBeforeFile=INSTALLER_NOTICE.txt
+LicenseFile={#SourceRoot}\RERC-e-LICENSE.txt
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -42,11 +43,11 @@ ChangesAssociations=yes
 RestartApplications=no
 SetupLogging=yes
 UninstallDisplayIcon={app}\{#AppExe}
-UninstallDisplayName=RERCie
+UninstallDisplayName=RERC-e
 VersionInfoVersion={#AppVersion}.0
-VersionInfoCompany=henkelpress
-VersionInfoDescription=RERCie local grant-writing guide
-VersionInfoProductName=RERCie
+VersionInfoCompany=EPR, P.C. - Timberwing Systems
+VersionInfoDescription=RERC-e local grant-writing guide
+VersionInfoProductName=RERC-e
 AppMutex=Local\RERCie-Desktop
 
 [Languages]
@@ -59,21 +60,21 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 Source: "{#SourceRoot}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\RERCie"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"; Comment: "Use a funding option and project notes to make a first draft"
-Name: "{autodesktop}\RERCie"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"; Tasks: desktopicon; Comment: "Use a funding option and project notes to make a first draft"
-Name: "{autoprograms}\RERCie website"; Filename: "{#AppUrl}"
+Name: "{autoprograms}\RERC-e"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"; Comment: "Use a funding option and project notes to make a first draft"
+Name: "{autodesktop}\RERC-e"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"; Tasks: desktopicon; Comment: "Use a funding option and project notes to make a first draft"
+Name: "{autoprograms}\RERC-e website"; Filename: "{#AppUrl}"
 
 [Registry]
-Root: HKA; Subkey: "Software\Classes\.rercie"; ValueType: string; ValueName: ""; ValueData: "RERCie.Plan"; Flags: uninsdeletevalue
-Root: HKA; Subkey: "Software\Classes\RERCie.Plan"; ValueType: string; ValueName: ""; ValueData: "RERCie Community Explorer Plan"; Flags: uninsdeletekey
-Root: HKA; Subkey: "Software\Classes\RERCie.Plan\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExe},0"
-Root: HKA; Subkey: "Software\Classes\RERCie.Plan\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\.rercie"; ValueType: string; ValueName: ""; ValueData: "RERC-e.Plan"; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\RERC-e.Plan"; ValueType: string; ValueName: ""; ValueData: "RERC-e Community Explorer Plan"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\RERC-e.Plan\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExe},0"
+Root: HKA; Subkey: "Software\Classes\RERC-e.Plan\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" ""%1"""
 
 [Run]
-Filename: "{app}\{#AppExe}"; Description: "Meet RERCie"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#AppExe}"; Description: "Meet RERC-e"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-Filename: "{app}\{#AppExe}"; Parameters: "--stop"; WorkingDir: "{app}"; Flags: runhidden waituntilterminated; RunOnceId: "StopRERCie"
+Filename: "{app}\{#AppExe}"; Parameters: "--stop"; WorkingDir: "{app}"; Flags: runhidden waituntilterminated; RunOnceId: "StopRERC-e"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\models"
@@ -87,6 +88,6 @@ procedure CurStepChanged(CurStep: TSetupStep);
 var
   ResultCode: Integer;
 begin
-  if (CurStep = ssInstall) and FileExists(ExpandConstant('{app}\RERCie.exe')) then
-    Exec(ExpandConstant('{app}\RERCie.exe'), '--stop', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  if (CurStep = ssInstall) and FileExists(ExpandConstant('{app}\RERC-e.exe')) then
+    Exec(ExpandConstant('{app}\RERC-e.exe'), '--stop', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;

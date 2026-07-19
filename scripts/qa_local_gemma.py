@@ -67,7 +67,7 @@ def main() -> int:
         "raw_model_prose_exposed": result["rawModelProseExposed"],
         "deterministic_scaffold": True,
         "unsupported_eligibility_claim_absent": True,
-        "evidence_scope": "Source-bound local Gemma inference passed against the final RERCie source before packaging.",
+        "evidence_scope": "Source-bound local Gemma inference passed against the final RERC-e source before packaging.",
         "later_standalone_rerun": {
             "status": "PASS",
             "reason": "Completed against the pinned approved local Gemma service.",

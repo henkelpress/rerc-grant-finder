@@ -20,7 +20,7 @@ namespace RERCieDesktop
 {
     internal static class Config
     {
-        public const string Version = "0.4.0";
+        public const string Version = "0.5.0";
         public const string AppUrl = "http://127.0.0.1:8789";
         public const string AppHealthUrl = AppUrl + "/health";
         public const string ModelHealthUrl = "http://127.0.0.1:8788/health";
@@ -87,17 +87,17 @@ namespace RERCieDesktop
 
         public static void VerifyPackage()
         {
-            if (!File.Exists(IntegrityPath)) throw new InvalidOperationException("RERCie is missing its safety file. Run the installer again.");
+            if (!File.Exists(IntegrityPath)) throw new InvalidOperationException("RERC-e is missing its safety file. Run the installer again.");
             IntegrityManifest manifest = Json.Deserialize<IntegrityManifest>(File.ReadAllText(IntegrityPath));
-            if (manifest == null || manifest.files == null || manifest.files.Count == 0) throw new InvalidOperationException("RERCie's safety file is not valid. Run the installer again.");
+            if (manifest == null || manifest.files == null || manifest.files.Count == 0) throw new InvalidOperationException("RERC-e's safety file is not valid. Run the installer again.");
             foreach (IntegrityEntry entry in manifest.files)
             {
                 string relative = (entry.path ?? "").Replace('/', Path.DirectorySeparatorChar);
                 string fullPath = Path.GetFullPath(Path.Combine(Root, relative));
-                if (!fullPath.StartsWith(Root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("RERCie's safety file has an invalid path.");
+                if (!fullPath.StartsWith(Root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("RERC-e's safety file has an invalid path.");
                 FileInfo file = new FileInfo(fullPath);
                 if (!file.Exists || file.Length != entry.bytes || !string.Equals(Sha256(fullPath), entry.sha256, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException("A RERCie file did not pass its safety check: " + relative + ". Run the installer again.");
+                    throw new InvalidOperationException("A RERC-e file did not pass its safety check: " + relative + ". Run the installer again.");
             }
         }
 
@@ -108,7 +108,7 @@ namespace RERCieDesktop
             string extension = Path.GetExtension(fullPath);
             if (!string.Equals(extension, ".rercie", StringComparison.OrdinalIgnoreCase)
                 && !string.Equals(extension, ".json", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("RERCie can open only .rercie or .json Community Explorer plans.");
+                throw new InvalidOperationException("RERC-e can open only .rercie or .json Community Explorer plans.");
             FileInfo source = new FileInfo(fullPath);
             if (!source.Exists || source.Length <= 0 || source.Length > Config.MaxPlanBytes)
                 throw new InvalidOperationException("The Community Explorer plan must be a non-empty file no larger than 256 KB.");
@@ -137,7 +137,7 @@ namespace RERCieDesktop
                 || !plan.TryGetValue("version", out version)
                 || !int.TryParse(Convert.ToString(version), out parsedVersion)
                 || parsedVersion != Config.PlanVersion)
-                throw new InvalidOperationException("This is not a supported RERCie Community Explorer plan.");
+                throw new InvalidOperationException("This is not a supported RERC-e Community Explorer plan.");
 
             Directory.CreateDirectory(HandoffDir);
             string temporaryPath = Path.Combine(HandoffDir, Guid.NewGuid().ToString("N") + ".tmp");
@@ -210,7 +210,7 @@ namespace RERCieDesktop
             Process process;
             return TryGetOwnedProcess("app", ServiceExe, out record, out process)
                 && !string.IsNullOrWhiteSpace(record.session_token)
-                && EndpointContains(Config.AppHealthUrl, "\"app\": \"RERCie\"", record.session_token);
+                && EndpointContains(Config.AppHealthUrl, "\"app\": \"RERC-e\"", record.session_token);
         }
 
         public static bool ModelServerReady()
@@ -227,7 +227,7 @@ namespace RERCieDesktop
             ProcessRecord record;
             Process process;
             if (!TryGetOwnedProcess("app", ServiceExe, out record, out process) || string.IsNullOrWhiteSpace(record.session_token))
-                throw new InvalidOperationException("RERCie's local session is not ready. Start RERCie again.");
+                throw new InvalidOperationException("RERC-e's local session is not ready. Start RERC-e again.");
             return Config.AppUrl + "/#token=" + Uri.EscapeDataString(record.session_token);
         }
 
@@ -275,7 +275,7 @@ namespace RERCieDesktop
             if (environment != null)
                 foreach (KeyValuePair<string, string> item in environment) info.EnvironmentVariables[item.Key] = item.Value;
             Process process = Process.Start(info);
-            if (process == null) throw new InvalidOperationException("A part of RERCie could not start. Restart RERCie and try again.");
+            if (process == null) throw new InvalidOperationException("A part of RERC-e could not start. Restart RERC-e and try again.");
             WriteProcessRecord(name, process, executable, sessionToken);
             return process;
         }
@@ -359,7 +359,7 @@ namespace RERCieDesktop
                         using (HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url))
                         {
                             client.Timeout = Timeout.InfiniteTimeSpan;
-                            request.Headers.UserAgent.ParseAdd("RERCie/" + Config.Version + " (Windows; local grant-writing guide)");
+                            request.Headers.UserAgent.ParseAdd("RERC-e/" + Config.Version + " (Windows; local grant-writing guide)");
                             request.Headers.Accept.ParseAdd("application/octet-stream");
                             if (existing > 0) request.Headers.Range = new RangeHeaderValue(existing, null);
                             using (HttpResponseMessage response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead))
@@ -403,7 +403,7 @@ namespace RERCieDesktop
                 if (attempt < 4) await Task.Delay(attempt * 1500);
             }
             string detail = lastError == null ? "Unknown network error." : RootMessage(lastError);
-            throw new InvalidOperationException("RERCie could not download " + downloadName + ". Check your internet connection and try again. The saved partial download will resume. Details: " + detail, lastError);
+            throw new InvalidOperationException("RERC-e could not download " + downloadName + ". Check your internet connection and try again. The saved partial download will resume. Details: " + detail, lastError);
         }
 
         private static string RootMessage(Exception error)
@@ -427,7 +427,7 @@ namespace RERCieDesktop
                 using (HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, Config.ModelUrl))
                 {
                     client.Timeout = TimeSpan.FromSeconds(45);
-                    request.Headers.UserAgent.ParseAdd("RERCie/" + Config.Version + " (Windows; download probe)");
+                    request.Headers.UserAgent.ParseAdd("RERC-e/" + Config.Version + " (Windows; download probe)");
                     request.Headers.Accept.ParseAdd("application/octet-stream");
                     request.Headers.Range = new RangeHeaderValue(0, 1023);
                     using (HttpResponseMessage response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead))
@@ -486,7 +486,7 @@ namespace RERCieDesktop
         public MainForm(bool hasStartupPlan)
         {
             startupPlanStaged = hasStartupPlan;
-            Text = "RERCie";
+            Text = "RERC-e";
             ClientSize = new Size(700, 520);
             MinimumSize = new Size(716, 559);
             StartPosition = FormStartPosition.CenterScreen;
@@ -498,9 +498,9 @@ namespace RERCieDesktop
             picture.Location = new Point(20, 24);
             picture.Size = new Size(220, 420);
             picture.SizeMode = PictureBoxSizeMode.Zoom;
-            picture.AccessibleName = "RERCie, a river otter holding a field notebook";
-            picture.AccessibleDescription = "RERCie is the outdoor guide character for this local grant-writing app.";
-            string imagePath = Path.Combine(Runtime.Root, "assets", "rercie-otter.jpg");
+            picture.AccessibleName = "RERC-e, a bald eagle field guide holding a notebook";
+            picture.AccessibleDescription = "RERC-e is the outdoor guide character for this local grant-writing app.";
+            string imagePath = Path.Combine(Runtime.Root, "assets", "rerc-e-eagle.jpg");
             if (File.Exists(imagePath)) picture.Image = Image.FromFile(imagePath);
             Controls.Add(picture);
 
@@ -513,9 +513,9 @@ namespace RERCieDesktop
             brand.TabStop = false;
             brand.ScrollBars = RichTextBoxScrollBars.None;
             brand.Rtf = @"{\rtf1\ansi\deff0{\fonttbl{\f0 Segoe UI;}}{\colortbl;\red0\green87\blue63;}\f0\fs20\cf1\b Recreation Economy \i for\i0  Rural Communities\b0}";
-            Label title = MakeLabel("Meet RERCie", 260, 58, 410, 46, 24f, true, Color.FromArgb(23, 63, 53));
-            Label intro = MakeLabel("RERCie helps you use a funding option and your project notes to make a first draft.", 260, 112, 410, 54, 11f, false, Color.FromArgb(27, 31, 35));
-            Label boundary = MakeLabel("RERCie is a community-built tool. It is not an EPA grant program. It does not decide who can apply or submit an application for you.", 260, 174, 410, 64, 9.5f, false, Color.FromArgb(70, 80, 75));
+            Label title = MakeLabel("Meet RERC-e", 260, 58, 410, 46, 24f, true, Color.FromArgb(23, 63, 53));
+            Label intro = MakeLabel("RERC-e helps you use a funding option and your project notes to make a first draft.", 260, 112, 410, 54, 11f, false, Color.FromArgb(27, 31, 35));
+            Label boundary = MakeLabel("RERC-e is a community-built tool. It is not an EPA grant program. It does not decide who can apply or submit an application for you.", 260, 174, 410, 64, 9.5f, false, Color.FromArgb(70, 80, 75));
             Controls.Add(brand); Controls.Add(title); Controls.Add(intro); Controls.Add(boundary);
 
             Label modelNote = MakeLabel("Google Gemma is about 0.81 GB. It stays on this computer.", 260, 244, 410, 32, 9.5f, true, Color.FromArgb(27, 31, 35));
@@ -533,27 +533,27 @@ namespace RERCieDesktop
 
             statusLabel.Location = new Point(260, 360);
             statusLabel.Size = new Size(410, 44);
-            statusLabel.Text = startupPlanStaged ? "Community Explorer plan ready. Checking RERCie..." : "Checking RERCie...";
+            statusLabel.Text = startupPlanStaged ? "Community Explorer plan ready. Checking RERC-e..." : "Checking RERC-e...";
             statusLabel.ForeColor = Color.FromArgb(70, 80, 75);
-            statusLabel.AccessibleName = "RERCie status";
+            statusLabel.AccessibleName = "RERC-e status";
             statusLabel.AccessibleDescription = statusLabel.Text;
             Controls.Add(statusLabel);
 
             progressBar.Location = new Point(260, 408);
             progressBar.Size = new Size(410, 18);
             progressBar.Style = ProgressBarStyle.Continuous;
-            progressBar.AccessibleName = "RERCie setup progress";
+            progressBar.AccessibleName = "RERC-e setup progress";
             progressBar.AccessibleDescription = "Shows download and startup progress.";
             Controls.Add(progressBar);
 
-            startButton.Text = "Start RERCie";
+            startButton.Text = "Start RERC-e";
             startButton.Location = new Point(260, 448);
             startButton.Size = new Size(130, 38);
             StylePrimary(startButton);
             startButton.Click += StartClicked;
             Controls.Add(startButton);
 
-            openButton.Text = "Open RERCie";
+            openButton.Text = "Open RERC-e";
             openButton.Location = new Point(398, 448);
             openButton.Size = new Size(130, 38);
             openButton.Click += delegate { Runtime.OpenBrowser(Runtime.AppBrowserUrl()); };
@@ -609,7 +609,7 @@ namespace RERCieDesktop
                 bool modelReady = await Task.Run((Func<bool>)Runtime.ModelReady);
                 bool appReady = Runtime.AppReady();
 
-                statusLabel.Text = appReady ? "RERCie is ready. Open it in your browser." : modelReady ? "The local model is ready. Start RERCie when you are ready." : "Select Download and start. RERCie will check the model before it runs.";
+                statusLabel.Text = appReady ? "RERC-e is ready. Open it in your browser." : modelReady ? "The local model is ready. Start RERC-e when you are ready." : "Select Download and start. RERC-e will check the model before it runs.";
                 if (startupPlanStaged) statusLabel.Text += " Your Community Explorer plan will open with it.";
             }
             catch (Exception error)
@@ -629,7 +629,7 @@ namespace RERCieDesktop
         {
             bool appReady = Runtime.AppReady();
             bool modelExists = File.Exists(Runtime.ModelPath) && new FileInfo(Runtime.ModelPath).Length == Config.ModelBytes;
-            startButton.Text = modelExists ? "Start RERCie" : "Download and start";
+            startButton.Text = modelExists ? "Start RERC-e" : "Download and start";
             startButton.Enabled = !busy && !appReady;
             openButton.Enabled = !busy && appReady;
             stopButton.Enabled = !busy && appReady;
@@ -661,14 +661,14 @@ namespace RERCieDesktop
                 }
                 await StartServicesAsync();
                 progressBar.Value = 100;
-                statusLabel.Text = startupPlanStaged ? "RERCie is ready. Your Community Explorer plan is opening." : "RERCie is ready. Your browser is opening.";
+                statusLabel.Text = startupPlanStaged ? "RERC-e is ready. Your Community Explorer plan is opening." : "RERC-e is ready. Your browser is opening.";
                 Runtime.OpenBrowser(Runtime.AppBrowserUrl());
             }
             catch (Exception error)
             {
                 statusLabel.Text = error.Message;
                 statusLabel.ForeColor = Color.FromArgb(139, 30, 30);
-                MessageBox.Show(this, error.Message, "RERCie could not start", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, error.Message, "RERC-e could not start", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             finally
             {
@@ -687,9 +687,9 @@ namespace RERCieDesktop
 
         private async Task InstallWindowsRuntimeAsync()
         {
-            DialogResult choice = MessageBox.Show(this, "RERCie needs a standard Microsoft Windows component. Windows may ask for permission while the official Microsoft installer runs.", "One Windows component is needed", MessageBoxButtons.OKCancel, MessageBoxIcon.Information);
+            DialogResult choice = MessageBox.Show(this, "RERC-e needs a standard Microsoft Windows component. Windows may ask for permission while the official Microsoft installer runs.", "One Windows component is needed", MessageBoxButtons.OKCancel, MessageBoxIcon.Information);
             if (choice != DialogResult.OK) throw new InvalidOperationException("Setup stopped before the Windows component was installed.");
-            string installer = Path.Combine(Path.GetTempPath(), "RERCie-vc_redist.x64.exe");
+            string installer = Path.Combine(Path.GetTempPath(), "RERC-e-vc_redist.x64.exe");
             statusLabel.Text = "Downloading the Microsoft Windows component...";
             await Runtime.DownloadAsync(Config.VcRuntimeUrl, installer, null);
             if (!AuthenticodeVerifier.IsTrustedMicrosoftFile(installer))
@@ -705,23 +705,23 @@ namespace RERCieDesktop
             process.WaitForExit();
             try { File.Delete(installer); } catch { }
             if (process.ExitCode != 0 && process.ExitCode != 1638 && process.ExitCode != 3010) throw new InvalidOperationException("The Microsoft installer returned error " + process.ExitCode + ".");
-            if (!Runtime.VcRuntimeReady()) throw new InvalidOperationException("The Windows component is still missing. Restart Windows, then open RERCie again.");
+            if (!Runtime.VcRuntimeReady()) throw new InvalidOperationException("The Windows component is still missing. Restart Windows, then open RERC-e again.");
         }
 
         private async Task StartServicesAsync()
         {
             if (!Runtime.ModelServerReady())
             {
-                if (Runtime.PortInUse(8788)) throw new InvalidOperationException("Another program is blocking RERCie. Close it, then start RERCie again.");
+                if (Runtime.PortInUse(8788)) throw new InvalidOperationException("Another program is blocking RERC-e. Close it, then start RERC-e again.");
                 int threads = Math.Max(2, Environment.ProcessorCount - 1);
                 string llamaArgs = "-m \"" + Runtime.ModelPath + "\" --host 127.0.0.1 --port 8788 -c 8192 -t " + threads;
                 Runtime.StartHidden("llama", Runtime.LlamaExe, llamaArgs, Runtime.LlamaDir, null, null);
                 statusLabel.Text = "Starting the local writing model...";
-                await Runtime.WaitForAsync(Runtime.ModelServerReady, 150, "The local model did not start. Restart RERCie and try again.");
+                await Runtime.WaitForAsync(Runtime.ModelServerReady, 150, "The local model did not start. Restart RERC-e and try again.");
             }
             if (!Runtime.AppReady())
             {
-                if (Runtime.PortInUse(8789)) throw new InvalidOperationException("Another program is blocking RERCie. Close it, then start RERCie again.");
+                if (Runtime.PortInUse(8789)) throw new InvalidOperationException("Another program is blocking RERC-e. Close it, then start RERC-e again.");
                 string sessionToken = Runtime.CreateSessionToken();
                 Dictionary<string, string> environment = new Dictionary<string, string>();
                 environment["RERCIE_LOCAL_CHAT_URL"] = "http://127.0.0.1:8788/v1/chat/completions";
@@ -731,8 +731,8 @@ namespace RERCieDesktop
                 environment["RERCIE_EXPECTED_HOST"] = "127.0.0.1:8789";
                 environment["RERCIE_APP_ROOT"] = Runtime.Root;
                 Runtime.StartHidden("app", Runtime.ServiceExe, "--serve --host 127.0.0.1 --port 8789", Runtime.ServiceDir, environment, sessionToken);
-                statusLabel.Text = "Starting RERCie...";
-                await Runtime.WaitForAsync(Runtime.AppReady, 35, "RERCie did not start. Restart the app and try again.");
+                statusLabel.Text = "Starting RERC-e...";
+                await Runtime.WaitForAsync(Runtime.AppReady, 35, "RERC-e did not start. Restart the app and try again.");
             }
         }
 
@@ -742,7 +742,7 @@ namespace RERCieDesktop
             RefreshButtons();
             int failures = 0;
             int stopped = await Task.Run(() => Runtime.StopOwnedProcesses(out failures));
-            statusLabel.Text = failures > 0 ? "RERCie could not stop every local process. Close RERCie and try again." : stopped > 0 ? "RERCie stopped." : "RERCie was already stopped.";
+            statusLabel.Text = failures > 0 ? "RERC-e could not stop every local process. Close RERC-e and try again." : stopped > 0 ? "RERC-e stopped." : "RERC-e was already stopped.";
             progressBar.Value = 0;
             busy = false;
             RefreshButtons();
@@ -852,7 +852,7 @@ namespace RERCieDesktop
                     string json = new JavaScriptSerializer().Serialize(new
                     {
                         status = "PASS",
-                        app = "RERCie",
+                        app = "RERC-e",
                         version = Config.Version,
                         powershell_required = false,
                         model_name = Config.ModelName,
@@ -897,7 +897,7 @@ namespace RERCieDesktop
                 }
                 catch (Exception error)
                 {
-                    MessageBox.Show(error.Message, "RERCie could not open this plan", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show(error.Message, "RERC-e could not open this plan", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return 2;
                 }
             }
@@ -911,7 +911,7 @@ namespace RERCieDesktop
                     {
                         if (planStaged)
                         {
-                            MessageBox.Show("The plan is ready. Use the open RERCie window to start the app.", "Community Explorer plan ready", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            MessageBox.Show("The plan is ready. Use the open RERC-e window to start the app.", "Community Explorer plan ready", MessageBoxButtons.OK, MessageBoxIcon.Information);
                             return 0;
                         }
                         return 1;

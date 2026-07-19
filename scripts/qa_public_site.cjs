@@ -27,7 +27,20 @@ async function main() {
     page.on("pageerror", (error) => errors.push(`pageerror:${error.message}`));
     page.on("console", (message) => { if (message.type() === "error") { const where = message.location(); errors.push(`console:${where.url}:${where.lineNumber}:${where.columnNumber}:${message.text()}`); } });
     await page.goto(baseUrl, { waitUntil: "networkidle", timeout: 60000 });
-    await page.waitForSelector("html.rerc-planner-ready"); await page.waitForSelector(".result-card");
+    await page.waitForSelector("html.rerc-planner-ready"); await page.waitForSelector("#communityName", { state: "visible" });
+    checks.communityFormVisibleAtStart = await page.locator("#communityFilters").isVisible();
+    checks.futureStepsLockedAtStart = await page.locator('#workflowSteps [data-wizard-step="2"], #workflowSteps [data-wizard-step="3"], #workflowSteps [data-wizard-step="4"]').evaluateAll((nodes) => nodes.every((node) => node.disabled));
+    checks.resultsHiddenAtStart = await page.locator("#matchesWorkspace").isHidden();
+    await page.locator("[data-wizard-next]").click();
+    checks.blankCommunityBlocked = await page.locator('[data-wizard-panel="1"]').isVisible();
+    await page.fill("#communityName", "St. Paul"); await page.locator("[data-wizard-next]").click();
+    checks.partialCommunityBlocked = await page.locator('[data-wizard-panel="1"]').isVisible() && await page.locator("#stateSelect").getAttribute("aria-invalid") === "true";
+    await page.selectOption("#stateSelect", { label: "Virginia" });
+    checks.futureStepsUnlocked = await page.locator('#workflowSteps [data-wizard-step="2"], #workflowSteps [data-wizard-step="3"], #workflowSteps [data-wizard-step="4"]').evaluateAll((nodes) => nodes.every((node) => !node.disabled));
+    await page.locator("[data-wizard-next]").click(); checks.phase2Visible = await page.locator('[data-wizard-panel="2"]').isVisible();
+    await page.locator('#workflowSteps [data-wizard-step="3"]').click(); await page.waitForSelector(".result-card");
+    checks.phase3Visible = await page.locator("#matchesWorkspace").isVisible();
+    check("community_gate", checks.communityFormVisibleAtStart && checks.futureStepsLockedAtStart && checks.resultsHiddenAtStart && checks.blankCommunityBlocked && checks.partialCommunityBlocked && checks.futureStepsUnlocked && checks.phase2Visible && checks.phase3Visible);
     checks.counts = await page.evaluate(() => ["fundingCount", "resourceCount", "caseStudyCount"].map((id) => Number(document.getElementById(id).textContent)));
     check("counts", checks.counts.join(",") === "659,61,476" && checks.counts.reduce((sum, value) => sum + value, 0) === 1196);
     checks.desktopNoOverflow = await overflow(page); check("desktop_overflow", checks.desktopNoOverflow);
@@ -35,7 +48,7 @@ async function main() {
     checks.modes = {}; for (const [name, selector] of Object.entries(modes)) { await page.locator(selector).click(); checks.modes[name] = await page.locator(selector).getAttribute("aria-pressed") === "true"; }
     check("mode_buttons", Object.values(checks.modes).every(Boolean));
     await page.locator("#showFunding").click();
-    const datedTitle = await page.evaluate(() => (window.RERCExplorer.catalog || []).find((item) => { const date = item.item_type === "Funding" ? window.RERCExplorer.parseDeadline(item) : null; return date instanceof Date && !Number.isNaN(date.getTime()) && date.getTime() >= new Date().setHours(0, 0, 0, 0); })?.title || "");
+    const datedTitle = await page.evaluate(() => window.RERCExplorer.getMatches().find((item) => { const date = item.item_type === "Funding" ? window.RERCExplorer.parseDeadline(item) : null; return date instanceof Date && !Number.isNaN(date.getTime()) && date.getTime() >= new Date().setHours(0, 0, 0, 0); })?.title || "");
     if (datedTitle) { await page.evaluate((title) => { const input = document.getElementById("keywordSearch"); input.value = title; input.dispatchEvent(new Event("input", { bubbles: true })); }, datedTitle); await page.waitForTimeout(250); }
     const firstSave = page.locator('[data-action="planner-save"]').first(); await firstSave.click(); await page.waitForTimeout(500);
     checks.savedBeforeReload = Number(await page.evaluate(() => document.querySelector("#savedCountBadge, #savedTrayCount, #mobileSavedCount")?.textContent || 0));
@@ -69,9 +82,15 @@ async function main() {
     await page.screenshot({ path: path.join(outDir, "desktop.png"), fullPage: true }); await context.close();
     checks.mobile = {}; for (const width of [320, 390]) {
       const mobile = await browser.newContext({ viewport: { width, height: 844 } }); const page = await mobile.newPage(); page.on("pageerror", (error) => errors.push(`mobile:${error.message}`));
-      await page.goto(baseUrl, { waitUntil: "networkidle", timeout: 60000 }); await page.waitForSelector("html.rerc-planner-ready");
+      await page.goto(baseUrl, { waitUntil: "networkidle", timeout: 60000 }); await page.waitForSelector("html.rerc-planner-ready"); await page.waitForSelector("#communityName", { state: "visible" });
+      const formVisible = await page.locator("#communityFilters").isVisible();
+      const locked = await page.locator('#workflowSteps [data-wizard-step="2"], #workflowSteps [data-wizard-step="3"], #workflowSteps [data-wizard-step="4"]').evaluateAll((nodes) => nodes.every((node) => node.disabled));
+      await page.fill("#communityName", "Taos"); await page.selectOption("#stateSelect", { label: "New Mexico" });
+      await page.locator('#workflowSteps [data-wizard-step="2"]').click(); const phase2 = await page.locator('[data-wizard-panel="2"]').isVisible();
+      await page.locator('#workflowSteps [data-wizard-step="3"]').click(); await page.waitForSelector(".result-card");
       const controls = await page.locator("button, a, input, select").evaluateAll((nodes) => nodes.filter((node) => { const style = getComputedStyle(node), box = node.getBoundingClientRect(); return !node.matches('input[type="file"]') && style.display !== "none" && style.visibility !== "hidden" && box.width > 0 && box.height > 0; }).map((node) => Math.min(node.getBoundingClientRect().width, node.getBoundingClientRect().height)));
-      checks.mobile[width] = { overflow: await overflow(page), bottomNav: await page.locator(".mobile-nav").isVisible(), controls44: controls.every((value) => value >= 44) }; check(`mobile_${width}`, Object.values(checks.mobile[width]).every(Boolean));
+      await page.locator('[data-mobile-action="filters"]').click(); const communityAction = await page.locator("#communityFilters").isVisible() && await page.locator('[data-wizard-panel="1"]').isVisible();
+      checks.mobile[width] = { overflow: await overflow(page), bottomNav: await page.locator(".mobile-nav").isVisible(), controls44: controls.every((value) => value >= 44), formVisible, locked, phase2, communityAction }; check(`mobile_${width}`, Object.values(checks.mobile[width]).every(Boolean));
       await page.screenshot({ path: path.join(outDir, `mobile-${width}.png`), fullPage: true }); await mobile.close();
     }
     check("browser_errors", errors.length === 0);

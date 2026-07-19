@@ -1,6 +1,6 @@
 # Local Knowledge
 
-Put local reference files in this folder when you run RERCie on your computer.
+Put local reference files in this folder when you run RERC-e on your computer.
 
 Supported file types:
 
@@ -9,4 +9,4 @@ Supported file types:
 3. `.csv`
 4. `.json`
 
-RERCie scans only this folder for saved reference files. It can also read files you choose in the app. It does not scan the rest of your computer.
+RERC-e scans only this folder for saved reference files. It can also read files you choose in the app. It does not scan the rest of your computer.

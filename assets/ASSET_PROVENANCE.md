@@ -12,11 +12,12 @@
 - Public credit: National Park Service
 - Approval: Approved for this public site with the source and rights reference recorded here.
 
-## RERCie Otter Illustration
+## RERC-e Eagle Illustration
 
-- Files: `rercie-otter.png`, `rercie-otter.jpg`, and `rercie.ico`
-- Description: RERCie, a river otter in an outdoor field vest holding a notebook, pencil, and trail map
-- Creator: Project-created original illustration generated for the RERCie release on July 13, 2026
+- Files: `rerc-e-eagle.jpg`, `rerc-e-eagle-icon.png`, and `rerc-e.ico`
+- Description: RERC-e, a bald eagle field guide in an outdoor vest holding a notebook and pencil
+- Creator: Project-created original illustration generated for the RERC-e release on July 19, 2026
 - External source: None
 - Rights basis: Created for this project through OpenAI image generation; no third-party stock asset was used.
-- Approval: Approved as the RERCie companion character for this public site and Windows installer.
+- Content boundary: No EPA seal, agency logo, or third-party trademark is embedded in the illustration.
+- Approval: Approved as the RERC-e companion character for this public site and Windows installer.

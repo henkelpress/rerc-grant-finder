@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PREFIX = "window.RERC_CATALOG = "
 COMMUNITY_PROFILES_PREFIX = "window.RERC_COMMUNITY_PROFILES="
-EXPECTED_RERCIE_VERSION = "0.4.0"
+EXPECTED_RERCIE_VERSION = "0.5.0"
 EXPECTED_NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org/search"
 EXPECTED_REFERRER_POLICY = "strict-origin-when-cross-origin"
 EXPECTED_CSP = (
@@ -296,7 +296,7 @@ def main() -> int:
     assert "source commit used to generate" in package_report["release_binding_note"]
     assert package_report["site_sha256"] == {
         name: git_blob_sha256(head_commit, name)
-        for name in ("index.html", "styles.css", "rercie.css", "app.js", "planner.js", "data.js", "case_studies.js", "community_profiles.js", "favicon.svg", "vendor/jszip.min.js", "vendor/lucide.min.js", "assets/hero-outdoor.jpg", "assets/rercie-otter.jpg", "README.md")
+        for name in ("index.html", "styles.css", "rercie.css", "app.js", "planner.js", "data.js", "case_studies.js", "community_profiles.js", "favicon.svg", "vendor/jszip.min.js", "vendor/lucide.min.js", "assets/hero-outdoor.jpg", "assets/rerc-e-eagle.jpg", "README.md")
     }
     assert package_report["docx"]["sha256"] == sha256(static_docx)
     assert package_report["xlsx"]["sha256"] == sha256(static_xlsx)
@@ -316,7 +316,7 @@ def main() -> int:
     core = (ROOT / "rercie" / "rercie_core.py").read_text(encoding="utf-8")
     assert "call_openai_compatible" not in core
     assert "apiEndpoint" not in core and "apiModel" not in core
-    assert "RERCie is reviewing your notes with local Gemma" in core
+    assert "RERC-e is reviewing your notes with local Gemma" in core
     assert "rawModelProseExposed" in core
     assert "parse_verified_excerpts" in core
     launcher = (ROOT / "rercie" / "packaging" / "RERCieLauncher.cs").read_text(encoding="utf-8")
@@ -325,9 +325,9 @@ def main() -> int:
     installer_script = (ROOT / "rercie" / "packaging" / "RERCie.iss").read_text(encoding="utf-8")
     assert '[InstallDelete]' not in installer_script
     assert 'Name: "{app}\\models"' in installer_script  # Uninstall cleanup remains intentional.
-    assert '#define AppVersion "0.4.0"' in installer_script
+    assert '#define AppVersion "0.5.0"' in installer_script
     build_script = (ROOT / "rercie" / "build_installer.ps1").read_text(encoding="utf-8")
-    assert '$Version = "0.4.0"' in build_script
+    assert '$Version = "0.5.0"' in build_script
     installer_manifest = json.loads(
         (ROOT / "rercie" / "packaging" / "installer_manifest.json").read_text(
             encoding="utf-8"
@@ -440,7 +440,7 @@ def main() -> int:
             "community_profiles",
             "case_studies",
             "downloads",
-            "rercie_0.4.0",
+            "rerc_e_0.5.0",
             "privacy_and_grounding",
         ],
     }

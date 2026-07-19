@@ -1,15 +1,15 @@
 {
   "status": "PASS",
   "tested_date": "2026-07-19",
-  "app_version": "0.4.0",
+  "app_version": "0.5.0",
   "model": "gemma-3-1b-it-Q4_K_M.gguf",
-  "source_sha256": "2e9dbf8e9e89c4eea123becb96f085b6f8a0c8fcb86aedc6f7e43ba95d98192c",
-  "source_normalized_sha256": "4dbbde8ec99fed6d8e8c8a69bec0dccb8add34a8f519705f9737466facbe5fa1",
+  "source_sha256": "5349a9a74cef97684880032fb7fbc7223d3574e44480f1d82996a08a2c921e66",
+  "source_normalized_sha256": "f8c48e3b4f44c6e13222248d0be254852ae50738525d763e7a6f8ec584a81e43",
   "verified_excerpt_count": 1,
   "raw_model_prose_exposed": false,
   "deterministic_scaffold": true,
   "unsupported_eligibility_claim_absent": true,
-  "evidence_scope": "Source-bound local Gemma inference passed against the final RERCie source before packaging.",
+  "evidence_scope": "Source-bound local Gemma inference passed against the final RERC-e source before packaging.",
   "later_standalone_rerun": {
     "status": "PASS",
     "reason": "Completed against the pinned approved local Gemma service."

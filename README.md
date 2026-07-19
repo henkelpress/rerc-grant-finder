@@ -30,9 +30,9 @@ People can name a community for the appendix, choose its state or territory, sel
 
 The community-example layer includes only public text and links from official EPA, U.S. Climate Resilience Toolkit, and USDA Rural Development pages. Private records, local paths, administrative notes, and images are excluded. The 2026-07-18 automated check reached 271 of 303 unique pages directly. USDA Rural Development blocked automated access to 32 pages, so those links require manual review; no case-study link returned a hard failure.
 
-## Meet RERCie
+## Meet RERC-e
 
-RERCie Local Grant-Writing Guide is an optional Windows app. It helps people review likely funding matches and turn project notes into a structured first draft. Local Gemma may select exact excerpts from supplied evidence; RERCie verifies them and places them in a fixed outline. Raw model prose is not shown.
+RERC-e Local Grant-Writing Guide is an optional Windows app. It helps people review likely funding matches and turn project notes into a structured first draft. Local Gemma may select exact excerpts from supplied evidence; RERC-e verifies them and places them in a fixed outline. Raw model prose is not shown.
 
 - Friendly Windows setup wizard
 - No command-line setup for the person installing it
@@ -41,11 +41,11 @@ RERCie Local Grant-Writing Guide is an optional Windows app. It helps people rev
 - First use downloads a verified Google Gemma 3 1B model, about 0.81 GB
 - Real Word `.docx` and Markdown export
 
-[Download RERCie for Windows](https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Setup.exe)
+[Download RERC-e for Windows](https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERC-e-Setup.exe)
 
-[SHA-256 checksum](https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Setup.exe.sha256) | [Release QA](https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Release-QA.json)
+[SHA-256 checksum](https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERC-e-Setup.exe.sha256) | [Release QA](https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERC-e-Release-QA.json)
 
-RERCie is a community-built tool. It is not an EPA grant program, does not decide eligibility, and does not submit applications. The installer is not yet digitally signed, so Windows may show a safety notice. Installer lifecycle testing ran on the build computer, not a separate clean Windows virtual machine. Package-bound local Gemma generation passed; a later standalone retest could not run because the local service was not open. Download it only from this repository's release page.
+RERC-e is a community-built tool. It is not an EPA grant program, does not decide eligibility, and does not submit applications. The installer is not yet digitally signed, so Windows may show a safety notice. Installer lifecycle testing ran on the build computer, not a separate clean Windows virtual machine. Package-bound local Gemma generation passed; a later standalone retest could not run because the local service was not open. Download it only from this repository's release page.
 
 The reviewed source is in `rercie/`. Model weights are not stored in this repository or installer.
 
