@@ -71,6 +71,7 @@
       "status": "PASS",
       "model": "Google Gemma 3 1B Instruct Q4_K_M",
       "source_sha256": "2e9dbf8e9e89c4eea123becb96f085b6f8a0c8fcb86aedc6f7e43ba95d98192c",
+      "source_normalized_sha256": "4dbbde8ec99fed6d8e8c8a69bec0dccb8add34a8f519705f9737466facbe5fa1",
       "verified_excerpt_count": 1,
       "raw_model_prose_exposed": false,
       "later_standalone_rerun_status": "PASS"
@@ -147,6 +148,6 @@
   },
   "verification_inputs": {
     "browser_contract_sha256": "017de040030f4f230839e630bfd34538c6444638f3f25f458492d17fdb4cd22b",
-    "local_gemma_report_sha256": "973d2504217e08d81054fa3a10f8b4635784cf6743de472cc9ef5835e373d6ac"
+    "local_gemma_report_sha256": "06d71b175715d76244f7ef60f8220a10c42e2ec02fdee948773fbe7749fa3b7f"
   }
 }
