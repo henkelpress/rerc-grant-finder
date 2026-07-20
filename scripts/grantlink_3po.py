@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+from datetime import datetime, timezone
 import json
 import ssl
 import time
@@ -11,9 +12,11 @@ from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA_JS = ROOT / "data.js"
+STATE_PATH = ROOT / ".source-monitor" / "state.json"
 TIMEOUT_SECONDS = 20
 MAX_WORKERS = 12
 MANUAL_REVIEW_HOSTS = {"oedc.wvu.edu"}
+SIGNAL_FIELDS = ("status", "final_url", "etag", "last_modified", "content_length")
 
 
 def load_urls() -> list[str]:
@@ -37,7 +40,17 @@ def load_urls() -> list[str]:
 
 def probe(url: str) -> dict:
     start = time.time()
-    result = {"url": url, "ok": False, "status": None, "error": "", "elapsed_seconds": None}
+    result = {
+        "url": url,
+        "ok": False,
+        "status": None,
+        "error": "",
+        "elapsed_seconds": None,
+        "final_url": url,
+        "etag": "",
+        "last_modified": "",
+        "content_length": "",
+    }
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf,*/*;q=0.8",
@@ -49,7 +62,17 @@ def probe(url: str) -> dict:
             request = urllib.request.Request(url, method=method, headers=headers)
             with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS, context=context) as response:
                 status = getattr(response, "status", 200)
-                result.update({"ok": status < 400, "status": status, "error": ""})
+                result.update(
+                    {
+                        "ok": status < 400,
+                        "status": status,
+                        "error": "",
+                        "final_url": response.geturl(),
+                        "etag": str(response.headers.get("ETag", "")).strip(),
+                        "last_modified": str(response.headers.get("Last-Modified", "")).strip(),
+                        "content_length": str(response.headers.get("Content-Length", "")).strip(),
+                    }
+                )
                 break
         except urllib.error.HTTPError as exc:
             if method == "HEAD":
@@ -77,19 +100,79 @@ def needs_manual_review(item: dict) -> bool:
     return not item["ok"] and not is_hard_failure(item)
 
 
+def source_signal(item: dict) -> dict:
+    return {field: item.get(field) or "" for field in SIGNAL_FIELDS}
+
+
+def load_previous_state() -> dict:
+    if not STATE_PATH.exists():
+        return {}
+    try:
+        data = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def compare_source_signals(previous_state: dict, results: list[dict]) -> dict:
+    previous = previous_state.get("sources") if isinstance(previous_state.get("sources"), dict) else {}
+    current = {item["url"]: source_signal(item) for item in results}
+    baseline_created = not bool(previous)
+    new_urls = sorted(set(current) - set(previous)) if not baseline_created else []
+    removed_urls = sorted(set(previous) - set(current)) if not baseline_created else []
+    changed = []
+    if not baseline_created:
+        for url in sorted(set(previous) & set(current)):
+            if previous[url] != current[url]:
+                changed.append({"url": url, "before": previous[url], "after": current[url]})
+
+    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    STATE_PATH.write_text(
+        json.dumps(
+            {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "sources": current,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return {
+        "baseline_created": baseline_created,
+        "changed": changed,
+        "new_urls": new_urls,
+        "removed_urls": removed_urls,
+    }
+
+
 def main() -> int:
     urls = load_urls()
+    previous_state = load_previous_state()
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
         results = list(pool.map(probe, urls))
     failed = [item for item in results if is_hard_failure(item)]
     manual_review = [item for item in results if needs_manual_review(item)]
     bot_blocked = [item for item in manual_review if item.get("status") == 403]
+    updates = compare_source_signals(previous_state, results)
+    update_count = len(updates["changed"]) + len(updates["new_urls"]) + len(updates["removed_urls"])
     report = {
-        "status": "REVIEW" if failed else ("MANUAL_REVIEW" if manual_review else "PASS"),
+        "status": (
+            "REVIEW"
+            if failed
+            else ("MANUAL_REVIEW" if manual_review else ("UPDATE_SIGNALS" if update_count else "PASS"))
+        ),
+        "checked_at": datetime.now(timezone.utc).isoformat(),
         "unique_urls_checked": len(urls),
         "failed_urls": len(failed),
         "manual_review_urls": len(manual_review),
         "bot_blocked_urls": len(bot_blocked),
+        "baseline_created": updates["baseline_created"],
+        "changed_source_signals": len(updates["changed"]),
+        "new_source_urls": len(updates["new_urls"]),
+        "removed_source_urls": len(updates["removed_urls"]),
+        "changed": updates["changed"],
+        "new_urls": updates["new_urls"],
+        "removed_urls": updates["removed_urls"],
         "results": results,
     }
     (ROOT / "source-health-report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
@@ -100,8 +183,21 @@ def main() -> int:
         f"Hard failures: {len(failed)}",
         f"Manual review URLs: {len(manual_review)}",
         f"Bot-blocked URLs: {len(bot_blocked)}",
+        f"Monitoring baseline created: {'yes' if updates['baseline_created'] else 'no'}",
+        f"Changed source signals: {len(updates['changed'])}",
+        f"New source URLs: {len(updates['new_urls'])}",
+        f"Removed source URLs: {len(updates['removed_urls'])}",
         "",
     ]
+    if updates["changed"]:
+        lines.append("## Changed Source Signals")
+        lines.extend(f"- {item['url']}" for item in updates["changed"][:100])
+    if updates["new_urls"]:
+        lines.append("## New Source URLs")
+        lines.extend(f"- {url}" for url in updates["new_urls"][:100])
+    if updates["removed_urls"]:
+        lines.append("## Removed Source URLs")
+        lines.extend(f"- {url}" for url in updates["removed_urls"][:100])
     if failed:
         lines.append("## Hard Failures")
         lines.extend(f"- {item['status'] or 'error'}: {item['url']} ({item['error']})" for item in failed[:100])
@@ -118,6 +214,10 @@ def main() -> int:
                 "failed_urls": len(failed),
                 "manual_review_urls": len(manual_review),
                 "bot_blocked_urls": len(bot_blocked),
+                "baseline_created": updates["baseline_created"],
+                "changed_source_signals": len(updates["changed"]),
+                "new_source_urls": len(updates["new_urls"]),
+                "removed_source_urls": len(updates["removed_urls"]),
             },
             indent=2,
         )

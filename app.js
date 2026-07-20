@@ -48,7 +48,8 @@ const elements = Object.fromEntries([
   "communityName","stateSelect","placeTypeSelect","keywordSearch","applicantOptions","topicOptions","stageSelect",
   "includeClosed","toggleFilters","resetButton","sortSelect","limitSelect","exportWord","exportCsv","communityTitle","communitySummary",
   "matchCount","fundingMatchCount","resourceMatchCount","caseStudyMatchCount","activeFilters","results","matchAnnouncement",
-  "fundingCount","resourceCount","caseStudyCount","showFunding","showResources","showCases"
+  "fundingCount","resourceCount","caseStudyCount","showFunding","showResources","showCases",
+  "nextDeadlinePanel","nextDeadlineDate","nextDeadlineMeta","nextDeadlineLink"
 ].map((id) => [id, document.getElementById(id)]));
 
 let mode = "All";
@@ -357,7 +358,7 @@ function matchEvidence(item) {
 }
 
 function makeLocalDate(year, month, day) {
-  const date = new Date(year, month - 1, day, 12, 0, 0, 0);
+  const date = new Date(year, month - 1, day, 0, 0, 0, 0);
   return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? date : null;
 }
 
@@ -368,16 +369,16 @@ function parseDeadline(item) {
   }
 
   const candidates = [];
-  const addCandidate = (year, month, day) => {
+  const addCandidate = (year, month, day, index, length) => {
     const date = makeLocalDate(Number(year), Number(month), Number(day));
-    if (date) candidates.push(date);
+    if (date) candidates.push({ date, index, end: index + length, rangeStart: false, rangeEnd: false });
   };
 
   for (const match of text.matchAll(/\b(20\d{2})-(\d{1,2})-(\d{1,2})\b/g)) {
-    addCandidate(match[1], match[2], match[3]);
+    addCandidate(match[1], match[2], match[3], match.index, match[0].length);
   }
   for (const match of text.matchAll(/\b(\d{1,2})\/(\d{1,2})\/(20\d{2})\b/g)) {
-    addCandidate(match[3], match[1], match[2]);
+    addCandidate(match[3], match[1], match[2], match.index, match[0].length);
   }
 
   const monthNumbers = {
@@ -386,19 +387,78 @@ function parseDeadline(item) {
     sep: 9, sept: 9, october: 10, oct: 10, november: 11, nov: 11, december: 12, dec: 12
   };
   const monthPattern = Object.keys(monthNumbers).join("|");
-  const namedDatePattern = new RegExp(`\\b(${monthPattern})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s+(20\\d{2})\\b`, "gi");
+  const listYear = text.match(/\b(20\d{2})\s+(?:deadlines?|cycle|application period)\b/i)?.[1];
+  const namedDatePattern = new RegExp(`\\b(${monthPattern})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(20\\d{2}))?\\b`, "gi");
   for (const match of text.matchAll(namedDatePattern)) {
-    addCandidate(match[3], monthNumbers[match[1].toLowerCase()], match[2]);
+    const year = match[3] || listYear;
+    if (year) addCandidate(year, monthNumbers[match[1].toLowerCase()], match[2], match.index, match[0].length);
+  }
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => a.index - b.index);
+  for (let index = 0; index < candidates.length - 1; index += 1) {
+    const between = text.slice(candidates[index].end, candidates[index + 1].index);
+    if (/^\s*(?:to|through|-)\s*$/i.test(between)) {
+      candidates[index].rangeStart = true;
+      candidates[index + 1].rangeEnd = true;
+    }
   }
 
-  if (!candidates.length) return null;
-  const deadline = candidates.sort((a, b) => b - a)[0];
+  const isOpeningDate = (entry) => {
+    const prefix = text.slice(Math.max(0, entry.index - 40), entry.index);
+    return entry.rangeStart || (!entry.rangeEnd && /\b(open(?:s|ing)?|begins?|starts?|from)\b[^.;:]{0,24}$/i.test(prefix));
+  };
+  const usable = candidates.filter((entry) => !isOpeningDate(entry));
+  if (!usable.length) return null;
+  const deadlineList = /\bdeadlines?\s+(?:include|are)\b/i.test(text);
+  const anchored = usable.filter((entry) => {
+    const context = text.slice(Math.max(0, entry.index - 50), Math.min(text.length, entry.end + 24));
+    return deadlineList || entry.rangeEnd || /\b(due|deadline|closes?|closing|ends?|through)\b/i.test(context);
+  });
+  const pool = anchored.length ? anchored : usable;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const future = pool.filter((entry) => entry.date >= today).sort((a, b) => a.date - b.date);
+  if (future.length) return future[0].date;
+  const deadline = pool.sort((a, b) => b.date - a.date)[0].date;
   if (/\b(open|available)\b/i.test(cleanText(item.status)) && deadline < today) return null;
   return deadline;
 }
+function renderNextDeadline(items) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const next = items
+    .filter((item) => item.item_type === "Funding")
+    .map((item) => ({ item, date: parseDeadline(item) }))
+    .filter((entry) => entry.date && entry.date >= today)
+    .sort((a, b) => a.date - b.date || b.item.score - a.item.score || a.item.title.localeCompare(b.item.title))[0];
 
+  if (!next) {
+    elements.nextDeadlinePanel.classList.add("empty");
+    elements.nextDeadlineDate.textContent = "No dated funding deadline found in these matches.";
+    elements.nextDeadlineMeta.textContent = "Open a program page to confirm current timing.";
+    elements.nextDeadlineLink.hidden = true;
+    elements.nextDeadlineLink.removeAttribute("href");
+    return;
+  }
+
+  const days = Math.round((next.date - today) / 86400000);
+  const dateText = new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric"
+  }).format(next.date);
+  const source = safeUrl(next.item.source_url);
+  elements.nextDeadlinePanel.classList.remove("empty");
+  elements.nextDeadlineDate.textContent = dateText;
+  elements.nextDeadlineMeta.textContent = `${next.item.title} - ${days === 0 ? "Due today" : `${days} day${days === 1 ? "" : "s"} left`}`;
+  elements.nextDeadlineLink.hidden = !source;
+  if (source) {
+    elements.nextDeadlineLink.href = source;
+    elements.nextDeadlineLink.setAttribute("aria-label", `View ${next.item.title} program details`);
+  } else {
+    elements.nextDeadlineLink.removeAttribute("href");
+  }
+}
 function hasSubstantiveAnswers() {
   const factors = selectedMatchFactors();
   return Boolean(
@@ -542,7 +602,7 @@ function render() {
   const resourceMatches = resourceResults.length;
   const caseMatches = caseResults.length;
   const modeLabel = {
-    "All": "Funding, resources, and examples",
+    "All": "Funding, resources, and case studies",
     "Funding": "Funding",
     "Resource": "Resources",
     "Case Study": "Case studies"
@@ -558,6 +618,7 @@ function render() {
   elements.fundingMatchCount.textContent = fundingMatches.toLocaleString();
   elements.resourceMatchCount.textContent = resourceMatches.toLocaleString();
   elements.caseStudyMatchCount.textContent = caseMatches.toLocaleString();
+  renderNextDeadline(fundingResults);
   elements.activeFilters.textContent = activeFilterSummary();
   elements.matchAnnouncement.textContent = `${currentMatches.length} total matches; ${visible.length} cards displayed for ${label}.`;
   if (!visible.length) {

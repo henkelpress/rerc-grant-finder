@@ -114,6 +114,15 @@
           <div><strong id="resourceMatchCount">0</strong><span>Resources</span></div>
           <div><strong id="caseStudyMatchCount">0</strong><span>Case studies</span></div>
         </div>
+        <section id="nextDeadlinePanel" class="next-deadline" aria-labelledby="nextDeadlineTitle" aria-live="polite">
+          <span class="next-deadline-icon" aria-hidden="true"><i data-lucide="calendar-days"></i></span>
+          <div>
+            <span id="nextDeadlineTitle" class="next-deadline-label">Next submission deadline</span>
+            <strong id="nextDeadlineDate">Checking dated funding matches...</strong>
+            <span id="nextDeadlineMeta"></span>
+          </div>
+          <a id="nextDeadlineLink" href="#" target="_blank" rel="noopener" hidden>View program</a>
+        </section>
         <p id="matchAnnouncement" class="sr-only" aria-live="polite" aria-atomic="true"></p>
         <div class="results-toolbar">
           <label for="sortSelect"><span>Sort</span><select id="sortSelect"><option value="score">Most relevant</option><option value="title">Name</option><option value="status">Status</option><option value="type">Type</option></select></label>

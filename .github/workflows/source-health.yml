@@ -1,8 +1,8 @@
-name: Weekly Source Link Check
+name: Daily Grant and Resource Update Check
 
 on:
   schedule:
-    - cron: '17 10 * * 1'
+    - cron: '17 10 * * *'
   workflow_dispatch:
 
 permissions:
@@ -18,10 +18,30 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Restore prior source signals
+        uses: actions/cache/restore@v4
+        with:
+          path: .source-monitor/state.json
+          key: rerc-source-monitor-${{ github.run_id }}
+          restore-keys: |
+            rerc-source-monitor-
       - name: Check funding and resource links
+        id: catalog
+        continue-on-error: true
         run: python scripts/grantlink_3po.py
       - name: Check community example links
+        id: examples
+        if: always()
+        continue-on-error: true
         run: python scripts/check_case_sources.py
+      - name: Add review summary
+        if: always()
+        run: |
+          if [ -f source-health-report.md ]; then
+            cat source-health-report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Source health report was not generated." >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Upload source health report
         if: always()
         uses: actions/upload-artifact@v4
@@ -31,3 +51,15 @@ jobs:
             source-health-report.json
             source-health-report.md
             case_studies.source_health.json
+            .source-monitor/state.json
+      - name: Save current source signals
+        if: always() && hashFiles('.source-monitor/state.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: .source-monitor/state.json
+          key: rerc-source-monitor-${{ github.run_id }}
+      - name: Enforce hard-failure gate
+        if: always()
+        run: |
+          test "${{ steps.catalog.outcome }}" = "success"
+          test "${{ steps.examples.outcome }}" = "success"

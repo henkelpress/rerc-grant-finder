@@ -250,6 +250,14 @@ def main() -> int:
     assert "qa_public_site.cjs" in (ROOT / ".github" / "workflows" / "qa.yml").read_text(encoding="utf-8")
     workflow = (ROOT / ".github" / "workflows" / "deploy-pages.yml").read_text(encoding="utf-8")
     assert "__pycache__" in workflow and "*.pyc" in workflow
+    source_health = (ROOT / ".github" / "workflows" / "source-health.yml").read_text(encoding="utf-8")
+    discovery = (ROOT / ".github" / "workflows" / "discover-federal-opportunities.yml").read_text(encoding="utf-8")
+    styles = (ROOT / "styles.css").read_text(encoding="utf-8")
+    assert "17 10 * * *" in source_health and "actions/cache/restore@v4" in source_health
+    assert "23 11 * * *" in discovery
+    assert ".source-monitor/" in (ROOT / ".gitignore").read_text(encoding="utf-8")
+    assert 'id="nextDeadlinePanel"' in index and "renderNextDeadline" in app_js
+    assert "object-fit: contain" in styles and "object-position: center" in styles
 
     case_raw = (ROOT / "case_studies.js").read_text(encoding="utf-8").strip()
     case_prefix = "window.RERC_CASE_STUDIES="

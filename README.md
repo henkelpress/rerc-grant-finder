@@ -56,9 +56,9 @@ The reviewed source and Timberwing Systems license are in `rercie/`. Model weigh
 
 ## Automated Checks
 
-The `Weekly Source Link Check` workflow checks the catalog maintenance links and uploads a source-health report. The `Monthly Federal Opportunity Discovery` workflow searches the public Grants.gov API and uploads a review queue of posted and forecasted opportunities related to rural development, outdoor recreation, trails, tourism, community development, economic development, and technical assistance.
+The `Daily Grant and Resource Update Check` workflow checks every catalog source each day, compares available source signals such as status, redirects, ETag, last-modified date, and content length with the prior run, and uploads a review report. The `Daily Federal Opportunity Discovery` workflow searches the public Grants.gov API each day and uploads a review queue of posted and forecasted opportunities related to rural development, outdoor recreation, trails, tourism, community development, economic development, and technical assistance.
 
-New opportunities and status changes require human review before they enter the public catalog. The discovery workflow does not publish unreviewed records.
+New opportunities, changed source signals, and status changes require human review before they enter the public catalog. The monitoring workflows do not publish unreviewed records.
 
 ## Publication Boundary
 

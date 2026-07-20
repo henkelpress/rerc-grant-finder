@@ -43,6 +43,32 @@ async function main() {
     check("community_gate", checks.communityFormVisibleAtStart && checks.futureStepsLockedAtStart && checks.resultsHiddenAtStart && checks.blankCommunityBlocked && checks.partialCommunityBlocked && checks.futureStepsUnlocked && checks.phase2Visible && checks.phase3Visible);
     checks.counts = await page.evaluate(() => ["fundingCount", "resourceCount", "caseStudyCount"].map((id) => Number(document.getElementById(id).textContent)));
     check("counts", checks.counts.join(",") === "659,61,476" && checks.counts.reduce((sum, value) => sum + value, 0) === 1196);
+    checks.nextDeadline = await page.locator("#nextDeadlinePanel").evaluate((node) => ({
+      visible: node.getBoundingClientRect().height > 0,
+      date: node.querySelector("#nextDeadlineDate")?.textContent.trim() || "",
+      program: node.querySelector("#nextDeadlineMeta")?.textContent.trim() || "",
+      link: node.querySelector("#nextDeadlineLink")?.getAttribute("href") || ""
+    }));
+    check("next_deadline", checks.nextDeadline.visible && /\b20\d{2}\b/.test(checks.nextDeadline.date) && checks.nextDeadline.program.length > 5 && /^https:\/\//.test(checks.nextDeadline.link));
+    checks.deadlineParser = await page.evaluate(() => {
+      const iso = (value) => value ? `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}` : "";
+      const now = new Date();
+      const todayText = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      return {
+        expectedToday: todayText,
+        openThenDue: iso(parseDeadline({ status: "Open", deadline_or_availability: "Cycle opens July 27, 2026; proposals due August 14, 2026" })),
+        dateRange: iso(parseDeadline({ status: "Open", deadline_or_availability: "Application period 2026-08-14 to 2026-10-31" })),
+        recurringList: iso(parseDeadline({ status: "Open", deadline_or_availability: "2026 deadlines include July 1, September 1, November 2" })),
+        dueToday: iso(parseDeadline({ status: "Open", deadline_or_availability: `Applications due ${todayText}` })),
+        dueTodayHour: parseDeadline({ status: "Open", deadline_or_availability: `Applications due ${todayText}` })?.getHours()
+      };
+    });
+    check("deadline_parser", checks.deadlineParser.openThenDue === "2026-08-14" && checks.deadlineParser.dateRange === "2026-10-31" && checks.deadlineParser.recurringList === "2026-09-01" && checks.deadlineParser.dueToday === checks.deadlineParser.expectedToday && checks.deadlineParser.dueTodayHour === 0);
+    checks.eagle = await page.locator(".rercie-mascot").evaluate((image) => {
+      const style = getComputedStyle(image), box = image.getBoundingClientRect();
+      return { loaded: image.complete && image.naturalWidth > 0, objectFit: style.objectFit, objectPosition: style.objectPosition, ratio: box.width / box.height };
+    });
+    check("eagle_centered", checks.eagle.loaded && checks.eagle.objectFit === "contain" && /50%|center/.test(checks.eagle.objectPosition) && Math.abs(checks.eagle.ratio - (16 / 9)) < 0.03);
     checks.desktopNoOverflow = await overflow(page); check("desktop_overflow", checks.desktopNoOverflow);
     const modes = { modeAll: '[data-mode="All"]', modeFunding: "#showFunding", modeResources: "#showResources", modeCases: "#showCases" };
     checks.modes = {}; for (const [name, selector] of Object.entries(modes)) { await page.locator(selector).click(); checks.modes[name] = await page.locator(selector).getAttribute("aria-pressed") === "true"; }

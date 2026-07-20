@@ -13,3 +13,4 @@ qa/
 *.test.exe
 node_modules/
 browser-qa/
+.source-monitor/
