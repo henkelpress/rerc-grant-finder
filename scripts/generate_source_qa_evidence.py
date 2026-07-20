@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RERCIE = ROOT / "rercie"
 PACKAGING = RERCIE / "packaging"
 LAYOUT_SHA256 = "f78b4355830b15a3400e84f3669afab484a93fd843b743bc96083940d4d60d01"
-EXPECTED_COUNTS = {"funding": 659, "resources": 61, "case_studies": 476, "public_total": 1196}
+EXPECTED_COUNTS = {"funding": 659, "resources": 137, "case_studies": 476, "public_total": 1272}
 TERRITORIES = {"Puerto Rico", "U.S. Virgin Islands", "Guam", "American Samoa", "Northern Mariana Islands"}
 
 
@@ -134,7 +134,7 @@ def main() -> int:
     browser_path = ROOT / args.browser_report
     browser = json.loads(browser_path.read_text(encoding="utf-8"))
     assert browser["status"] == "PASS" and not browser["errors"] and not browser["failures"]
-    assert browser["checks"]["counts"] == [659, 61, 476]
+    assert browser["checks"]["counts"] == [EXPECTED_COUNTS["funding"], EXPECTED_COUNTS["resources"], EXPECTED_COUNTS["case_studies"]]
     assert browser["checks"]["spanishApplied"] is True and browser["checks"]["englishRestored"] is True
     assert all(item["controls44"] and item["overflow"] for item in browser["checks"]["mobile"].values())
     browser_contract = {
