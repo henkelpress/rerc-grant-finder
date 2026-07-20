@@ -89,6 +89,15 @@ def main() -> int:
     assert all(item["item_type"] in {"Funding", "Resource"} for item in items)
     assert not any(re.search(r"potential rerc fit|purpose tags", item.get("why_it_matters", ""), re.I) for item in items)
     assert not any((item.get("summary") or "").strip() in {"", "-"} for item in items)
+    reviewed_resources = [item for item in items if item["item_id"].startswith(("RERC-RES-R2-", "RERC-RES-NEW-2026-"))]
+    assert len(reviewed_resources) == 76
+    assert all(len(item["summary"].strip()) >= 55 for item in reviewed_resources)
+    assert not any(
+        item["summary"].strip(". ").lower()
+        in {item["title"].strip(". ").lower(), item["organization"].strip(". ").lower()}
+        for item in reviewed_resources
+    )
+    assert not any(re.fullmatch(r".*\(?(?:19|20)\d{2}\)?\.?", item["summary"]) for item in reviewed_resources)
 
     index = (ROOT / "index.html").read_text(encoding="utf-8")
     site_contract = parse_site_contract(index)
@@ -276,6 +285,9 @@ def main() -> int:
     assert len(cases) == 476
     assert all(case["source_url"].startswith(("https://www.epa.gov/", "https://toolkit.climate.gov/", "https://www.rd.usda.gov/")) for case in cases)
     assert not any(re.search(r"[A-Za-z]:\\\\|protos|private_internal|needs_image_review", json.dumps(case), re.I) for case in cases)
+    case_by_id = {case["item_id"]: case for case in cases}
+    assert case_by_id["RERC-CASE-BROWNFIELDS-SUCCESS-STORIES-WEIRTON-WV-FROM-ABANDONED-SCHOOL-TO-MAIN-EVENT-WV-2017"]["summary"].startswith("Weirton used EPA brownfields")
+    assert case_by_id["RERC-CASE-BROWNFIELDS-SUCCESS-STORIES-WELLSBURG-WV-A-LOCAL-MANUFACTURING-EXPANSION-TAKES-FLIGHT-WV-2017"]["summary"].startswith("Wellsburg and regional partners")
 
     downloads = ROOT / "downloads"
     static_docx = downloads / "RERC_Community_Explorer_Appendix_2026-07-20.docx"
