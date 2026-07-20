@@ -188,8 +188,15 @@ def main() -> int:
     assert nominatim_urls == {EXPECTED_NOMINATIM_ENDPOINT}
     assert f'new URL("{EXPECTED_NOMINATIM_ENDPOINT}")' in planner
     assert 'url.searchParams.set("format", "jsonv2")' in planner
-    assert 'url.searchParams.set("countrycodes", "us")' in planner
-    assert 'referrerPolicy: "no-referrer"' in planner
+    assert 'url.searchParams.set("countrycodes", geocodeCountryCode())' in planner
+    assert 'url.searchParams.set("q", query)' in planner
+    assert 'url.searchParams.set("limit", "8")' in planner
+    assert 'matchingGeocodeResult(results)' in planner
+    assert 'return "us"' in planner
+    assert 'expectedStateAliases' in planner
+    assert '"U.S. Virgin Islands": "United States Virgin Islands"' in planner
+    assert '"Northern Mariana Islands": "Commonwealth of the Northern Mariana Islands"' in planner
+    assert 'referrerPolicy: "no-referrer"' not in planner
     assert 'anchor.referrerPolicy = "no-referrer"' in planner
 
     profile_path = ROOT / "community_profiles.js"
@@ -245,6 +252,25 @@ def main() -> int:
                     and not isinstance(profile_record[field], bool)
                 )
 
+    selectable_profiles = [
+        profile for profile in profiles
+        if profile["placeType"] in {"town_or_city", "county_or_region"}
+    ]
+    assert len(selectable_profiles) == 35_902
+    assert sum(profile["placeType"] == "county_or_region" for profile in selectable_profiles) == 3_293
+    assert sum(profile["placeType"] == "town_or_city" for profile in selectable_profiles) == 32_609
+    assert len({profile["state"] for profile in selectable_profiles}) == 56
+    assert all(
+        any(profile["state"] == jurisdiction for profile in selectable_profiles)
+        for jurisdiction in (
+            "District of Columbia",
+            "American Samoa",
+            "Guam",
+            "Northern Mariana Islands",
+            "Puerto Rico",
+            "U.S. Virgin Islands",
+        )
+    )
     app_js = (ROOT / "app.js").read_text(encoding="utf-8")
     assert "item.eligible_users" in app_js
     assert "confirm territory eligibility" in app_js
@@ -256,7 +282,15 @@ def main() -> int:
     assert "window.RERC_CASE_STUDIES" in app_js
     assert "Read the example" in app_js
     assert "placeTypeSelect" in index
-    assert all(value in index for value in ("town_or_city", "county_or_region", "tribal_community", "statewide_or_multi_community"))
+    assert all(value in app_js for value in ("town_or_city", "county_or_region"))
+    assert 'id="communityName"' in index and '<select id="communityName"' in index
+    assert 'id="placeTypeSelect"' in index and 'disabled' in index
+    assert "Includes every county or county equivalent and every Census place" in index
+    assert "getCommunityCoverage" in app_js and "communityProfilesByState" in app_js
+    assert "renderCardActions" not in app_js
+    assert "planner-card-actions" in planner
+    assert all(value in index for value in ("fundingViewSwitch", "showFundingCalendar", "calendarGrid", "calendarAgenda"))
+    assert all(value in app_js for value in ("renderFundingCalendar", "chooseFundingView", "fundingDeadlineEntries"))
     assert "topicCorpus(item)" in app_js and "broadFundingStage" in app_js
     assert "cleanText(item.case_place_type) !== selectedPlaceType" in app_js
     assert "<${headingTag}>${escapeHtml(item.title)}</${headingTag}>" in app_js

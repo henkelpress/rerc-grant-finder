@@ -16,6 +16,31 @@ const places = [
 
 const territoryPlaces = new Set(["American Samoa","Guam","Northern Mariana Islands","Puerto Rico","U.S. Virgin Islands"]);
 
+const communityProfiles = Array.isArray(window.RERC_COMMUNITY_PROFILES) ? window.RERC_COMMUNITY_PROFILES : [];
+const selectableCommunityProfiles = communityProfiles.filter((profile) =>
+  profile && ["county_or_region", "town_or_city"].includes(profile.placeType) && profile.state && profile.geoid
+);
+const communityProfileByGeoid = new Map(selectableCommunityProfiles.map((profile) => [String(profile.geoid), profile]));
+const communityProfilesByState = new Map();
+selectableCommunityProfiles.forEach((profile) => {
+  if (!communityProfilesByState.has(profile.state)) {
+    communityProfilesByState.set(profile.state, { county_or_region: [], town_or_city: [] });
+  }
+  communityProfilesByState.get(profile.state)[profile.placeType].push(profile);
+});
+
+function communityDisplayName(profile) {
+  const raw = cleanText(profile?.community || profile?.name);
+  const suffix = `, ${cleanText(profile?.state)}`;
+  return suffix.length > 2 && raw.endsWith(suffix) ? raw.slice(0, -suffix.length) : raw;
+}
+
+communityProfilesByState.forEach((groups) => {
+  Object.values(groups).forEach((profiles) => profiles.sort((a, b) =>
+    communityDisplayName(a).localeCompare(communityDisplayName(b), "en", { sensitivity: "base", numeric: true })
+  ));
+});
+
 const applicantOptions = [
   ["local government|local governments|municipal|municipality|municipalities|county|counties|city|cities|town|towns|village|villages|political subdivision|political subdivisions", "Local government"],
   ["tribe|tribes|tribal|native|indian nation|indian nations|sovereign", "Tribe or Native community"],
@@ -49,11 +74,15 @@ const elements = Object.fromEntries([
   "includeClosed","toggleFilters","resetButton","sortSelect","limitSelect","exportWord","exportCsv","communityTitle","communitySummary",
   "matchCount","fundingMatchCount","resourceMatchCount","caseStudyMatchCount","activeFilters","results","matchAnnouncement",
   "fundingCount","resourceCount","caseStudyCount","showFunding","showResources","showCases",
-  "nextDeadlinePanel","nextDeadlineDate","nextDeadlineMeta","nextDeadlineLink"
+  "nextDeadlinePanel","nextDeadlineDate","nextDeadlineMeta","nextDeadlineLink","loadCommunityProfile","profileStatus",
+  "fundingViewSwitch","showFundingList","showFundingCalendar","fundingCalendar","calendarMonthTitle","calendarGrid","calendarAgenda",
+  "previousCalendarMonth","todayCalendarMonth","nextCalendarMonth","resultsToolbar"
 ].map((id) => [id, document.getElementById(id)]));
 
 let mode = "All";
 let currentMatches = [];
+let fundingView = "list";
+let calendarCursor = null;
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'"]/g, (character) => ({
@@ -76,6 +105,78 @@ function safeUrl(value) {
   }
 }
 
+function selectedCommunityProfile() {
+  return communityProfileByGeoid.get(cleanText(elements.communityName?.value)) || null;
+}
+
+function selectedCommunityName() {
+  const profile = selectedCommunityProfile();
+  return profile ? communityDisplayName(profile) : "";
+}
+
+function replaceSelectOptions(select, placeholder, options, selectedValue = "") {
+  if (!select) return;
+  select.innerHTML = `<option value="">${escapeHtml(placeholder)}</option>${options.join("")}`;
+  select.disabled = options.length === 0;
+  select.value = options.length && selectedValue ? selectedValue : "";
+}
+
+function setCommunitySelectorStatus(message) {
+  if (elements.profileStatus) elements.profileStatus.textContent = message;
+}
+
+function populateStateOptions(selectedState = "") {
+  const states = places.filter((stateName) => communityProfilesByState.has(stateName));
+  replaceSelectOptions(
+    elements.stateSelect,
+    "Choose a state, D.C., or U.S. territory",
+    states.map((stateName) => `<option value="${escapeHtml(stateName)}">${escapeHtml(stateName)}</option>`),
+    selectedState
+  );
+  elements.stateSelect.disabled = false;
+}
+
+function populatePlaceTypeOptions(selectedType = "") {
+  const groups = communityProfilesByState.get(elements.stateSelect.value);
+  if (!groups) {
+    replaceSelectOptions(elements.placeTypeSelect, "Choose a state first", []);
+    replaceSelectOptions(elements.communityName, "Choose a place type first", []);
+    if (elements.loadCommunityProfile) elements.loadCommunityProfile.disabled = true;
+    setCommunitySelectorStatus("Choose a state or territory first.");
+    return;
+  }
+  const definitions = [
+    ["county_or_region", "County or county equivalent"],
+    ["town_or_city", "Town, city, or Census place"]
+  ];
+  const options = definitions
+    .filter(([value]) => groups[value].length)
+    .map(([value, label]) => `<option value="${value}">${escapeHtml(label)} (${groups[value].length.toLocaleString()})</option>`);
+  replaceSelectOptions(elements.placeTypeSelect, "Choose a place type", options, selectedType);
+  replaceSelectOptions(elements.communityName, "Choose a place type first", []);
+  if (elements.loadCommunityProfile) elements.loadCommunityProfile.disabled = true;
+  setCommunitySelectorStatus("Choose a county or a town, city, or Census place.");
+}
+
+function populateCommunityOptions(selectedGeoid = "") {
+  const groups = communityProfilesByState.get(elements.stateSelect.value);
+  const profiles = groups?.[elements.placeTypeSelect.value] || [];
+  const typeLabel = elements.placeTypeSelect.value === "county_or_region" ? "county or county equivalent" : "town, city, or Census place";
+  const options = profiles.map((profile) =>
+    `<option value="${escapeHtml(profile.geoid)}">${escapeHtml(communityDisplayName(profile))}</option>`
+  );
+  replaceSelectOptions(elements.communityName, `Choose a ${typeLabel}`, options, selectedGeoid);
+  if (elements.loadCommunityProfile) elements.loadCommunityProfile.disabled = !elements.communityName.value;
+  setCommunitySelectorStatus(profiles.length
+    ? `Choose from ${profiles.length.toLocaleString()} ${typeLabel}${profiles.length === 1 ? "" : "s"}.`
+    : "No matching Census places were found.");
+}
+
+function setCommunitySelection(stateName, placeType, geoid) {
+  populateStateOptions(stateName);
+  populatePlaceTypeOptions(placeType);
+  if (placeType) populateCommunityOptions(String(geoid || ""));
+}
 function summaryTopic(item) {
   const topics = cleanText(item.topic_tags)
     .split(/[;,|]/)
@@ -176,7 +277,7 @@ function matchesGeography(item, selectedPlace) {
 
 function selectedMatchFactors() {
   return {
-    selectedCommunity: elements.communityName.value.trim().toLowerCase(),
+    selectedCommunity: selectedCommunityName().toLowerCase(),
     selectedPlace: elements.stateSelect.value,
     selectedPlaceType: elements.placeTypeSelect.value,
     applicants: selectedValues(elements.applicantOptions),
@@ -387,6 +488,16 @@ function parseDeadline(item) {
     sep: 9, sept: 9, october: 10, oct: 10, november: 11, nov: 11, december: 12, dec: 12
   };
   const monthPattern = Object.keys(monthNumbers).join("|");
+  const shorthandRangePattern = new RegExp(`\\b(${monthPattern})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?\\s*(?:-|\\u2013|\\u2014|to|through)\\s*(\\d{1,2})(?:st|nd|rd|th)?,?\\s+(20\\d{2})\\b`, "gi");
+  for (const match of text.matchAll(shorthandRangePattern)) {
+    const month = monthNumbers[match[1].toLowerCase()];
+    const startDate = makeLocalDate(Number(match[4]), month, Number(match[2]));
+    const endDate = makeLocalDate(Number(match[4]), month, Number(match[3]));
+    if (!startDate || !endDate || endDate < startDate) continue;
+    const endOffset = match[0].lastIndexOf(match[3]);
+    candidates.push({ date: startDate, index: match.index, end: match.index + match[0].indexOf(match[3]), rangeStart: true, rangeEnd: false });
+    candidates.push({ date: endDate, index: match.index + endOffset, end: match.index + endOffset + match[3].length, rangeStart: false, rangeEnd: true });
+  }
   const listYear = text.match(/\b(20\d{2})\s+(?:deadlines?|cycle|application period)\b/i)?.[1];
   const namedDatePattern = new RegExp(`\\b(${monthPattern})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(20\\d{2}))?\\b`, "gi");
   for (const match of text.matchAll(namedDatePattern)) {
@@ -459,6 +570,97 @@ function renderNextDeadline(items) {
     elements.nextDeadlineLink.removeAttribute("href");
   }
 }
+function fundingDeadlineEntries(items) {
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return items
+    .filter((item) => item.item_type === "Funding")
+    .map((item) => ({ item, date: parseDeadline(item) }))
+    .filter((entry) => entry.date && entry.date >= start)
+    .sort((a, b) => a.date - b.date || a.item.title.localeCompare(b.item.title));
+}
+
+function dateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function renderFundingCalendar(items) {
+  if (!elements.calendarGrid || !elements.calendarAgenda) return;
+  const entries = fundingDeadlineEntries(items);
+  if (!calendarCursor) {
+    const anchor = entries[0]?.date || new Date();
+    calendarCursor = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  }
+  const year = calendarCursor.getFullYear();
+  const month = calendarCursor.getMonth();
+  const locale = document.documentElement.lang === "es" ? "es-US" : "en-US";
+  elements.calendarMonthTitle.textContent = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" }).format(calendarCursor);
+
+  const monthEntries = new Map();
+  entries.forEach((entry) => {
+    if (entry.date.getFullYear() !== year || entry.date.getMonth() !== month) return;
+    const key = dateKey(entry.date);
+    if (!monthEntries.has(key)) monthEntries.set(key, []);
+    monthEntries.get(key).push(entry);
+  });
+
+  const weekdayFormatter = new Intl.DateTimeFormat(locale, { weekday: "short" });
+  const weekdays = Array.from({ length: 7 }, (_, index) => {
+    const label = weekdayFormatter.format(new Date(2026, 0, 4 + index));
+    return `<div class="calendar-weekday" role="columnheader">${escapeHtml(label)}</div>`;
+  });
+  const cells = [];
+  const leading = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  for (let index = 0; index < leading; index += 1) {
+    cells.push('<div class="calendar-day outside" role="gridcell" aria-hidden="true"></div>');
+  }
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const current = new Date(year, month, day);
+    const dayEntries = monthEntries.get(dateKey(current)) || [];
+    const links = dayEntries.slice(0, 2).map(({ item }) => {
+      const source = safeUrl(item.source_url);
+      const title = escapeHtml(item.title);
+      return source
+        ? `<a href="${escapeHtml(source)}" target="_blank" rel="noopener" title="${title}">${title}</a>`
+        : `<span title="${title}">${title}</span>`;
+    }).join("");
+    const more = dayEntries.length > 2 ? `<span class="calendar-more">+${dayEntries.length - 2} more</span>` : "";
+    const today = new Date();
+    const isToday = current.getFullYear() === today.getFullYear() && current.getMonth() === today.getMonth() && current.getDate() === today.getDate();
+    cells.push(`<div class="calendar-day${dayEntries.length ? " has-deadline" : ""}${isToday ? " today" : ""}" role="gridcell" aria-label="${escapeHtml(new Intl.DateTimeFormat(locale, { month: "long", day: "numeric", year: "numeric" }).format(current))}"><strong>${day}</strong>${links}${more}</div>`);
+  }
+  elements.calendarGrid.innerHTML = weekdays.join("") + cells.join("");
+
+  if (!entries.length) {
+    elements.calendarAgenda.innerHTML = '<p class="empty-copy">No dated funding deadlines are available in these matches.</p>';
+    return;
+  }
+  elements.calendarAgenda.innerHTML = entries.slice(0, 12).map(({ item, date }) => {
+    const source = safeUrl(item.source_url);
+    const title = escapeHtml(item.title);
+    const formatted = escapeHtml(new Intl.DateTimeFormat(locale, { month: "short", day: "numeric", year: "numeric" }).format(date));
+    const titleMarkup = source
+      ? `<a href="${escapeHtml(source)}" target="_blank" rel="noopener">${title}</a>`
+      : `<strong>${title}</strong>`;
+    return `<article class="calendar-agenda-item"><time datetime="${dateKey(date)}">${formatted}</time><div>${titleMarkup}<small>${escapeHtml(item.organization || "")}</small></div></article>`;
+  }).join("");
+}
+
+function chooseFundingView(nextView) {
+  fundingView = nextView === "calendar" ? "calendar" : "list";
+  [elements.showFundingList, elements.showFundingCalendar].forEach((button) => {
+    if (!button) return;
+    const active = button === (fundingView === "calendar" ? elements.showFundingCalendar : elements.showFundingList);
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  if (fundingView === "calendar" && !calendarCursor) {
+    const next = fundingDeadlineEntries(currentMatches)[0]?.date || new Date();
+    calendarCursor = new Date(next.getFullYear(), next.getMonth(), 1);
+  }
+  render();
+}
 function hasSubstantiveAnswers() {
   const factors = selectedMatchFactors();
   return Boolean(
@@ -481,15 +683,6 @@ function renderEvidence(item) {
     ? `<p class="match-cautions"><strong>Check:</strong> ${escapeHtml(evidence.cautions.join(" "))}</p>`
     : "";
   return `<div class="match-reason"><strong>Why it fits:</strong><ul>${reasons}</ul>${cautions}</div>`;
-}
-
-function renderCardActions(item) {
-  const safeItemId = escapeHtml(item.item_id);
-  const safeTitle = escapeHtml(item.title);
-  return `<div class="card-actions" aria-label="Planning actions">
-    <button type="button" class="card-action save-action" data-action="save" data-item-id="${safeItemId}" aria-label="Save ${safeTitle}" aria-pressed="false">Save</button>
-    <button type="button" class="card-action compare-action" data-action="compare" data-item-id="${safeItemId}" aria-label="Compare ${safeTitle}" aria-pressed="false">Compare</button>
-  </div>`;
 }
 
 function renderSourceLink(item, label) {
@@ -521,7 +714,7 @@ function renderCard(item, headingLevel = 3) {
           <p class="details"><strong>Topics:</strong> ${escapeHtml(item.topic_tags || "Community development")}</p>
         </details>
         ${renderSourceLink(item, "Read the example")}
-        ${renderCardActions(item)}
+
       </div>
       <div class="score" aria-label="${escapeHtml(scoreLabel)}"><strong>${escapeHtml(scoreLabel)}</strong><span>${hasSubstantiveAnswers() ? "match level" : "add details to rank"}</span></div>
     </article>`;
@@ -548,7 +741,7 @@ function renderCard(item, headingLevel = 3) {
         <p class="details"><strong>Timing or amount:</strong> ${escapeHtml(timing)} &nbsp; <strong>Checked:</strong> ${escapeHtml(item.last_checked)}</p>
       </details>
       ${renderSourceLink(item, item.item_type === "Resource" ? "Open the resource" : "View program details")}
-      ${renderCardActions(item)}
+
     </div>
     <div class="score" aria-label="${escapeHtml(scoreLabel)}"><strong>${escapeHtml(scoreLabel)}</strong><span>${hasSubstantiveAnswers() ? "match level" : "add details to rank"}</span></div>
   </article>`;
@@ -556,7 +749,7 @@ function renderCard(item, headingLevel = 3) {
 
 function activeFilterSummary() {
   const values = [];
-  if (elements.communityName.value.trim()) values.push(elements.communityName.value.trim());
+  if (selectedCommunityName()) values.push(selectedCommunityName());
   if (elements.stateSelect.value) values.push(elements.stateSelect.value);
   if (elements.placeTypeSelect.value) values.push(elements.placeTypeSelect.options[elements.placeTypeSelect.selectedIndex].text);
   if (elements.keywordSearch.value.trim()) values.push(`Search: ${elements.keywordSearch.value.trim()}`);
@@ -595,7 +788,7 @@ function render() {
       ...caseResults.slice(0, each)
     ];
   }
-  const community = elements.communityName.value.trim();
+  const community = selectedCommunityName();
   const place = elements.stateSelect.value;
   const label = community || place || "rural communities";
   const fundingMatches = fundingResults.length;
@@ -619,8 +812,14 @@ function render() {
   elements.resourceMatchCount.textContent = resourceMatches.toLocaleString();
   elements.caseStudyMatchCount.textContent = caseMatches.toLocaleString();
   renderNextDeadline(fundingResults);
+  const calendarActive = mode === "Funding" && fundingView === "calendar";
+  elements.fundingViewSwitch.hidden = mode !== "Funding";
+  elements.fundingCalendar.hidden = !calendarActive;
+  elements.resultsToolbar.hidden = calendarActive;
+  elements.results.hidden = calendarActive;
+  if (calendarActive) renderFundingCalendar(fundingResults);
   elements.activeFilters.textContent = activeFilterSummary();
-  elements.matchAnnouncement.textContent = `${currentMatches.length} total matches; ${visible.length} cards displayed for ${label}.`;
+  elements.matchAnnouncement.textContent = calendarActive ? `${fundingMatches} funding matches shown in calendar view for ${label}.` : `${currentMatches.length} total matches; ${visible.length} cards displayed for ${label}.`;
   if (!visible.length) {
     elements.results.innerHTML = `<div class="empty-state"><h3>No matches yet</h3><p>Clear one or more answers, or turn on closed rounds to see future options.</p></div>`;
   } else if (mode === "All") {
@@ -702,7 +901,7 @@ async function exportWord() {
     window.alert("The Word export tool did not load. Refresh the page and try again.");
     return;
   }
-  const community = elements.communityName.value.trim() || "Community";
+  const community = selectedCommunityName() || "Community";
   const place = elements.stateSelect.value || "United States";
   const funding = currentMatches.filter((item) => item.item_type === "Funding");
   const resources = currentMatches.filter((item) => item.item_type === "Resource");
@@ -718,7 +917,7 @@ async function exportWord() {
     wordRunXml("for", { italic: true }),
     wordRunXml(" Rural Communities (RERC)")
   ]));
-  body.push(wordParagraphXml([wordRunXml(community + ", " + place, { bold: true })]));
+  body.push(wordParagraphXml([wordRunXml(community ? `${community}, ${place}` : place, { bold: true })]));
   body.push(wordParagraphXml([wordRunXml(profile)]));
   body.push(wordParagraphXml([
     wordRunXml("This explorer does not determine eligibility. ", { bold: true }),
@@ -856,7 +1055,8 @@ function initialize() {
   elements.fundingCount.textContent = fundingResources.filter((item) => item.item_type === "Funding").length.toLocaleString();
   elements.resourceCount.textContent = fundingResources.filter((item) => item.item_type === "Resource").length.toLocaleString();
   elements.caseStudyCount.textContent = caseStudies.length.toLocaleString();
-  elements.stateSelect.innerHTML = `<option value="">Choose a state, D.C., or U.S. territory</option>${places.map((place) => `<option>${escapeHtml(place)}</option>`).join("")}`;
+  populateStateOptions();
+  populatePlaceTypeOptions();
   elements.stageSelect.innerHTML = stages.map((stage) => `<option>${escapeHtml(stage)}</option>`).join("");
   buildCheckList(elements.applicantOptions, applicantOptions, "applicant");
   buildCheckList(elements.topicOptions, topicOptions, "topic");
@@ -866,6 +1066,36 @@ function initialize() {
     deadlineOption.textContent = "Deadline: soonest first";
     elements.sortSelect.appendChild(deadlineOption);
   }
+  elements.stateSelect.addEventListener("change", () => {
+    populatePlaceTypeOptions();
+    render();
+  });
+  elements.placeTypeSelect.addEventListener("change", () => {
+    populateCommunityOptions();
+    render();
+  });
+  elements.communityName.addEventListener("change", () => {
+    if (elements.loadCommunityProfile) elements.loadCommunityProfile.disabled = !elements.communityName.value;
+    setCommunitySelectorStatus(elements.communityName.value ? "Community selected. Loading public profile and map..." : "Choose a community.");
+    render();
+  });
+  elements.showFundingList.addEventListener("click", () => chooseFundingView("list"));
+  elements.showFundingCalendar.addEventListener("click", () => chooseFundingView("calendar"));
+  elements.previousCalendarMonth.addEventListener("click", () => {
+    const current = calendarCursor || new Date();
+    calendarCursor = new Date(current.getFullYear(), current.getMonth() - 1, 1);
+    renderFundingCalendar(currentMatches);
+  });
+  elements.todayCalendarMonth.addEventListener("click", () => {
+    const today = new Date();
+    calendarCursor = new Date(today.getFullYear(), today.getMonth(), 1);
+    renderFundingCalendar(currentMatches);
+  });
+  elements.nextCalendarMonth.addEventListener("click", () => {
+    const current = calendarCursor || new Date();
+    calendarCursor = new Date(current.getFullYear(), current.getMonth() + 1, 1);
+    renderFundingCalendar(currentMatches);
+  });
   document.querySelectorAll("[data-mode]").forEach((button) => button.addEventListener("click", () => chooseMode(button.dataset.mode)));
   elements.showFunding.addEventListener("click", () => chooseMode("Funding"));
   elements.showResources.addEventListener("click", () => chooseMode("Resource"));
@@ -893,7 +1123,18 @@ window.RERCExplorer = {
   parseDeadline,
   safeUrl,
   chooseMode,
-  getMode: () => mode
+  getMode: () => mode,
+  getSelectedCommunityProfile: selectedCommunityProfile,
+  getSelectedCommunityName: selectedCommunityName,
+  setCommunitySelection,
+  getCommunityCoverage: () => ({
+    profiles: selectableCommunityProfiles.length,
+    statesAndTerritories: communityProfilesByState.size,
+    countiesAndEquivalents: selectableCommunityProfiles.filter((profile) => profile.placeType === "county_or_region").length,
+    townsCitiesAndPlaces: selectableCommunityProfiles.filter((profile) => profile.placeType === "town_or_city").length
+  }),
+  chooseFundingView,
+  getFundingView: () => fundingView
 };
 
 initialize();

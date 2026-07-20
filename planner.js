@@ -63,14 +63,14 @@
       located: "Community location found.",
       locateFailed: "The community could not be located. Check the name and try again.",
       locateConsent:
-        "Location lookup sends the community and state to OpenStreetMap Nominatim only when you select Locate.",
+        "The selected community is located automatically with OpenStreetMap Nominatim.",
       mapFallback: "Interactive map unavailable. Coordinates are shown as an accessible text fallback.",
       osmAttribution: "Map data © OpenStreetMap contributors",
       next: "Next",
       back: "Back",
       editProfile: "Edit profile",
       stepOf: "Step {step} of {total}",
-      completePlace: "Enter a community name and choose a state or territory to continue.",
+      completePlace: "Choose a state or territory, place type, and community to continue.",
       calendarExported: "Calendar exported.",
       csvExported: "Saved-plan CSV exported.",
       docxExported: "Saved-plan Word document exported.",
@@ -153,14 +153,14 @@
       located: "Se encontró la ubicación de la comunidad.",
       locateFailed: "No se pudo encontrar la comunidad. Revise el nombre e inténtelo de nuevo.",
       locateConsent:
-        "La búsqueda envía la comunidad y el estado a OpenStreetMap Nominatim solo al seleccionar Localizar.",
+        "La comunidad seleccionada se ubica automáticamente con OpenStreetMap Nominatim.",
       mapFallback: "El mapa interactivo no está disponible. Las coordenadas se muestran como texto accesible.",
       osmAttribution: "Datos del mapa © colaboradores de OpenStreetMap",
       next: "Siguiente",
       back: "Atrás",
       editProfile: "Editar perfil",
       stepOf: "Paso {step} de {total}",
-      completePlace: "Escriba una comunidad y elija un estado o territorio para continuar.",
+      completePlace: "Elija un estado o territorio, un tipo de lugar y una comunidad para continuar.",
       calendarExported: "Calendario exportado.",
       csvExported: "CSV del plan exportado.",
       docxExported: "Documento Word del plan exportado.",
@@ -1020,7 +1020,10 @@
     if (focusMissing) {
       const name = byId("communityName");
       const stateSelect = byId("stateSelect");
-      const target = name && !name.value.trim() ? name : stateSelect;
+      const placeType = byId("placeTypeSelect");
+      const target = stateSelect && !stateSelect.value
+        ? stateSelect
+        : (placeType && !placeType.value ? placeType : name);
       if (target) window.requestAnimationFrame(function () { target.focus({ preventScroll: true }); });
     }
   }
@@ -1040,34 +1043,36 @@
     if (ready) {
       const name = byId("communityName");
       const stateSelect = byId("stateSelect");
-      if (name) { name.setCustomValidity(""); name.removeAttribute("aria-invalid"); }
-      if (stateSelect) { stateSelect.setCustomValidity(""); stateSelect.removeAttribute("aria-invalid"); }
+      const placeType = byId("placeTypeSelect");
+      [stateSelect, placeType, name].forEach(function (control) {
+        if (!control) return;
+        control.setCustomValidity("");
+        control.removeAttribute("aria-invalid");
+      });
     }
     return ready;
   }
 
   function requireCommunityInfo() {
     if (syncCommunityGate()) return true;
-    const name = byId("communityName");
     const stateSelect = byId("stateSelect");
+    const placeType = byId("placeTypeSelect");
+    const name = byId("communityName");
     const message = t("completePlace");
-    const nameMissing = !name || !name.value.trim();
-    const stateMissing = !stateSelect || !stateSelect.value;
-    if (name) {
-      name.setCustomValidity(nameMissing ? message : "");
-      if (nameMissing) name.setAttribute("aria-invalid", "true"); else name.removeAttribute("aria-invalid");
-    }
-    if (stateSelect) {
-      stateSelect.setCustomValidity(stateMissing ? message : "");
-      if (stateMissing) stateSelect.setAttribute("aria-invalid", "true"); else stateSelect.removeAttribute("aria-invalid");
-    }
+    const controls = [stateSelect, placeType, name];
+    controls.forEach(function (control) {
+      if (!control) return;
+      const missing = !control.value;
+      control.setCustomValidity(missing ? message : "");
+      if (missing) control.setAttribute("aria-invalid", "true");
+      else control.removeAttribute("aria-invalid");
+    });
     setStatus("profileStatus", message, "warning");
     revealCommunityForm(true);
-    const firstMissing = nameMissing ? name : stateSelect;
+    const firstMissing = controls.find(function (control) { return control && !control.value; });
     if (firstMissing && typeof firstMissing.reportValidity === "function") firstMissing.reportValidity();
     return false;
   }
-
   function setupWizard() {
     const root = byId("workflowSteps");
     const form = byId("communityFilters");
@@ -1288,7 +1293,8 @@
   function hasPlaceSelection() {
     const name = byId("communityName");
     const stateSelect = byId("stateSelect");
-    return Boolean(name && name.value.trim() && stateSelect && stateSelect.value);
+    const placeType = byId("placeTypeSelect");
+    return Boolean(stateSelect && stateSelect.value && placeType && placeType.value && name && name.value);
   }
 
   function selectedValues(root) {
@@ -1341,23 +1347,27 @@
   }
 
   function captureProfileFromFilters() {
-    const name = byId("communityName");
     const stateSelect = byId("stateSelect");
     const placeType = byId("placeTypeSelect");
-    const profile = Object.assign({}, state.workspace.profile);
-    if (name && name.value.trim()) profile.community = name.value.trim().slice(0, 200);
+    const selected = typeof explorer().getSelectedCommunityProfile === "function"
+      ? explorer().getSelectedCommunityProfile()
+      : null;
+    const profile = selected ? Object.assign({}, selected) : {};
+    if (selected && typeof explorer().getSelectedCommunityName === "function") {
+      profile.community = explorer().getSelectedCommunityName();
+      profile.name = profile.community;
+    }
     if (stateSelect && stateSelect.value) {
       profile.state = stateSelect.options[stateSelect.selectedIndex]
         ? stateSelect.options[stateSelect.selectedIndex].text.trim().slice(0, 120)
         : stateSelect.value.slice(0, 120);
-      profile.stateCode = stateSelect.value.slice(0, 20);
+      profile.stateCode = stateSelect.value.slice(0, 120);
     }
     if (placeType && placeType.value) profile.placeType = placeType.value.slice(0, 80);
     state.workspace.profile = sanitizeProfile(profile);
     schedulePersist();
     renderProfileSummary();
   }
-
   function projectedProfiles() {
     const raw = window.RERC_COMMUNITY_PROFILES;
     if (Array.isArray(raw)) return raw;
@@ -1371,19 +1381,14 @@
   }
 
   function findProjectedProfile() {
-    const nameInput = byId("communityName");
-    const stateSelect = byId("stateSelect");
-    const name = (nameInput ? nameInput.value : "").trim().toLowerCase();
-    const stateCode = (stateSelect ? stateSelect.value : "").trim().toLowerCase();
+    if (typeof explorer().getSelectedCommunityProfile === "function") {
+      return explorer().getSelectedCommunityProfile();
+    }
     const currentGeoid = textValue(state.workspace.profile.geoid, 80);
     return projectedProfiles().find(function (profile) {
-      if (currentGeoid && textValue(profile.geoid, 80) === currentGeoid) return true;
-      const profileName = textValue(profile.community || profile.name, 200).toLowerCase();
-      const profileState = textValue(profile.stateCode || profile.state, 80).toLowerCase();
-      return Boolean(name && profileName === name && (!stateCode || profileState === stateCode));
+      return currentGeoid && textValue(profile.geoid, 80) === currentGeoid;
     }) || null;
   }
-
   async function loadProjectedProfile() {
     if (!requireCommunityInfo()) return;
     captureProfileFromFilters();
@@ -1398,7 +1403,13 @@
     setStatus("profileStatus", t("profileLoaded"), "success");
     renderProfileSummary();
     renderCommunitySnapshot();
-    renderMap();
+    try {
+      await locateCommunity();
+    } catch (error) {
+      renderMap();
+      setStatus("mapStatus", t("locateFailed"), "warning");
+      reportError(error);
+    }
   }
 
   function profileRows(profile) {
@@ -1496,20 +1507,55 @@
     root.appendChild(note);
   }
 
-  function geocodeQuery() {
-    const name = byId("communityName");
-    const stateSelect = byId("stateSelect");
-    const parts = [];
-    if (name && name.value.trim()) parts.push(name.value.trim());
-    if (stateSelect && stateSelect.selectedIndex >= 0) {
-      const label = stateSelect.options[stateSelect.selectedIndex].text.trim();
-      if (label) parts.push(label);
-    }
-    parts.push("United States");
-    return parts.join(", ").slice(0, 300);
+  function geocodeCountryCode() {
+    // Nominatim returns U.S. territories under country_code=us; state validation keeps them distinct.
+    return "us";
   }
 
-  async function locateCommunity() {
+  function geocodePlaceName() {
+    const community = typeof explorer().getSelectedCommunityName === "function"
+      ? explorer().getSelectedCommunityName()
+      : "";
+    return community
+      .replace(/\s+(city|town|village|borough|municipality|municipio|subdistrict|zona urbana)$/i, "")
+      .replace(/\s+CDP(?:\s+\([^)]*\))?$/i, "")
+      .trim();
+  }
+
+  function geocodeStateName() {
+    const selected = textValue(byId("stateSelect") && byId("stateSelect").value, 120);
+    return {
+      "U.S. Virgin Islands": "United States Virgin Islands",
+      "Northern Mariana Islands": "Commonwealth of the Northern Mariana Islands",
+    }[selected] || selected;
+  }
+
+  function geocodeQuery() {
+    return [geocodePlaceName(), geocodeStateName(), "United States"].filter(Boolean).join(", ").slice(0, 300);
+  }
+
+  function expectedStateAliases() {
+    const selected = textValue(byId("stateSelect") && byId("stateSelect").value, 120).toLowerCase();
+    const aliases = {
+      "u.s. virgin islands": ["u.s. virgin islands", "united states virgin islands", "virgin islands"],
+      "northern mariana islands": ["northern mariana islands", "commonwealth of the northern mariana islands"],
+    };
+    return aliases[selected] || [selected];
+  }
+
+  function matchingGeocodeResult(results) {
+    const stateAliases = expectedStateAliases();
+    return results.find(function (candidate) {
+      const address = candidate && candidate.address && typeof candidate.address === "object" ? candidate.address : {};
+      const stateName = textValue(address.state || address.region, 120).toLowerCase();
+      const countryCode = textValue(address.country_code, 8).toLowerCase();
+      const displayName = textValue(candidate && candidate.display_name, 400).toLowerCase();
+      const stateMatches = stateAliases.some(function (alias) {
+        return stateName === alias || displayName.includes(alias);
+      });
+      return stateMatches && (!countryCode || countryCode === "us");
+    }) || null;
+  }  async function locateCommunity() {
     const query = geocodeQuery();
     if (!hasPlaceSelection()) {
       setStatus("mapStatus", t("completePlace"), "warning");
@@ -1525,21 +1571,22 @@
       const url = new URL("https://nominatim.openstreetmap.org/search");
       url.searchParams.set("format", "jsonv2");
       url.searchParams.set("q", query);
-      url.searchParams.set("countrycodes", "us");
-      url.searchParams.set("limit", "1");
+      url.searchParams.set("countrycodes", geocodeCountryCode());
+      url.searchParams.set("limit", "8");
       url.searchParams.set("addressdetails", "1");
       state.lastGeocodeAt = Date.now();
       const response = await fetch(url.toString(), {
         headers: { Accept: "application/json" },
-        referrerPolicy: "no-referrer",
       });
       if (!response.ok) throw new Error("nominatim-" + response.status);
       const results = await response.json();
       if (!Array.isArray(results) || !results.length) throw new Error("nominatim-empty");
+      const matched = matchingGeocodeResult(results);
+      if (!matched) throw new Error("nominatim-state-mismatch");
       result = {
-        latitude: Number(results[0].lat),
-        longitude: Number(results[0].lon),
-        displayName: textValue(results[0].display_name, 400),
+        latitude: Number(matched.lat),
+        longitude: Number(matched.lon),
+        displayName: textValue(matched.display_name, 400),
       };
       if (!Number.isFinite(result.latitude) || !Number.isFinite(result.longitude)) {
         throw new Error("nominatim-coordinates");
@@ -1570,6 +1617,19 @@
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       root.setAttribute("aria-label", t("noProfile"));
       root.replaceChildren();
+      const message = document.createElement("p");
+      message.className = "map-placeholder";
+      message.textContent = hasPlaceSelection() ? "Loading the selected community map..." : t("noProfile");
+      root.appendChild(message);
+      if (hasPlaceSelection()) {
+        const searchUrl = new URL("https://www.openstreetmap.org/search");
+        searchUrl.searchParams.set("query", geocodeQuery());
+        const fallback = safeAnchor(searchUrl.href, "Open this place in OpenStreetMap");
+        if (fallback) {
+          fallback.className = "map-fallback-link";
+          root.appendChild(fallback);
+        }
+      }
       return;
     }
     const place = textValue(profile.community || profile.name, 200) || t("community");
@@ -1592,7 +1652,7 @@
     const frame = document.createElement("iframe");
     frame.className = "osm-map-frame";
     frame.title = "Interactive OpenStreetMap of " + place;
-    frame.loading = "lazy";
+    frame.loading = "eager";
     frame.referrerPolicy = "strict-origin-when-cross-origin";
     frame.src = mapUrl.href;
     root.appendChild(frame);
@@ -2244,16 +2304,12 @@
       notes.value = state.workspace.projectNotes;
       notes.maxLength = MAX_NOTES;
     }
-    const name = byId("communityName");
-    if (name && !name.value && (state.workspace.profile.community || state.workspace.profile.name)) {
-      name.value = state.workspace.profile.community || state.workspace.profile.name;
-    }
-    const stateSelect = byId("stateSelect");
-    if (stateSelect && state.workspace.profile.stateCode) {
-      const option = Array.from(stateSelect.options).find(function (candidate) {
-        return candidate.value === state.workspace.profile.stateCode;
-      });
-      if (option) stateSelect.value = option.value;
+    if (typeof explorer().setCommunitySelection === "function" && state.workspace.profile.stateCode) {
+      explorer().setCommunitySelection(
+        state.workspace.profile.stateCode,
+        state.workspace.profile.placeType,
+        state.workspace.profile.geoid
+      );
     }
     renderProfileSummary();
   }
@@ -2364,9 +2420,10 @@
     }
     const communityName = byId("communityName");
     const communityState = byId("stateSelect");
-    [communityName, communityState].forEach(function (control) {
+    const communityType = byId("placeTypeSelect");
+    [communityState, communityType, communityName].forEach(function (control) {
       if (!control) return;
-      control.addEventListener(control === communityName ? "input" : "change", function () {
+      control.addEventListener("change", function () {
         control.setCustomValidity("");
         control.removeAttribute("aria-invalid");
         syncCommunityGate();
@@ -2375,10 +2432,13 @@
 
     const filters = byId("communityFilters");
     if (filters) {
-      filters.addEventListener("change", function () {
+      filters.addEventListener("change", function (event) {
         captureProfileFromFilters();
         renderProfileSummary();
         syncCommunityGate();
+        if (event.target && event.target.id === "communityName" && event.target.value) {
+          loadProjectedProfile().catch(reportError);
+        }
       });
     }
     const roadmap = byId("roadmap");
@@ -2421,7 +2481,16 @@
     applyLanguage();
     refreshWorkspaceUI();
     renderMap();
-    setStatus("mapStatus", t("locateConsent"), "info");
+    if (hasPlaceSelection() && (!Number.isFinite(state.workspace.profile.latitude) || !Number.isFinite(state.workspace.profile.longitude))) {
+      try {
+        await locateCommunity();
+      } catch (error) {
+        setStatus("mapStatus", t("locateFailed"), "warning");
+        reportError(error);
+      }
+    } else {
+      setStatus("mapStatus", hasPlaceSelection() ? t("located") : t("locateConsent"), "info");
+    }
     document.documentElement.classList.add("rerc-planner-ready");
     document.dispatchEvent(new CustomEvent("rerc:planner-ready", {
       detail: { schema: SCHEMA_VERSION, workspaceId: state.workspace.id },

@@ -35,6 +35,20 @@
     "First, tell us about your community.": "Primero, cuéntenos sobre su comunidad.",
     "A few answers help us find stronger matches. They do not decide whether you are eligible.": "Unas pocas respuestas nos ayudan a encontrar mejores opciones. No determinan si usted cumple los requisitos.",
     "Your place": "Su comunidad",
+    "Choose a state, a place type, and then your community.": "Elija un estado, un tipo de lugar y luego su comunidad.",
+    "Place type": "Tipo de lugar",
+    "Choose a state first": "Primero elija un estado",
+    "County, town, city, or Census place": "Condado, pueblo, ciudad o lugar del Censo",
+    "Choose a place type first": "Primero elija un tipo de lugar",
+    "State or territory, place type, and community are required before you continue.": "Debe elegir el estado o territorio, el tipo de lugar y la comunidad antes de continuar.",
+    "Includes every county or county equivalent and every Census place in the 50 states, D.C., and U.S. territories.": "Incluye todos los condados o equivalentes y todos los lugares del Censo en los 50 estados, D.C. y los territorios de EE. UU.",
+    "Load community profile": "Cargar perfil comunitario",
+    "Choose a state or territory first.": "Primero elija un estado o territorio.",
+    "Choose a place type": "Elija un tipo de lugar",
+    "Choose a county or a town, city, or Census place.": "Elija un condado o un pueblo, ciudad o lugar del Censo.",
+    "Choose a community.": "Elija una comunidad.",
+    "Community selected. Loading public profile and map...": "Comunidad seleccionada. Cargando el perfil público y el mapa...",
+    "No matching Census places were found.": "No se encontraron lugares del Censo que coincidan.",
     "Enter a community and choose its location.": "Escriba una comunidad y elija su ubicación.",
     "Community name": "Nombre de la comunidad",
     "State, D.C., or U.S. territory": "Estado, D.C. o territorio de EE. UU.",
@@ -69,6 +83,21 @@
     "Next submission deadline": "Próxima fecha límite",
     "Checking dated funding matches...": "Buscando fechas de financiamiento...",
     "View program": "Ver programa",
+    "Funding view": "Vista de financiamiento",
+    "Choose funding view": "Elegir vista de financiamiento",
+    "List": "Lista",
+    "Funding deadlines": "Fechas límite de financiamiento",
+    "Upcoming application calendar": "Calendario de próximas solicitudes",
+    "Change calendar month": "Cambiar mes del calendario",
+    "Previous month": "Mes anterior",
+    "Next month": "Mes siguiente",
+    "Today": "Hoy",
+    "Scrollable funding deadline calendar": "Calendario desplazable de fechas límite de financiamiento",
+    "Funding deadline calendar": "Calendario de fechas límite de financiamiento",
+    "Next upcoming deadlines": "Próximas fechas límite",
+    "No dated funding deadlines are available in these matches.": "Estas opciones no tienen fechas límite de financiamiento disponibles.",
+    "Loading the selected community map...": "Cargando el mapa de la comunidad seleccionada...",
+    "Open this place in OpenStreetMap": "Abrir este lugar en OpenStreetMap",
     "Sort": "Ordenar",
     "Most relevant": "Más relevante",
     "Name": "Nombre",
@@ -253,6 +282,16 @@
     if (match) return `Comparar ${match[1]}`;
     match = value.match(/^(.+): (.+) \(opens in a new tab\)$/);
     if (match) return `${translateTemplate(match[1])}: ${match[2]} (se abre en una pestaña nueva)`;
+    match = value.match(/^County or county equivalent \(([\d,]+)\)$/);
+    if (match) return `Condado o equivalente (${match[1]})`;
+    match = value.match(/^Town, city, or Census place \(([\d,]+)\)$/);
+    if (match) return `Pueblo, ciudad o lugar del Censo (${match[1]})`;
+    match = value.match(/^Choose a (county or county equivalent|town, city, or Census place)$/);
+    if (match) return match[1].startsWith("county") ? "Elija un condado o equivalente" : "Elija un pueblo, ciudad o lugar del Censo";
+    match = value.match(/^Choose from ([\d,]+) (county or county equivalent|town, city, or Census place)s?\.$/);
+    if (match) return `Elija entre ${match[1]} ${match[2].startsWith("county") ? "condados o equivalentes" : "pueblos, ciudades o lugares del Censo"}.`;
+    match = value.match(/^(\d+) funding matches shown in calendar view for (.+)\.$/);
+    if (match) return `${match[1]} opciones de financiamiento en el calendario para ${match[2]}.`;
     return value;
   }
 

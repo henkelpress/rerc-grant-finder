@@ -61,17 +61,18 @@
         <section class="wizard-panel" data-wizard-panel="1" aria-labelledby="communityPanelTitle">
           <div class="panel-heading">
             <span class="panel-step" aria-hidden="true">1</span>
-            <div><h3 id="communityPanelTitle">Your place</h3><p>Enter a community and choose its location.</p></div>
+            <div><h3 id="communityPanelTitle">Your place</h3><p>Choose a state, a place type, and then your community.</p></div>
           </div>
           <div class="field-grid">
-            <label class="field field-wide" for="communityName"><span>Community name <b aria-hidden="true">*</b></span><input id="communityName" type="text" autocomplete="address-level2" placeholder="Example: Taos" aria-describedby="communityRequirement" required></label>
             <label class="field" for="stateSelect"><span>State, D.C., or U.S. territory <b aria-hidden="true">*</b></span><select id="stateSelect" aria-describedby="communityRequirement" required></select></label>
-            <label class="field" for="placeTypeSelect"><span>Community type</span><select id="placeTypeSelect"><option value="">Any community type</option><option value="town_or_city">Town or city</option><option value="county_or_region">County or region</option><option value="tribal_community">Tribal community</option><option value="statewide_or_multi_community">Statewide or multi-community</option></select></label>
+            <label class="field" for="placeTypeSelect"><span>Place type <b aria-hidden="true">*</b></span><select id="placeTypeSelect" aria-describedby="communityRequirement" required disabled><option value="">Choose a state first</option></select></label>
+            <label class="field field-wide" for="communityName"><span>County, town, city, or Census place <b aria-hidden="true">*</b></span><select id="communityName" aria-describedby="communityRequirement communityCoverage" required disabled><option value="">Choose a place type first</option></select></label>
           </div>
-          <p id="communityRequirement" class="required-note">Community name and state or territory are required before you continue.</p>
+          <p id="communityRequirement" class="required-note">State or territory, place type, and community are required before you continue.</p>
+          <p id="communityCoverage" class="coverage-note">Includes every county or county equivalent and every Census place in the 50 states, D.C., and U.S. territories.</p>
           <div class="profile-actions">
-            <button id="loadCommunityProfile" class="primary-button" type="button"><i data-lucide="search" aria-hidden="true"></i>Look up community</button>
-            <p id="profileStatus" class="status-message" role="status" aria-live="polite">Enter a place to add public community facts.</p>
+            <button id="loadCommunityProfile" class="primary-button" type="button" disabled><i data-lucide="search" aria-hidden="true"></i>Load community profile</button>
+            <p id="profileStatus" class="status-message" role="status" aria-live="polite">Choose a state or territory first.</p>
           </div>
           <section id="communityProfileSummary" class="profile-summary" aria-labelledby="profileSummaryTitle" hidden>
             <div class="section-heading"><div><p class="eyebrow">Community snapshot</p><h3 id="profileSummaryTitle">What we found</h3></div><button id="refreshProfile" class="icon-text-button" type="button"><i data-lucide="refresh-cw" aria-hidden="true"></i>Refresh</button></div>
@@ -123,8 +124,31 @@
           </div>
           <a id="nextDeadlineLink" href="#" target="_blank" rel="noopener" hidden>View program</a>
         </section>
+        <div id="fundingViewSwitch" class="funding-view-switch" hidden>
+          <span>Funding view</span>
+          <div role="group" aria-label="Choose funding view">
+            <button id="showFundingList" type="button" class="active" aria-pressed="true"><i data-lucide="list" aria-hidden="true"></i>List</button>
+            <button id="showFundingCalendar" type="button" aria-pressed="false"><i data-lucide="calendar-days" aria-hidden="true"></i>Calendar</button>
+          </div>
+        </div>
+        <section id="fundingCalendar" class="funding-calendar" aria-labelledby="calendarTitle" hidden>
+          <header class="calendar-heading">
+            <div><p class="eyebrow">Funding deadlines</p><h3 id="calendarTitle">Upcoming application calendar</h3></div>
+            <div class="calendar-controls" role="group" aria-label="Change calendar month">
+              <button id="previousCalendarMonth" class="icon-button" type="button" aria-label="Previous month"><i data-lucide="chevron-left" aria-hidden="true"></i></button>
+              <button id="todayCalendarMonth" class="secondary-button" type="button">Today</button>
+              <button id="nextCalendarMonth" class="icon-button" type="button" aria-label="Next month"><i data-lucide="chevron-right" aria-hidden="true"></i></button>
+            </div>
+          </header>
+          <h4 id="calendarMonthTitle" class="calendar-month-title"></h4>
+          <div class="calendar-grid-scroll" tabindex="0" aria-label="Scrollable funding deadline calendar"><div id="calendarGrid" class="calendar-grid" role="grid" aria-label="Funding deadline calendar"></div></div>
+          <div class="calendar-agenda">
+            <h4>Next upcoming deadlines</h4>
+            <div id="calendarAgenda"></div>
+          </div>
+        </section>
         <p id="matchAnnouncement" class="sr-only" aria-live="polite" aria-atomic="true"></p>
-        <div class="results-toolbar">
+        <div id="resultsToolbar" class="results-toolbar">
           <label for="sortSelect"><span>Sort</span><select id="sortSelect"><option value="score">Most relevant</option><option value="title">Name</option><option value="status">Status</option><option value="type">Type</option></select></label>
           <label for="limitSelect"><span>Show</span><select id="limitSelect"><option value="30" selected>30</option><option value="60">60</option><option value="120">120</option><option value="all">All</option></select></label>
           <div class="legacy-exports" aria-label="Quick match exports"><button id="exportWord" type="button"><i data-lucide="file-text" aria-hidden="true"></i>Word</button><button id="exportCsv" type="button"><i data-lucide="sheet" aria-hidden="true"></i>CSV</button></div>
@@ -248,8 +272,8 @@
   <script src="case_studies.js"></script>
   <script src="community_profiles.js"></script>
   <script src="vendor/lucide.min.js"></script>
-  <script src="ui-i18n.js?v=20260720-1"></script>
-  <script src="app.js?v=20260718-2"></script>
-  <script src="planner.js?v=20260720-1"></script>
+  <script src="ui-i18n.js?v=20260720-2"></script>
+  <script src="app.js?v=20260720-1"></script>
+  <script src="planner.js?v=20260720-2"></script>
 </body>
 </html>

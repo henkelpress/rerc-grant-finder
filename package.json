@@ -2,6 +2,10 @@
   "name": "rerc-community-explorer-qa",
   "private": true,
   "version": "1.0.0",
+  "scripts": {
+    "test": "python scripts/qa_release.py",
+    "qa:browser": "node scripts/qa_public_site.cjs"
+  },
   "devDependencies": {
     "playwright": "1.61.1"
   }
