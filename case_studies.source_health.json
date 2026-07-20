@@ -2,7 +2,7 @@
   "status": "PASS",
   "checked_date": "2026-07-18",
   "unique_urls": 303,
-  "case_studies_sha256": "520f8f56562cc2d636547a0c326fdce6a931343053efd5387b0397bd314f9f92",
+  "case_studies_sha256": "5c590883729c5788c5773606c84b5fdab4041fc9f0e029de66a0988a62459287",
   "counts": {
     "reachable": 271,
     "restricted_but_present": 32,
