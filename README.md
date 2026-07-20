@@ -6,9 +6,9 @@ Live site: <https://henkelpress.github.io/rerc-grant-finder/>
 
 ## Current Catalog
 
-- 1,196 public records
+- 1,272 public records
 - 659 funding options
-- 61 guides, tools, data sources, training programs, and other resources
+- 137 guides, tools, data sources, training programs, and other resources
 - 476 official federal community examples
 - Coverage for all 50 states, the District of Columbia, Puerto Rico, American Samoa, Guam, the Northern Mariana Islands, and the U.S. Virgin Islands
 

@@ -70,6 +70,7 @@ def main() -> int:
     assert expected_app_version == EXPECTED_RERCIE_VERSION
     run("node", "--check", "app.js")
     run("node", "--check", "planner.js")
+    run("node", "--check", "ui-i18n.js")
     run(sys.executable, "scripts/qa_case_studies.py")
 
     raw = (ROOT / "data.js").read_text(encoding="utf-8").strip()
@@ -147,7 +148,7 @@ def main() -> int:
         for tag, attrs in site_contract.elements
         if tag == "script" and attrs.get("src")
     }
-    assert {"community_profiles.js", "app.js", "planner.js"} <= script_sources
+    assert {"community_profiles.js", "ui-i18n.js", "app.js", "planner.js"} <= script_sources
     rercie_download = next(
         (
             attrs.get("href", "")
@@ -277,18 +278,19 @@ def main() -> int:
     assert not any(re.search(r"[A-Za-z]:\\\\|protos|private_internal|needs_image_review", json.dumps(case), re.I) for case in cases)
 
     downloads = ROOT / "downloads"
-    static_docx = downloads / "RERC_Community_Explorer_Appendix_2026-07-19.docx"
-    static_xlsx = downloads / "RERC_Community_Explorer_Master_2026-07-19.xlsx"
-    static_csv = downloads / "RERC_Community_Explorer_Master_2026-07-19.csv"
+    static_docx = downloads / "RERC_Community_Explorer_Appendix_2026-07-20.docx"
+    static_xlsx = downloads / "RERC_Community_Explorer_Master_2026-07-20.xlsx"
+    static_csv = downloads / "RERC_Community_Explorer_Master_2026-07-20.csv"
     assert static_docx.stat().st_size > 100_000
     assert static_xlsx.stat().st_size > 100_000
     assert static_csv.stat().st_size > 100_000
-    assert len(static_csv.read_text(encoding="utf-8-sig").splitlines()) == 1197
+    csv_row_count = len(static_csv.read_text(encoding="utf-8-sig").splitlines()) - 1
+    assert csv_row_count >= 1200
     with zipfile.ZipFile(static_docx) as package:
         names = set(package.namelist())
         assert "word/comments.xml" not in names
         document_xml = package.read("word/document.xml").decode("utf-8")
-        assert document_xml.count("<w:hyperlink") == 1196
+        assert document_xml.count("<w:hyperlink") == csv_row_count
         assert document_xml.count("<w:cantSplit") > 4000
         assert document_xml.count("<w:keepNext") > 4000
         app_xml = package.read("docProps/app.xml").decode("utf-8")
@@ -302,7 +304,8 @@ def main() -> int:
         workbook_xml = package.read("xl/workbook.xml").decode("utf-8")
         assert all(name in workbook_xml for name in ("Funding", "Resources", "Community Examples"))
     sha256 = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
-    package_report = json.loads((downloads / "RERC_Community_Explorer_QA_2026-07-19.json").read_text(encoding="utf-8"))
+    package_report = json.loads((downloads / "RERC_Community_Explorer_QA_2026-07-20.json").read_text(encoding="utf-8"))
+    assert csv_row_count == package_report["records"]
     head_commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip()
     assert package_report["status"] == "PASS"
     assert package_report["source_sha256"] == {
@@ -313,7 +316,7 @@ def main() -> int:
     assert "source commit used to generate" in package_report["release_binding_note"]
     assert package_report["site_sha256"] == {
         name: git_blob_sha256(head_commit, name)
-        for name in ("index.html", "styles.css", "rercie.css", "app.js", "planner.js", "data.js", "case_studies.js", "community_profiles.js", "favicon.svg", "vendor/jszip.min.js", "vendor/lucide.min.js", "assets/hero-outdoor.jpg", "assets/rerc-e-eagle.jpg", "README.md")
+        for name in ("index.html", "styles.css", "rercie.css", "app.js", "planner.js", "ui-i18n.js", "data.js", "case_studies.js", "community_profiles.js", "favicon.svg", "vendor/jszip.min.js", "vendor/lucide.min.js", "assets/hero-outdoor.jpg", "assets/rerc-e-eagle.jpg", "README.md")
     }
     assert package_report["docx"]["sha256"] == sha256(static_docx)
     assert package_report["xlsx"]["sha256"] == sha256(static_xlsx)

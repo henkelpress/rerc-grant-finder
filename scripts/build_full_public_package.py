@@ -362,7 +362,11 @@ def git_blob_sha256(commit: str, name: str) -> str:
 
 
 def validate(records: list[dict[str, str]], docx: Path, xlsx: Path, csv_path: Path) -> dict:
-    assert len(records) == 1196
+    type_counts = {kind: sum(row["Type"] == kind for row in records) for kind in ("Funding", "Resource", "Community Example")}
+    assert type_counts["Funding"] == 659
+    assert type_counts["Resource"] >= 100
+    assert type_counts["Community Example"] == 476
+    assert len(records) == sum(type_counts.values())
     assert {row["Type"] for row in records} == {"Funding", "Resource", "Community Example"}
     assert all(row["Official URL"].startswith(("https://", "http://")) for row in records)
     serialized = json.dumps(records, ensure_ascii=False)
@@ -370,23 +374,23 @@ def validate(records: list[dict[str, str]], docx: Path, xlsx: Path, csv_path: Pa
     assert not any(marker in serialized for marker in ("Ã", "Â", "â", "Æ", "ï¿½", "\ufffd"))
     workbook = load_workbook(xlsx, read_only=False, data_only=False)
     assert workbook.sheetnames == ["Read Me", "Funding", "Resources", "Community Examples"]
-    assert workbook["Funding"].max_row == 660
-    assert workbook["Resources"].max_row == 62
-    assert workbook["Community Examples"].max_row == 477
+    assert workbook["Funding"].max_row == type_counts["Funding"] + 1
+    assert workbook["Resources"].max_row == type_counts["Resource"] + 1
+    assert workbook["Community Examples"].max_row == type_counts["Community Example"] + 1
     assert docx.stat().st_size > 100_000 and xlsx.stat().st_size > 100_000 and csv_path.stat().st_size > 100_000
     source_commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip()
     return {
         "status": "PASS",
         "updated": DATE_TAG,
         "records": len(records),
-        "funding": 659,
-        "resources": 61,
-        "community_examples": 476,
+        "funding": type_counts["Funding"],
+        "resources": type_counts["Resource"],
+        "community_examples": type_counts["Community Example"],
         "catalog_source_commit": source_commit,
         "release_binding_note": "This is the source commit used to generate the files. See the GitHub release and RELEASE_MANIFEST.json for the final release commit.",
         "site_sha256": {
             name: git_blob_sha256(source_commit, name)
-            for name in ("index.html", "styles.css", "rercie.css", "app.js", "planner.js", "data.js", "case_studies.js", "community_profiles.js", "favicon.svg", "vendor/jszip.min.js", "vendor/lucide.min.js", "assets/hero-outdoor.jpg", "assets/rerc-e-eagle.jpg", "README.md")
+            for name in ("index.html", "styles.css", "rercie.css", "app.js", "planner.js", "ui-i18n.js", "data.js", "case_studies.js", "community_profiles.js", "favicon.svg", "vendor/jszip.min.js", "vendor/lucide.min.js", "assets/hero-outdoor.jpg", "assets/rerc-e-eagle.jpg", "README.md")
         },
         "source_sha256": {
             "data.js": git_blob_sha256(source_commit, "data.js"),

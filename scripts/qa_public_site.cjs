@@ -42,7 +42,7 @@ async function main() {
     checks.phase3Visible = await page.locator("#matchesWorkspace").isVisible();
     check("community_gate", checks.communityFormVisibleAtStart && checks.futureStepsLockedAtStart && checks.resultsHiddenAtStart && checks.blankCommunityBlocked && checks.partialCommunityBlocked && checks.futureStepsUnlocked && checks.phase2Visible && checks.phase3Visible);
     checks.counts = await page.evaluate(() => ["fundingCount", "resourceCount", "caseStudyCount"].map((id) => Number(document.getElementById(id).textContent)));
-    check("counts", checks.counts.join(",") === "659,61,476" && checks.counts.reduce((sum, value) => sum + value, 0) === 1196);
+    check("counts", checks.counts.join(",") === "659,137,476" && checks.counts.reduce((sum, value) => sum + value, 0) === 1272);
     checks.nextDeadline = await page.locator("#nextDeadlinePanel").evaluate((node) => ({
       visible: node.getBoundingClientRect().height > 0,
       date: node.querySelector("#nextDeadlineDate")?.textContent.trim() || "",
@@ -93,7 +93,14 @@ async function main() {
     const spanishOption = page.locator('#languageDialog input[value="es"]');
     checks.spanishDialog = await spanishOption.count() === 1 && /Espa/.test(await page.locator("#languageDialog").innerText()); check("spanish_dialog", checks.spanishDialog);
     await spanishOption.click(); await page.locator("#languageDialog").waitFor({ state: "hidden" }); await page.waitForTimeout(50);
-    checks.spanishApplied = await page.locator("html").getAttribute("lang") === "es" && /Espa/.test(await page.locator("#openLanguage span").innerText()) && await page.evaluate(() => document.activeElement?.id === "openLanguage"); check("spanish_applied", checks.spanishApplied);
+    checks.spanishApplied = await page.locator("html").getAttribute("lang") === "es"
+      && /Espa/.test(await page.locator("#openLanguage span").innerText())
+      && /Recursos/.test(await page.locator("#showResources").innerText())
+      && /Descargar RERC-e/.test(await page.locator("#rercieDownload").innerText())
+      && /Descargue todo el cat[aá]logo/.test(await page.locator("#downloadsTitle").innerText())
+      && /Primero, cu[eé]ntenos/.test(await page.locator("#communityFilters").innerText())
+      && /Guardar|Quitar/.test(await page.locator('[data-action="planner-save"]').first().innerText())
+      && await page.evaluate(() => document.activeElement?.id === "openLanguage"); check("spanish_applied", checks.spanishApplied);
     await page.locator("#openLanguage").click(); await page.locator('#languageDialog input[value="en"]').click(); await page.locator("#languageDialog").waitFor({ state: "hidden" });
     checks.englishRestored = await page.locator("html").getAttribute("lang") === "en"; check("english_restored", checks.englishRestored);
     checks.roadmapPhases = await page.locator("#roadmap select").first().locator("option").allTextContents(); check("roadmap_phases", ["Plan", "Design", "Build", "Operate"].every((phase) => checks.roadmapPhases.includes(phase)));

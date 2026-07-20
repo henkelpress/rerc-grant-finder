@@ -1806,7 +1806,7 @@
 
   function catalogVersion() {
     return textValue(window.RERC_CATALOG_VERSION, 80) ||
-      String(catalog().length) + "-" + textValue(catalog()[0] && catalog()[0].last_checked, 20);
+      String(catalog().length) + "-" + textValue(window.RERC_CATALOG && window.RERC_CATALOG.updated, 20);
   }
 
   function csvCell(value) {
@@ -2225,6 +2225,7 @@
     }
     renderProfileSummary();
     refreshWorkspaceUI();
+    if (window.RERCI18N) window.RERCI18N.setLanguage(state.language);
   }
 
   async function setLanguage(language) {
@@ -2259,6 +2260,12 @@
 
   function setupEventHandlers() {
     document.addEventListener("click", function (event) {
+      const languageOpener = event.target.closest("#openLanguage");
+      if (languageOpener) {
+        event.preventDefault();
+        openDialog("languageDialog");
+        return;
+      }
       const communityEntry = event.target.closest("[data-community-entry]");
       if (communityEntry) {
         event.preventDefault();
@@ -2325,7 +2332,7 @@
     bind("deleteLocalData", "click", function () { deleteLocalData().catch(reportError); });
     bind("shareWorkspace", "click", showShareDialog);
     bind("copyShareLink", "click", function () { copyShareLink().catch(reportError); });
-    bind("openLanguage", "click", function () { openDialog("languageDialog"); });
+
 
     const importInput = byId("importWorkspaceFile");
     if (importInput) {
