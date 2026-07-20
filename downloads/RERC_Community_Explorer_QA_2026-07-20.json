@@ -1,0 +1,46 @@
+{
+  "status": "PASS",
+  "updated": "2026-07-20",
+  "records": 1272,
+  "funding": 659,
+  "resources": 137,
+  "community_examples": 476,
+  "catalog_source_commit": "b773c1bd2f0c79bb52e71e12591917f56cacab02",
+  "release_binding_note": "This is the source commit used to generate the files. See the GitHub release and RELEASE_MANIFEST.json for the final release commit.",
+  "site_sha256": {
+    "index.html": "1faad53cb28e91e3e69589755a5880925c31ab6e386715bd2e686ed4c490a74f",
+    "styles.css": "337ef80a4d81b12a2257c40b7c1a3bb35ae07435fd74ab81a943b79224262e8b",
+    "rercie.css": "8cc33fa867b0afb38c5523efb3d8f1d1c7dd76dce336b6b403549b39fae02a46",
+    "app.js": "d56ed6fe5c5d273c3cbf3938f0f37bbe90f784ed0f247c8223a235d2cd7ac596",
+    "planner.js": "fa62e6d9f589a3d6aceae2e9b08e23971120873d572f1ccd3bdaad9ee65bc1e0",
+    "ui-i18n.js": "00133c989f4483d3a00e6124e7b73fd916e100a7488c487a1670e92749b804f8",
+    "data.js": "87679a9c1da58916250b8f705961335582e7be6a28bad3606cf7a9ab7d51a1ec",
+    "case_studies.js": "520f8f56562cc2d636547a0c326fdce6a931343053efd5387b0397bd314f9f92",
+    "community_profiles.js": "e9c22c97b4d2d9cdc829b5c0559f17a87d9965d3f0a4c3f5b3a4b3d0925927c1",
+    "favicon.svg": "08bd8268fdeb2a2e83d8a55d89c92afcedc01024c585fc6401c8897f6878cd04",
+    "vendor/jszip.min.js": "acc7e41455a80765b5fd9c7ee1b8078a6d160bbbca455aeae854de65c947d59e",
+    "vendor/lucide.min.js": "3411692820cb8d47543f69496aa25fd603a358f4498046f41c508a5a3342210e",
+    "assets/hero-outdoor.jpg": "c401e10950d2fbc0698ef754003010cc6045b5ecd2ed7ce230fce72715c3983c",
+    "assets/rerc-e-eagle.jpg": "a549963e0172f9a8f27f9f78288cb974ef7a567ac0c9818fbb7f35b6d5a2e57a",
+    "README.md": "fd26e1159b9d1851253d124eff271d0cbab3271d8d68cb46d29e9662197a6955"
+  },
+  "source_sha256": {
+    "data.js": "87679a9c1da58916250b8f705961335582e7be6a28bad3606cf7a9ab7d51a1ec",
+    "case_studies.js": "520f8f56562cc2d636547a0c326fdce6a931343053efd5387b0397bd314f9f92"
+  },
+  "docx": {
+    "file": "RERC_Community_Explorer_Appendix_2026-07-20.docx",
+    "bytes": 375330,
+    "sha256": "a06fe1479295dc1ffe7a86466be9e445b0b443622fd559f752daeb0140d15e9c"
+  },
+  "xlsx": {
+    "file": "RERC_Community_Explorer_Master_2026-07-20.xlsx",
+    "bytes": 357011,
+    "sha256": "a7f2660850280df37930e1042b8aedff8fb5e9c61bc564f25cb6a21586828d2d"
+  },
+  "csv": {
+    "file": "RERC_Community_Explorer_Master_2026-07-20.csv",
+    "bytes": 882626,
+    "sha256": "f2fb8a2f197ba09feaac70767dbb07ca7273e4022724c981e6c4f59ba2cd7cc4"
+  }
+}
