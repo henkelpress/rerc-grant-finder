@@ -5,15 +5,15 @@
   "funding": 659,
   "resources": 137,
   "community_examples": 476,
-  "catalog_source_commit": "99ff7028787668e473bdf6fa303c3735d28af13e",
+  "catalog_source_commit": "d12de099fced7f63e35da6ddd3e4943c1b9b5d05",
   "release_binding_note": "This is the source commit used to generate the files. See the GitHub release and RELEASE_MANIFEST.json for the final release commit.",
   "site_sha256": {
-    "index.html": "1faad53cb28e91e3e69589755a5880925c31ab6e386715bd2e686ed4c490a74f",
-    "styles.css": "337ef80a4d81b12a2257c40b7c1a3bb35ae07435fd74ab81a943b79224262e8b",
+    "index.html": "7d0f94849fb12c2a92f2ff92f60437121ba332c9bd85dd6d600f25ff7e8b353d",
+    "styles.css": "5085fb127859d5fc627d17aa3f8975ea6a9929535b379cefd4575570f213542c",
     "rercie.css": "8cc33fa867b0afb38c5523efb3d8f1d1c7dd76dce336b6b403549b39fae02a46",
-    "app.js": "d56ed6fe5c5d273c3cbf3938f0f37bbe90f784ed0f247c8223a235d2cd7ac596",
-    "planner.js": "fa62e6d9f589a3d6aceae2e9b08e23971120873d572f1ccd3bdaad9ee65bc1e0",
-    "ui-i18n.js": "00133c989f4483d3a00e6124e7b73fd916e100a7488c487a1670e92749b804f8",
+    "app.js": "aa6680dc5d4caf2941c354ac8f939c0a139cabc7315488503dd00c7eea3a036f",
+    "planner.js": "0ffdbeb538f510e606c6d7230ee46d19ef928151885a2b581437981be80e8c93",
+    "ui-i18n.js": "9a72fc651f0c15a31c1de0edc3e1ec0273796042fba93e5448d7aa5d25146a63",
     "data.js": "ab7cdc464d13fb6042594db418535a9b477123edb2aee7147a09dc030a289c41",
     "case_studies.js": "5c590883729c5788c5773606c84b5fdab4041fc9f0e029de66a0988a62459287",
     "community_profiles.js": "e9c22c97b4d2d9cdc829b5c0559f17a87d9965d3f0a4c3f5b3a4b3d0925927c1",
@@ -31,12 +31,12 @@
   "docx": {
     "file": "RERC_Community_Explorer_Appendix_2026-07-20.docx",
     "bytes": 375562,
-    "sha256": "4a3b99f362bf261820f5e886651c4d00869b220d0a479bb078cd2f1aa2ec7f2f"
+    "sha256": "7cd5425622aab7b64f82116f28ad7aaeabf7f79f42e49b26c07b0fc1fb2ade6a"
   },
   "xlsx": {
     "file": "RERC_Community_Explorer_Master_2026-07-20.xlsx",
     "bytes": 357239,
-    "sha256": "ce8bb236fac60491e2383e0133f68806289bdd253641ff325bd3c556bd5748d7"
+    "sha256": "c62415a7bf679acef3bbc874478eb508af354d69a8968b79c2910da68849b660"
   },
   "csv": {
     "file": "RERC_Community_Explorer_Master_2026-07-20.csv",
