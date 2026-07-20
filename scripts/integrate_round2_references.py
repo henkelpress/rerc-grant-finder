@@ -329,7 +329,7 @@ SECTION_TOPICS = {
 KIND_SUPPORT = {
     "Organization or resource hub": "Resource hub",
     "Toolkit or guide": "Toolkit or guide",
-    "Data or analysis tool": "Data tool",
+    "Data and analysis tool": "Data and analysis tool",
     "Case study collection": "Case-study collection",
     "Report or publication": "Report",
     "Webinar or video": "Webinar or video",
