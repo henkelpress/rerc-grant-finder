@@ -148,6 +148,15 @@ def main() -> int:
         if tag == "script" and attrs.get("src")
     }
     assert {"community_profiles.js", "app.js", "planner.js"} <= script_sources
+    rercie_download = next(
+        (
+            attrs.get("href", "")
+            for tag, attrs in site_contract.elements
+            if tag == "a" and attrs.get("id") == "rercieDownload"
+        ),
+        "",
+    )
+    assert rercie_download == "https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Setup.exe"
 
     meta_by_name = {
         attrs.get("name", "").lower(): attrs.get("content", "")

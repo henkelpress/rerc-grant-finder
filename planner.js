@@ -15,7 +15,7 @@
   const MAX_FILE_BYTES = 256 * 1024;
   const MAX_SHARE_LENGTH = 1800;
   const INSTALLER_URL =
-    "https://github.com/henkelpress/rerc-grant-finder/releases";
+    "https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Setup.exe";
   const PHASES = ["Plan", "Design", "Build", "Operate"];
   const ALLOWED_LANGUAGES = ["en", "es"];
 

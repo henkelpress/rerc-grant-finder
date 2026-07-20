@@ -41,9 +41,9 @@ RERC-e Local Grant-Writing Guide is an optional Windows app. It helps people rev
 - First use downloads a verified Google Gemma 3 1B model, about 0.81 GB
 - Real Word `.docx` and Markdown export
 
-[View RERC-e release status](https://github.com/henkelpress/rerc-grant-finder/releases)
+[Download RERC-e for Windows](https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Setup.exe)
 
-RERC-e 0.5.0 passed source, package, and local Gemma generation QA. Its public Windows download is on hold until EPR, P.C. can apply an authorized Timberwing Systems publisher signature and the signed installer passes Windows security checks. RERC-e is a community-built tool. It is not an EPA grant program, does not decide eligibility, and does not submit applications.
+The current public installer is RERC-e 0.4.0. It passed installer QA and uses Google Gemma 3 1B. The installer is not code-signed, so Windows may show a safety notice. RERC-e 0.5.0 has passed source and local-generation QA but is not the public installer yet. RERC-e is a community-built tool. It is not an EPA grant program, does not decide eligibility, and does not submit applications.
 
 The reviewed source and Timberwing Systems license are in `rercie/`. Model weights are not stored in this repository or installer.
 
