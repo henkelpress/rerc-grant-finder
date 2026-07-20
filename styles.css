@@ -233,6 +233,20 @@ fieldset legend { margin-bottom: 9px; }
 .roadmap, .deadline-list { display: grid; gap: 8px; }
 .roadmap-item, .deadline-item { padding: 10px 0; border-top: 1px solid var(--line); }
 .roadmap-item:first-child, .deadline-item:first-child { border-top: 0; }
+.deadline-item { display: grid; gap: 8px; min-width: 0; padding: 13px 0; }
+.deadline-item h3 { margin: 0; color: var(--forest); font-size: 0.96rem; line-height: 1.25; overflow-wrap: anywhere; }
+.deadline-main { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 10px; }
+.deadline-main time { color: var(--text); font-weight: 800; }
+.deadline-label, .deadline-status, .timing-class { display: inline-flex; width: fit-content; min-height: 28px; align-items: center; padding: 4px 8px; border: 1px solid var(--line); border-radius: 4px; color: var(--forest); background: #f4f8f5; font-size: 0.74rem; font-weight: 800; line-height: 1.2; }
+.deadline-label.urgent, .deadline-label.soon { border-color: #d5a52c; background: #fff3c7; }
+.deadline-label.past, .deadline-status.closed, .timing-class.closed { color: #6d2f27; border-color: #d8b0aa; background: #fff3f1; }
+.deadline-status.rolling, .timing-class.rolling { border-color: #7aab88; background: #eef8f1; }
+.deadline-detail { margin: 0; color: var(--muted); font-size: 0.82rem; line-height: 1.4; overflow-wrap: anywhere; }
+.deadline-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; }
+.deadline-footer small { color: var(--muted); }
+.deadline-footer a { color: var(--rerc-green); font-size: 0.8rem; font-weight: 800; }
+.calendar-timing-summary { margin: -3px 0 10px; color: var(--muted); font-size: 0.82rem; font-weight: 700; }
+.timing-detail { display: inline-block; margin-top: 4px; }
 .project-notes { display: grid; gap: 12px; }
 .plan-exports h3 { margin-bottom: 12px; }
 .action-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }

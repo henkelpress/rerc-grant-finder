@@ -94,6 +94,23 @@
     "Today": "Hoy",
     "Scrollable funding deadline calendar": "Calendario desplazable de fechas límite de financiamiento",
     "Funding deadline calendar": "Calendario de fechas límite de financiamiento",
+    "Dated deadline": "Fecha límite con día",
+    "Rolling / ongoing": "Continuo / sin fecha fija",
+    "Recurring cycle / next date pending": "Ciclo recurrente / próxima fecha pendiente",
+    "Closed / next cycle pending": "Cerrado / próximo ciclo pendiente",
+    "Deadlines vary by program": "Las fechas varían según el programa",
+    "Active program period": "Período activo del programa",
+    "Next deadline not announced": "Próxima fecha no anunciada",
+    "Application timing": "Plazo de solicitud",
+    "Application timing:": "Plazo de solicitud:",
+    "Availability": "Disponibilidad",
+    "Availability:": "Disponibilidad:",
+    "Check current availability": "Confirme la disponibilidad actual",
+    "Check the official program page.": "Revise la página oficial del programa.",
+    "Last checked": "Última revisión",
+    "Last checked:": "Última revisión:",
+    "No upcoming dated funding deadline found.": "No hay una próxima fecha anunciada.",
+    "Use the official program links to confirm current timing.": "Confirme las fechas en los enlaces oficiales.",
     "Next upcoming deadlines": "Próximas fechas límite",
     "No dated funding deadlines are available in these matches.": "Estas opciones no tienen fechas límite de financiamiento disponibles.",
     "Loading the selected community map...": "Cargando el mapa de la comunidad seleccionada...",
@@ -292,6 +309,14 @@
     if (match) return `Elija entre ${match[1]} ${match[2].startsWith("county") ? "condados o equivalentes" : "pueblos, ciudades o lugares del Censo"}.`;
     match = value.match(/^(\d+) funding matches shown in calendar view for (.+)\.$/);
     if (match) return `${match[1]} opciones de financiamiento en el calendario para ${match[2]}.`;
+    match = value.match(/^(\d+) upcoming dates\. (\d+) rolling or ongoing\. (\d+) dates to confirm\.$/);
+    if (match) return `${match[1]} fechas próximas. ${match[2]} continuas o sin fecha fija. ${match[3]} fechas por confirmar.`;
+    match = value.match(/^(\d+) rolling or ongoing funding options$/);
+    if (match) return `${match[1]} opciones continuas o sin fecha fija`;
+    match = value.match(/^(\d+) options need a new cycle date; use the official program links to confirm timing\.$/);
+    if (match) return `${match[1]} opciones necesitan una nueva fecha; confirme el plazo en el enlace oficial.`;
+    match = value.match(/^No upcoming dated funding deadlines are available\. (\d+) options are rolling or ongoing; (\d+) need a new cycle date\.$/);
+    if (match) return `No hay próximas fechas anunciadas. ${match[1]} opciones son continuas o no tienen fecha fija; ${match[2]} necesitan una nueva fecha.`;
     return value;
   }
 

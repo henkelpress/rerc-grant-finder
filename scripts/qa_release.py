@@ -72,6 +72,7 @@ def main() -> int:
     run("node", "--check", "planner.js")
     run("node", "--check", "ui-i18n.js")
     run(sys.executable, "scripts/qa_case_studies.py")
+    run(sys.executable, "scripts/qa_funding_deadlines.py")
 
     raw = (ROOT / "data.js").read_text(encoding="utf-8").strip()
     assert raw.startswith(PREFIX) and raw.endswith(";")
@@ -87,6 +88,11 @@ def main() -> int:
     for item_id in ("RERC-RES-0014", "RERC-RES-0066", "RERC-RES-0068", "RERC-RES-0076"):
         assert by_id[item_id]["item_type"] == "Funding"
     assert all(item["item_type"] in {"Funding", "Resource"} for item in items)
+    funding_items = [item for item in items if item["item_type"] == "Funding"]
+    assert len(funding_items) == 659
+    assert all((item.get("deadline_or_availability") or "").strip() for item in funding_items)
+    assert all(re.fullmatch(r"20\d{2}-\d{2}-\d{2}", item.get("last_checked", "")) for item in funding_items)
+    assert all((item.get("source_url") or "").startswith("https://") for item in funding_items)
     assert not any(re.search(r"potential rerc fit|purpose tags", item.get("why_it_matters", ""), re.I) for item in items)
     assert not any((item.get("summary") or "").strip() in {"", "-"} for item in items)
     reviewed_resources = [item for item in items if item["item_id"].startswith(("RERC-RES-R2-", "RERC-RES-NEW-2026-"))]
@@ -290,7 +296,10 @@ def main() -> int:
     assert "renderCardActions" not in app_js
     assert "planner-card-actions" in planner
     assert all(value in index for value in ("fundingViewSwitch", "showFundingCalendar", "calendarGrid", "calendarAgenda"))
-    assert all(value in app_js for value in ("renderFundingCalendar", "chooseFundingView", "fundingDeadlineEntries"))
+    assert all(value in app_js for value in ("renderFundingCalendar", "chooseFundingView", "fundingDeadlineEntries", "fundingTiming", "fundingTimingCounts"))
+    assert "calendarTimingSummary" in index and "deadline-status" in planner
+    ui_i18n = (ROOT / "ui-i18n.js").read_text(encoding="utf-8")
+    assert all(value in ui_i18n for value in ("Application timing", "Last checked", "Check current availability", "Check the official program page.", "No upcoming dated funding deadline found."))
     assert "topicCorpus(item)" in app_js and "broadFundingStage" in app_js
     assert "cleanText(item.case_place_type) !== selectedPlaceType" in app_js
     assert "<${headingTag}>${escapeHtml(item.title)}</${headingTag}>" in app_js

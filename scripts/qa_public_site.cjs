@@ -75,6 +75,8 @@ async function main() {
     check("community_map", /openstreetmap\.org\/export\/embed\.html/.test(checks.map.iframe) && /marker=/.test(checks.map.iframe));
     checks.counts = await page.evaluate(() => ["fundingCount", "resourceCount", "caseStudyCount"].map((id) => Number(document.getElementById(id).textContent)));
     check("counts", checks.counts.join(",") === "659,137,476" && checks.counts.reduce((sum, value) => sum + value, 0) === 1272);
+    checks.fundingTiming = await page.evaluate(() => window.RERCExplorer.fundingTimingCounts(window.RERCExplorer.catalog.filter((item) => item.item_type === "Funding")));
+    check("funding_timing_coverage", Object.values(checks.fundingTiming).reduce((sum, value) => sum + value, 0) === 659 && checks.fundingTiming.dated > 0 && checks.fundingTiming.rolling > 0 && checks.fundingTiming.date_pending > 0);
     checks.nextDeadline = await page.locator("#nextDeadlinePanel").evaluate((node) => ({
       visible: node.getBoundingClientRect().height > 0,
       date: node.querySelector("#nextDeadlineDate")?.textContent.trim() || "",
@@ -119,13 +121,14 @@ async function main() {
     const monthAfter = await page.locator("#calendarMonthTitle").innerText();
     checks.calendar = {
       visible: await page.locator("#fundingCalendar").isVisible(),
+      timingSummary: await page.locator("#calendarTimingSummary").innerText(),
       weekdayHeaders: await page.locator("#calendarGrid .calendar-weekday").count(),
       dayCells: await page.locator("#calendarGrid .calendar-day").count(),
       agendaItems: await page.locator("#calendarAgenda .calendar-agenda-item").count(),
       navigated: monthBefore !== monthAfter,
       cardsHidden: await page.locator("#results").isHidden()
     };
-    check("funding_calendar", checks.calendar.visible && checks.calendar.weekdayHeaders === 7 && checks.calendar.dayCells >= 28 && checks.calendar.agendaItems > 0 && checks.calendar.navigated && checks.calendar.cardsHidden);
+    check("funding_calendar", checks.calendar.visible && /upcoming dates/i.test(checks.calendar.timingSummary) && /rolling or ongoing/i.test(checks.calendar.timingSummary) && checks.calendar.weekdayHeaders === 7 && checks.calendar.dayCells >= 28 && checks.calendar.agendaItems > 0 && checks.calendar.navigated && checks.calendar.cardsHidden);
     await page.screenshot({ path: path.join(outDir, "calendar-desktop.png"), fullPage: true });
     await page.locator("#showFundingList").click();
     const datedTitle = await page.evaluate(() => window.RERCExplorer.getMatches().find((item) => { const date = item.item_type === "Funding" ? window.RERCExplorer.parseDeadline(item) : null; return date instanceof Date && !Number.isNaN(date.getTime()) && date.getTime() >= new Date().setHours(0, 0, 0, 0); })?.title || "");
@@ -134,6 +137,18 @@ async function main() {
     checks.savedBeforeReload = Number(await page.evaluate(() => document.querySelector("#savedCountBadge, #savedTrayCount, #mobileSavedCount")?.textContent || 0));
     await page.reload({ waitUntil: "networkidle" }); await page.waitForSelector("html.rerc-planner-ready");
     checks.savedAfterReload = Number(await page.evaluate(() => document.querySelector("#savedCountBadge, #savedTrayCount, #mobileSavedCount")?.textContent || 0)); check("saved_persists", checks.savedBeforeReload === 1 && checks.savedAfterReload === 1);
+    checks.deadlineLayout = await page.locator("#deadlineList .deadline-item").first().evaluate((row) => {
+      const heading = row.querySelector("h3"), main = row.querySelector(".deadline-main"), detail = row.querySelector(".deadline-detail"), footer = row.querySelector(".deadline-footer"), link = footer?.querySelector("a");
+      const blocks = [heading, main, detail, footer].map((node) => node?.getBoundingClientRect()).filter(Boolean);
+      return {
+        text: row.innerText,
+        parts: [heading, main, detail, footer].every(Boolean),
+        source: link?.href || "",
+        verticalOrder: blocks.every((box, index) => index === 0 || box.top >= blocks[index - 1].top),
+        noMash: !/\d{4}Due|leftReviewed|leftLast checked|\d{4}Last checked/i.test(row.innerText)
+      };
+    });
+    check("deadline_layout", checks.deadlineLayout.parts && checks.deadlineLayout.verticalOrder && checks.deadlineLayout.noMash && /^https:\/\//.test(checks.deadlineLayout.source));
     await page.locator('[data-mode="All"]').click();
     for (let index = 0; index < 3; index += 1) {
       const save = page.locator('[data-action="planner-save"][aria-pressed="false"]').first();
@@ -147,14 +162,32 @@ async function main() {
     const spanishOption = page.locator('#languageDialog input[value="es"]');
     checks.spanishDialog = await spanishOption.count() === 1 && /Espa/.test(await page.locator("#languageDialog").innerText()); check("spanish_dialog", checks.spanishDialog);
     await spanishOption.click(); await page.locator("#languageDialog").waitFor({ state: "hidden" }); await page.waitForTimeout(50);
-    checks.spanishApplied = await page.locator("html").getAttribute("lang") === "es"
-      && /Espa/.test(await page.locator("#openLanguage span").innerText())
-      && /Recursos/.test(await page.locator("#showResources").innerText())
-      && /Descargar RERC-e/.test(await page.locator("#rercieDownload").innerText())
-      && /Descargue todo el cat[aá]logo/.test(await page.locator("#downloadsTitle").innerText())
-      && /Primero, cu[eé]ntenos/.test(await page.locator("#communityFilters").innerText())
-      && /Guardar|Quitar/.test(await page.locator('[data-action="planner-save"]').first().innerText())
-      && await page.evaluate(() => document.activeElement?.id === "openLanguage"); check("spanish_applied", checks.spanishApplied);
+    const languageFocus = await page.evaluate(() => document.activeElement?.id === "openLanguage");
+    await page.locator("#showFunding").click(); await page.waitForTimeout(50);
+    const spanishTiming = await page.locator(".timing-class").first().textContent();
+    await page.locator(".result-card details").first().evaluate((details) => { details.open = true; });
+    const spanishCardDetails = await page.locator(".result-card").first().locator(".details").last().innerText();
+    await page.locator("#showFundingCalendar").click(); await page.waitForTimeout(50);
+    const spanishCalendar = await page.locator("#calendarTimingSummary").innerText();
+    await page.locator("#showFundingList").click();
+    checks.spanishValues = {
+      timing: spanishTiming,
+      calendar: spanishCalendar,
+      cardDetails: spanishCardDetails
+    };    checks.spanishPieces = {
+      lang: await page.locator("html").getAttribute("lang") === "es",
+      trigger: /Espa/.test(await page.locator("#openLanguage span").innerText()),
+      resources: /Recursos/.test(await page.locator("#showResources").innerText()),
+      download: /Descargar RERC-e/.test(await page.locator("#rercieDownload").innerText()),
+      downloadsTitle: /Descargue todo el cat\u00e1logo/.test(await page.locator("#downloadsTitle").innerText()),
+      community: /Primero, cu\u00e9ntenos/.test(await page.locator("#communityFilters").innerText()),
+      save: /Guardar|Quitar/.test(await page.locator('[data-action="planner-save"]').first().innerText()),
+      timing: /Fecha l\u00edmite|Continuo|Ciclo recurrente|Cerrado|Las fechas|Per\u00edodo|Pr\u00f3xima/.test(checks.spanishValues.timing),
+      calendar: /fechas pr\u00f3ximas/.test(checks.spanishValues.calendar),
+      cardDetails: /Plazo de solicitud/.test(checks.spanishValues.cardDetails) && /\u00daltima revisi\u00f3n/.test(checks.spanishValues.cardDetails),
+      focus: languageFocus
+    };
+    checks.spanishApplied = Object.values(checks.spanishPieces).every(Boolean); check("spanish_applied", checks.spanishApplied);
     await page.locator("#openLanguage").click(); await page.locator('#languageDialog input[value="en"]').click(); await page.locator("#languageDialog").waitFor({ state: "hidden" });
     checks.englishRestored = await page.locator("html").getAttribute("lang") === "en"; check("english_restored", checks.englishRestored);
     checks.roadmapPhases = await page.locator("#roadmap select").first().locator("option").allTextContents(); check("roadmap_phases", ["Plan", "Design", "Build", "Operate"].every((phase) => checks.roadmapPhases.includes(phase)));

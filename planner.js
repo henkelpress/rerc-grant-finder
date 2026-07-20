@@ -29,7 +29,7 @@
       savedOnly: "Show saved only",
       allMatches: "Show all matches",
       noSaved: "No items saved yet.",
-      noDeadlines: "No reviewed deadlines were found in the saved plan.",
+      noDeadlines: "Save funding options to see their application timing here.",
       noProfile: "Choose a community and load its public profile.",
       profileUnavailable: "No public profile was found for this community.",
       profileLoaded: "Community profile loaded.",
@@ -48,7 +48,13 @@
       dueToday: "Due today",
       pastDue: "Past date",
       daysLeft: "{days} days left",
-      reviewedDeadline: "Reviewed deadline",
+      reviewedDeadline: "Last checked",
+      rollingTiming: "Rolling / ongoing",
+      recurringTiming: "Recurring cycle / next date pending",
+      closedTiming: "Closed / next cycle pending",
+      variableTiming: "Deadlines vary by program",
+      activePeriodTiming: "Active program period",
+      datePendingTiming: "Next deadline not announced",
       openSource: "Open official source",
       compareTitle: "Compare saved options",
       compareLimit: "Choose up to three items to compare.",
@@ -119,7 +125,7 @@
       savedOnly: "Mostrar solo lo guardado",
       allMatches: "Mostrar todos los resultados",
       noSaved: "Todavía no hay elementos guardados.",
-      noDeadlines: "No se encontraron fechas revisadas en el plan guardado.",
+      noDeadlines: "Guarde opciones de financiamiento para ver aquí sus fechas y plazos.",
       noProfile: "Elija una comunidad y cargue su perfil público.",
       profileUnavailable: "No se encontró un perfil público para esta comunidad.",
       profileLoaded: "Perfil de la comunidad cargado.",
@@ -138,7 +144,13 @@
       dueToday: "Vence hoy",
       pastDue: "Fecha pasada",
       daysLeft: "Quedan {days} días",
-      reviewedDeadline: "Fecha revisada",
+      reviewedDeadline: "Última revisión",
+      rollingTiming: "Continuo / sin fecha fija",
+      recurringTiming: "Ciclo recurrente / próxima fecha pendiente",
+      closedTiming: "Cerrado / próximo ciclo pendiente",
+      variableTiming: "Las fechas varían según el programa",
+      activePeriodTiming: "Período activo del programa",
+      datePendingTiming: "Próxima fecha no anunciada",
       openSource: "Abrir fuente oficial",
       compareTitle: "Comparar opciones guardadas",
       compareLimit: "Elija hasta tres elementos para comparar.",
@@ -812,16 +824,51 @@
     const days = Math.round((due.getTime() - start.getTime()) / 86400000);
     if (days < 0) return { text: t("pastDue"), kind: "past" };
     if (days === 0) return { text: t("dueToday"), kind: "urgent" };
-    if (days <= 30) return { text: t("dueSoon") + " · " + t("daysLeft", { days: days }), kind: "soon" };
+    if (days <= 30) return { text: t("dueSoon") + ": " + t("daysLeft", { days: days }), kind: "soon" };
     return { text: t("daysLeft", { days: days }), kind: "future" };
   }
 
+  function fundingTimingInfo(item) {
+    if (typeof explorer().fundingTiming === "function") return explorer().fundingTiming(item);
+    return {
+      type: "date_pending",
+      label: t("datePendingTiming"),
+      detail: textValue(item.deadline_or_availability, 1000) || "Check the official program page.",
+      date: null,
+    };
+  }
+
+  function timingLabel(type) {
+    const keys = {
+      rolling: "rollingTiming",
+      recurring: "recurringTiming",
+      closed: "closedTiming",
+      variable: "variableTiming",
+      active_period: "activePeriodTiming",
+      date_pending: "datePendingTiming",
+    };
+    return t(keys[type] || "datePendingTiming");
+  }
+
+  function checkedDateLabel(value) {
+    const raw = textValue(value, 80);
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+    if (!match) return raw;
+    const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    return new Intl.DateTimeFormat(state.language, { year: "numeric", month: "short", day: "numeric" }).format(date);
+  }
+
   function deadlineItems() {
-    return savedItems().map(function (item) {
-      const deadline = reviewedDeadline(item);
-      return deadline ? { item: item, deadline: deadline } : null;
-    }).filter(Boolean).sort(function (a, b) {
-      return a.deadline.date.getTime() - b.deadline.date.getTime();
+    const order = { dated: 0, rolling: 1, recurring: 2, variable: 3, active_period: 4, date_pending: 5, closed: 6 };
+    return savedItems().filter(function (item) {
+      return textValue(item.item_type, 80) === "Funding";
+    }).map(function (item) {
+      return { item: item, deadline: reviewedDeadline(item), timing: fundingTimingInfo(item) };
+    }).sort(function (a, b) {
+      if (a.deadline && b.deadline) return a.deadline.date.getTime() - b.deadline.date.getTime();
+      if (a.deadline) return -1;
+      if (b.deadline) return 1;
+      return (order[a.timing.type] ?? 99) - (order[b.timing.type] ?? 99) || textValue(a.item.title, 500).localeCompare(textValue(b.item.title, 500));
     });
   }
 
@@ -832,6 +879,7 @@
     const deadlines = deadlineItems();
     if (!deadlines.length) {
       const empty = document.createElement("p");
+      empty.className = "empty-copy";
       empty.textContent = t("noDeadlines");
       root.appendChild(empty);
       return;
@@ -841,20 +889,45 @@
       row.className = "deadline-item";
       const heading = document.createElement("h3");
       heading.textContent = textValue(entry.item.title, 500);
-      const date = document.createElement("time");
-      date.dateTime = isoDate(entry.deadline.date);
-      date.textContent = new Intl.DateTimeFormat(state.language, {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      }).format(entry.deadline.date);
-      const badge = document.createElement("span");
-      const label = deadlineLabel(entry.deadline.date);
-      badge.className = "deadline-label " + label.kind;
-      badge.textContent = label.text;
+      const main = document.createElement("div");
+      main.className = "deadline-main";
+      if (entry.deadline) {
+        const date = document.createElement("time");
+        date.dateTime = isoDate(entry.deadline.date);
+        date.textContent = new Intl.DateTimeFormat(state.language, {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        }).format(entry.deadline.date);
+        const badge = document.createElement("span");
+        const label = deadlineLabel(entry.deadline.date);
+        badge.className = "deadline-label " + label.kind;
+        badge.textContent = label.text;
+        main.append(date, badge);
+      } else {
+        const status = document.createElement("span");
+        status.className = "deadline-status " + entry.timing.type;
+        status.textContent = timingLabel(entry.timing.type);
+        main.appendChild(status);
+      }
+      const detail = document.createElement("p");
+      detail.className = "deadline-detail";
+      detail.textContent = textValue(entry.timing.detail || entry.item.deadline_or_availability, 1000);
+      const footer = document.createElement("div");
+      footer.className = "deadline-footer";
       const reviewed = document.createElement("small");
-      reviewed.textContent = [t("reviewedDeadline"), entry.deadline.reviewedAt].filter(Boolean).join(" · ");
-      row.append(heading, date, badge, reviewed);
+      reviewed.textContent = [t("reviewedDeadline"), checkedDateLabel(entry.deadline?.reviewedAt || entry.item.last_checked)].filter(Boolean).join(": ");
+      footer.appendChild(reviewed);
+      const source = typeof explorer().safeUrl === "function" ? explorer().safeUrl(entry.item.source_url) : "";
+      if (source) {
+        const link = document.createElement("a");
+        link.href = source;
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.textContent = t("openSource");
+        footer.appendChild(link);
+      }
+      row.append(heading, main, detail, footer);
       root.appendChild(row);
     });
   }
@@ -2086,7 +2159,7 @@
 
   function exportCalendar() {
     const entries = deadlineItems().filter(function (entry) {
-      return entry.deadline.date.getTime() >= new Date().setHours(0, 0, 0, 0);
+      return entry.deadline && entry.deadline.date.getTime() >= new Date().setHours(0, 0, 0, 0);
     });
     if (!entries.length) {
       setStatus("shareStatus", t("noDeadlines"), "warning");

@@ -75,7 +75,7 @@ const elements = Object.fromEntries([
   "matchCount","fundingMatchCount","resourceMatchCount","caseStudyMatchCount","activeFilters","results","matchAnnouncement",
   "fundingCount","resourceCount","caseStudyCount","showFunding","showResources","showCases",
   "nextDeadlinePanel","nextDeadlineDate","nextDeadlineMeta","nextDeadlineLink","loadCommunityProfile","profileStatus",
-  "fundingViewSwitch","showFundingList","showFundingCalendar","fundingCalendar","calendarMonthTitle","calendarGrid","calendarAgenda",
+  "fundingViewSwitch","showFundingList","showFundingCalendar","fundingCalendar","calendarMonthTitle","calendarTimingSummary","calendarGrid","calendarAgenda",
   "previousCalendarMonth","todayCalendarMonth","nextCalendarMonth","resultsToolbar"
 ].map((id) => [id, document.getElementById(id)]));
 
@@ -534,19 +534,52 @@ function parseDeadline(item) {
   if (/\b(open|available)\b/i.test(cleanText(item.status)) && deadline < today) return null;
   return deadline;
 }
+function fundingTiming(item) {
+  const raw = cleanText(item?.deadline_or_availability);
+  const status = cleanText(item?.status);
+  const date = parseDeadline(item);
+  if (date) return { type: "dated", label: "Dated deadline", detail: raw, date };
+  if (/\b(rolling|ongoing|year[- ]round|continuous|always open|open throughout the year|no fixed deadlines?|first[- ]come,? first[- ]served|as needed|while (?:funding|funds) remain|until funds? (?:are )?depleted|applications? (?:are )?accepted (?:throughout|year[- ]round))\b/i.test(raw)) {
+    return { type: "rolling", label: "Rolling / ongoing", detail: raw, date: null };
+  }
+  if (/\b(cycle closed|round closed|has ended|ended|awarded|wrapped|not accepting|no current round|next round|future round|deadline passed)\b/i.test(`${status} ${raw}`)) {
+    return { type: "closed", label: "Closed / next cycle pending", detail: raw, date: null };
+  }
+  if (/\b(deadlines? vary|cycles? vary|var(?:y|ies) by|fund-specific|region(?:al)? deadlines?|multiple .* cycles|category-specific|program-specific|local deadlines?)\b/i.test(raw)) {
+    return { type: "variable", label: "Deadlines vary by program", detail: raw, date: null };
+  }
+  if (/\b(tax years?|program years?|operates? from|active through|reauthorized through|fiscal year|incentive year|funding availability applies)\b/i.test(raw)) {
+    return { type: "active_period", label: "Active program period", detail: raw, date: null };
+  }
+  if (/\b(recurring|annual|biennial|two-year cycle|periodic|quarterly|monthly|spring cycle|summer cycle|fall cycle|winter cycle|grant cycle|application cycle|competitive rounds?)\b/i.test(`${status} ${raw}`)) {
+    return { type: "recurring", label: "Recurring cycle / next date pending", detail: raw, date: null };
+  }
+  return { type: "date_pending", label: "Next deadline not announced", detail: raw || "Check the official program page.", date: null };
+}
+
+function fundingTimingCounts(items) {
+  const counts = { dated: 0, rolling: 0, recurring: 0, closed: 0, variable: 0, active_period: 0, date_pending: 0 };
+  items.filter((item) => item.item_type === "Funding").forEach((item) => {
+    const type = fundingTiming(item).type;
+    counts[type] = (counts[type] || 0) + 1;
+  });
+  return counts;
+}
 function renderNextDeadline(items) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const next = items
-    .filter((item) => item.item_type === "Funding")
+  const funding = items.filter((item) => item.item_type === "Funding");
+  const counts = fundingTimingCounts(funding);
+  const next = funding
     .map((item) => ({ item, date: parseDeadline(item) }))
     .filter((entry) => entry.date && entry.date >= today)
     .sort((a, b) => a.date - b.date || b.item.score - a.item.score || a.item.title.localeCompare(b.item.title))[0];
 
   if (!next) {
+    const pending = counts.recurring + counts.variable + counts.active_period + counts.date_pending;
     elements.nextDeadlinePanel.classList.add("empty");
-    elements.nextDeadlineDate.textContent = "No dated funding deadline found in these matches.";
-    elements.nextDeadlineMeta.textContent = "Open a program page to confirm current timing.";
+    elements.nextDeadlineDate.textContent = counts.rolling ? `${counts.rolling} rolling or ongoing funding options` : "No upcoming dated funding deadline found.";
+    elements.nextDeadlineMeta.textContent = pending ? `${pending} options need a new cycle date; use the official program links to confirm timing.` : "Use the official program links to confirm current timing.";
     elements.nextDeadlineLink.hidden = true;
     elements.nextDeadlineLink.removeAttribute("href");
     return;
@@ -587,6 +620,9 @@ function dateKey(date) {
 function renderFundingCalendar(items) {
   if (!elements.calendarGrid || !elements.calendarAgenda) return;
   const entries = fundingDeadlineEntries(items);
+  const timingCounts = fundingTimingCounts(items);
+  const pendingCount = timingCounts.recurring + timingCounts.variable + timingCounts.active_period + timingCounts.date_pending;
+  if (elements.calendarTimingSummary) elements.calendarTimingSummary.textContent = `${entries.length} upcoming dates. ${timingCounts.rolling} rolling or ongoing. ${pendingCount} dates to confirm.`;
   if (!calendarCursor) {
     const anchor = entries[0]?.date || new Date();
     calendarCursor = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
@@ -633,7 +669,7 @@ function renderFundingCalendar(items) {
   elements.calendarGrid.innerHTML = weekdays.join("") + cells.join("");
 
   if (!entries.length) {
-    elements.calendarAgenda.innerHTML = '<p class="empty-copy">No dated funding deadlines are available in these matches.</p>';
+    elements.calendarAgenda.innerHTML = `<p class="empty-copy">No upcoming dated funding deadlines are available. ${timingCounts.rolling} options are rolling or ongoing; ${pendingCount} need a new cycle date.</p>`;
     return;
   }
   elements.calendarAgenda.innerHTML = entries.slice(0, 12).map(({ item, date }) => {
@@ -724,6 +760,7 @@ function renderCard(item, headingLevel = 3) {
   const geography = nationalTerritoryListing ? item.geography + " (confirm territory eligibility)" : item.geography;
   const classes = ["result-card", item.item_type === "Resource" ? "resource" : "funding", item.status === "Cycle closed" ? "closed" : ""].join(" ");
   const timing = item.deadline_or_availability || item.amount_or_cost || "Check current availability";
+  const timingInfo = item.item_type === "Funding" ? fundingTiming(item) : null;
   return `<article class="${classes}" data-item-id="${escapeHtml(itemId)}">
     <div>
       <div class="card-kicker">
@@ -738,7 +775,7 @@ function renderCard(item, headingLevel = 3) {
         <summary>Why it fits and details</summary>
         ${renderEvidence(item)}
         <p class="details"><strong>Where:</strong> ${escapeHtml(geography)} &nbsp; <strong>Who:</strong> ${escapeHtml(item.eligible_users || "Eligibility varies")}</p>
-        <p class="details"><strong>Timing or amount:</strong> ${escapeHtml(timing)} &nbsp; <strong>Checked:</strong> ${escapeHtml(item.last_checked)}</p>
+        <p class="details"><strong>${item.item_type === "Funding" ? "Application timing" : "Availability"}:</strong> ${timingInfo ? `<span class="timing-class ${escapeHtml(timingInfo.type)}">${escapeHtml(timingInfo.label)}</span><br>` : ""}<span class="timing-detail">${escapeHtml(timing)}</span> &nbsp; <strong>Last checked:</strong> ${escapeHtml(item.last_checked)}</p>
       </details>
       ${renderSourceLink(item, item.item_type === "Resource" ? "Open the resource" : "View program details")}
 
@@ -1121,6 +1158,8 @@ window.RERCExplorer = {
   matchEvidence,
   publicSummary,
   parseDeadline,
+  fundingTiming,
+  fundingTimingCounts,
   safeUrl,
   chooseMode,
   getMode: () => mode,
