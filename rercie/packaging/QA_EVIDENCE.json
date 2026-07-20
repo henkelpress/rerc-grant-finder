@@ -1,7 +1,7 @@
 {
   "app_version": "0.5.0",
   "status": "SOURCE_PASS",
-  "tested_date": "2026-07-19",
+  "tested_date": "2026-07-20",
   "evidence_stage": "source",
   "checks": {
     "source_smoke": {
@@ -56,9 +56,9 @@
     },
     "live_catalog": {
       "status": "PASS",
-      "total_items": 1196,
+      "total_items": 1272,
       "funding_items": 659,
-      "resource_items": 61,
+      "resource_items": 137,
       "case_study_items": 476,
       "territory_filter_checked": true,
       "case_study_unique_urls_checked": 303,
