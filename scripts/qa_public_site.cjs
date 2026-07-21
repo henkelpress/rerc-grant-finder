@@ -74,7 +74,7 @@ async function main() {
     check("community_selector", checks.selectorInitial.stateEnabled && checks.selectorInitial.typeDisabled && checks.selectorInitial.placeDisabled && checks.selectorInitial.coverage.profiles === 35902 && checks.selectorInitial.coverage.statesAndTerritories === 56 && checks.selectorInitial.coverage.countiesAndEquivalents === 3293 && checks.selectorInitial.coverage.townsCitiesAndPlaces === 32609 && checks.virginiaPlaceCount > 500 && /St\. Paul/.test(checks.selectedCommunity) && checks.profileLoaded);
     check("community_map", /openstreetmap\.org\/export\/embed\.html/.test(checks.map.iframe) && /marker=/.test(checks.map.iframe));
     checks.counts = await page.evaluate(() => ["fundingCount", "resourceCount", "caseStudyCount"].map((id) => Number(document.getElementById(id).textContent)));
-    check("counts", checks.counts.join(",") === "659,137,476" && checks.counts.reduce((sum, value) => sum + value, 0) === 1272);
+    check("counts", checks.counts.join(",") === "659,167,476" && checks.counts.reduce((sum, value) => sum + value, 0) === 1302);
     checks.fundingTiming = await page.evaluate(() => window.RERCExplorer.fundingTimingCounts(window.RERCExplorer.catalog.filter((item) => item.item_type === "Funding")));
     check("funding_timing_coverage", Object.values(checks.fundingTiming).reduce((sum, value) => sum + value, 0) === 659 && checks.fundingTiming.dated > 0 && checks.fundingTiming.rolling > 0 && checks.fundingTiming.date_pending > 0);
     checks.nextDeadline = await page.locator("#nextDeadlinePanel").evaluate((node) => ({

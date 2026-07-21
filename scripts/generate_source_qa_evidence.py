@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 RERCIE = ROOT / "rercie"
 PACKAGING = RERCIE / "packaging"
 LAYOUT_SHA256 = "f78b4355830b15a3400e84f3669afab484a93fd843b743bc96083940d4d60d01"
-EXPECTED_COUNTS = {"funding": 659, "resources": 137, "case_studies": 476, "public_total": 1272}
+EXPECTED_COUNTS = {"funding": 659, "resources": 167, "case_studies": 476, "public_total": 1302}
 TERRITORIES = {"Puerto Rico", "U.S. Virgin Islands", "Guam", "American Samoa", "Northern Mariana Islands"}
 
 
