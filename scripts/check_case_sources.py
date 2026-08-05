@@ -19,6 +19,11 @@ KNOWN_BOT_BLOCKED_PREFIXES = (
 )
 
 
+def canonical_text_sha256(path: Path) -> str:
+    normalized = path.read_text(encoding="utf-8", newline=None)
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
 def load_urls() -> list[str]:
     raw = (ROOT / "case_studies.js").read_text(encoding="utf-8").strip()
     payload = json.loads(raw[len(PREFIX) : -1])
@@ -93,7 +98,7 @@ def main() -> int:
         "status": "PASS" if counts["hard_failure"] == 0 else "FAIL",
         "checked_date": date.today().isoformat(),
         "unique_urls": len(urls),
-        "case_studies_sha256": hashlib.sha256((ROOT / "case_studies.js").read_bytes()).hexdigest(),
+        "case_studies_sha256": canonical_text_sha256(ROOT / "case_studies.js"),
         "counts": counts,
         "results": rows,
     }

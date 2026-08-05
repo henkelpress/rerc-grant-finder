@@ -30,6 +30,10 @@ def git_blob_sha256(commit: str, name: str) -> str:
     return hashlib.sha256(blob).hexdigest()
 
 
+def canonical_text_sha256(path: Path) -> str:
+    normalized = path.read_text(encoding="utf-8", newline=None)
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
 class SiteContractParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
@@ -338,7 +342,7 @@ def main() -> int:
         "manual_review": 0,
     }
     assert source_health["counts"]["hard_failure"] == 0
-    assert source_health["case_studies_sha256"] == hashlib.sha256((ROOT / "case_studies.js").read_bytes()).hexdigest()
+    assert source_health["case_studies_sha256"] == canonical_text_sha256(ROOT / "case_studies.js")
 
     core = (ROOT / "rercie" / "rercie_core.py").read_text(encoding="utf-8")
     assert "call_openai_compatible" not in core
