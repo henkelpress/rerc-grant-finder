@@ -28,6 +28,8 @@ jobs:
           node --check planner.js
           node --check ui-i18n.js
           node --check site-config.js
+          node --check deadline-utils.js
+          node --check scripts/qa_deadline_parity.cjs
           node --check scripts/qa_public_site.cjs
       - name: Run release checks
         run: |

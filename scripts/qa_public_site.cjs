@@ -1,6 +1,11 @@
 const fs = require("fs");
 const path = require("path");
 const { chromium } = require("playwright");
+const { execFileSync } = require("child_process");
+
+const expectedDeadlineReport = JSON.parse(execFileSync(
+  process.execPath, [path.join(__dirname, "qa_deadline_parity.cjs"), "--json"], { encoding: "utf8" }
+));
 
 const baseUrl = process.argv[2] || "http://127.0.0.1:8877/";
 const outDir = process.argv[3] || "browser-qa";
@@ -159,8 +164,24 @@ async function main() {
       && /^https:\/\//.test(checks.card.link) && checks.card.coverage && checks.card.noWhy && checks.card.score.length > 0);
 
     checks.fundingTiming = await page.evaluate(() => window.RERCExplorer.fundingTimingCounts(window.RERCExplorer.catalog.filter((item) => item.item_type === "Funding")));
+    const browserDeadlineRecords = await page.evaluate(() => Object.fromEntries(
+      window.RERCExplorer.catalog.filter((item) => item.item_type === "Funding")
+        .map((item) => [item.item_id, window.RERCExplorer.fundingTiming(item).type])
+    ));
+    const deadlineMismatches = Object.entries(expectedDeadlineReport.records)
+      .filter(([itemId, type]) => browserDeadlineRecords[itemId] !== type)
+      .map(([itemId, type]) => ({ itemId, expected: type, actual: browserDeadlineRecords[itemId] || null }));
+    checks.fundingTimingParity = {
+      expected: expectedDeadlineReport.counts,
+      actual: checks.fundingTiming,
+      recordsChecked: Object.keys(expectedDeadlineReport.records).length,
+      mismatches: deadlineMismatches
+    };
     check("funding_timing_coverage", Object.values(checks.fundingTiming).reduce((sum, value) => sum + value, 0) === 659
       && checks.fundingTiming.dated > 0 && checks.fundingTiming.rolling > 0 && checks.fundingTiming.date_pending > 0);
+    check("funding_timing_parity", expectedDeadlineReport.status === "PASS"
+      && JSON.stringify(checks.fundingTiming) === JSON.stringify(expectedDeadlineReport.counts)
+      && checks.fundingTimingParity.recordsChecked === 659 && deadlineMismatches.length === 0);
     checks.nextDeadline = await page.locator("#nextDeadlinePanel").evaluate((node) => ({
       visible: node.getBoundingClientRect().height > 0,
       date: node.querySelector("#nextDeadlineDate")?.textContent.trim() || "",

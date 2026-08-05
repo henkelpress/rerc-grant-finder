@@ -20,6 +20,7 @@ People choose a state or territory, select All, Funding, Resources, or Case stud
 - `styles.css`
 - `rercie.css`
 - `app.js`
+- `deadline-utils.js`
 - `site-config.js`
 - `data.js`
 - `maintenance/catalog.csv` and `scripts/catalog_maintenance.py`

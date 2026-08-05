@@ -59,6 +59,7 @@ Run these checks before publication:
 python scripts/catalog_maintenance.py check
 python scripts/sync_multistate_coverage.py
 python scripts/qa_geography_coverage.py
+node scripts/qa_deadline_parity.cjs
 python scripts/qa_funding_deadlines.py
 python scripts/qa_release.py
 node scripts/qa_public_site.cjs http://127.0.0.1:8877/ browser-qa

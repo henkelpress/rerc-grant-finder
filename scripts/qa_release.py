@@ -215,6 +215,9 @@ def main() -> int:
     assert "source-backed examples from Protos" not in index and "community profile" not in index.lower()
     assert "why it fits" not in index.lower()
     assert all(value in index for value in ("fundingViewSwitch", "showFundingCalendar", "calendarGrid", "calendarAgenda"))
+    assert 'src="deadline-utils.js?v=20260805-2"' in index
+    deadline_utils = (ROOT / "deadline-utils.js").read_text(encoding="utf-8")
+    assert all(value in deadline_utils for value in ("parseDeadline", "fundingTiming", "RERCDeadlineUtils"))
     assert all(value in app_js for value in ("renderFundingCalendar", "chooseFundingView", "fundingDeadlineEntries", "fundingTiming", "fundingTimingCounts"))
     assert "calendarTimingSummary" in index and "deadline-status" in planner
     assert "renderCardActions" not in app_js and "planner-card-actions" in planner
@@ -320,7 +323,7 @@ def main() -> int:
     assert "source commit used to generate" in package_report["release_binding_note"]
     assert package_report["site_sha256"] == {
         name: git_blob_sha256(head_commit, name)
-        for name in ("index.html", "styles.css", "rercie.css", "app.js", "planner.js", "ui-i18n.js", "site-config.js", "data.js", "case_studies.js", "maintenance/multistate_coverage.json", "favicon.svg", "vendor/jszip.min.js", "vendor/lucide.min.js", "assets/hero-outdoor.jpg", "assets/rerc-e-eagle.jpg", "README.md")
+        for name in ("index.html", "styles.css", "rercie.css", "app.js", "planner.js", "ui-i18n.js", "deadline-utils.js", "site-config.js", "data.js", "case_studies.js", "maintenance/multistate_coverage.json", "favicon.svg", "vendor/jszip.min.js", "vendor/lucide.min.js", "assets/hero-outdoor.jpg", "assets/rerc-e-eagle.jpg", "README.md")
     }
     assert package_report["docx"]["sha256"] == sha256(static_docx)
     assert package_report["xlsx"]["sha256"] == sha256(static_xlsx)
