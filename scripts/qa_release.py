@@ -31,7 +31,8 @@ def git_blob_sha256(commit: str, name: str) -> str:
 
 
 def canonical_text_sha256(path: Path) -> str:
-    normalized = path.read_text(encoding="utf-8", newline=None)
+    with path.open("r", encoding="utf-8", newline=None) as handle:
+        normalized = handle.read()
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 class SiteContractParser(HTMLParser):
