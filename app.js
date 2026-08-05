@@ -16,32 +16,13 @@ const places = [
 
 const territoryPlaces = new Set(["American Samoa","Guam","Northern Mariana Islands","Puerto Rico","U.S. Virgin Islands"]);
 
-const communityProfiles = Array.isArray(window.RERC_COMMUNITY_PROFILES) ? window.RERC_COMMUNITY_PROFILES : [];
-const selectableCommunityProfiles = communityProfiles.filter((profile) =>
-  profile && ["county_or_region", "town_or_city"].includes(profile.placeType) && profile.state && profile.geoid
-);
-const communityProfileByGeoid = new Map(selectableCommunityProfiles.map((profile) => [String(profile.geoid), profile]));
-const communityProfilesByState = new Map();
-selectableCommunityProfiles.forEach((profile) => {
-  if (!communityProfilesByState.has(profile.state)) {
-    communityProfilesByState.set(profile.state, { county_or_region: [], town_or_city: [] });
-  }
-  communityProfilesByState.get(profile.state)[profile.placeType].push(profile);
-});
+const siteConfig = window.RERC_SITE_CONFIG || {};
+const rankingConfig = siteConfig.ranking || {};
+const rankingWeights = rankingConfig.weights || {};
+const rankingBase = rankingConfig.base || {};
+const rankingThresholds = rankingConfig.thresholds || {};
 
-function communityDisplayName(profile) {
-  const raw = cleanText(profile?.community || profile?.name);
-  const suffix = `, ${cleanText(profile?.state)}`;
-  return suffix.length > 2 && raw.endsWith(suffix) ? raw.slice(0, -suffix.length) : raw;
-}
-
-communityProfilesByState.forEach((groups) => {
-  Object.values(groups).forEach((profiles) => profiles.sort((a, b) =>
-    communityDisplayName(a).localeCompare(communityDisplayName(b), "en", { sensitivity: "base", numeric: true })
-  ));
-});
-
-const applicantOptions = [
+const defaultApplicantOptions = [
   ["local government|local governments|municipal|municipality|municipalities|county|counties|city|cities|town|towns|village|villages|political subdivision|political subdivisions", "Local government"],
   ["tribe|tribes|tribal|native|indian nation|indian nations|sovereign", "Tribe or Native community"],
   ["nonprofit|nonprofits|non-profit|non-profits|community organization|community organizations|land trust|land trusts", "Nonprofit or community group"],
@@ -53,7 +34,7 @@ const applicantOptions = [
   ["eligible|applicant|applicants|public agency|public agencies|sponsor|sponsors|organization|organizations|customer|customers|owner|owners|student|students|farmer|farmers|fishermen|worker|workers|sportsmen|resident|residents|member|members|partner|partners|representative|representatives|planner|planners|consultant|consultants|recipient|recipients|institution|institutions|entity|entities|government|governments|community|communities|state|states|varies|see program|check with the program", "Other or varies by program"]
 ];
 
-const topicOptions = [
+const defaultTopicOptions = [
   ["trail|park|recreation|outdoor access", "Parks, trails, and outdoor access"],
   ["downtown|main street|gateway|placemaking", "Downtown and Main Street"],
   ["tourism|visitor|recreation economy", "Tourism and visitor economy"],
@@ -67,14 +48,22 @@ const topicOptions = [
   ["planning|community development|data|mapping|capacity|technical assistance", "Planning and local capacity"]
 ];
 
-const stages = ["Any step", "Planning", "Early Design", "Engineering", "Construction", "Implementation", "Operations/Maintenance", "Capacity Building", "Acquisition", "Cleanup"];
+const defaultStages = ["Any step", "Planning", "Early Design", "Engineering", "Construction", "Implementation", "Operations/Maintenance", "Capacity Building", "Acquisition", "Cleanup"];
+
+const filterConfig = siteConfig.filters || {};
+const applicantOptions = Array.isArray(filterConfig.applicants) && filterConfig.applicants.length
+  ? filterConfig.applicants : defaultApplicantOptions;
+const topicOptions = Array.isArray(filterConfig.topics) && filterConfig.topics.length
+  ? filterConfig.topics : defaultTopicOptions;
+const stages = Array.isArray(filterConfig.stages) && filterConfig.stages.length
+  ? filterConfig.stages : defaultStages;
 
 const elements = Object.fromEntries([
-  "communityName","stateSelect","placeTypeSelect","keywordSearch","applicantOptions","topicOptions","stageSelect",
+  "stateSelect","keywordSearch","applicantOptions","topicOptions","stageSelect",
   "includeClosed","toggleFilters","resetButton","sortSelect","limitSelect","exportWord","exportCsv","communityTitle","communitySummary",
   "matchCount","fundingMatchCount","resourceMatchCount","caseStudyMatchCount","activeFilters","results","matchAnnouncement",
   "fundingCount","resourceCount","caseStudyCount","showFunding","showResources","showCases",
-  "nextDeadlinePanel","nextDeadlineDate","nextDeadlineMeta","nextDeadlineLink","loadCommunityProfile","profileStatus",
+  "nextDeadlinePanel","nextDeadlineDate","nextDeadlineMeta","nextDeadlineLink","profileStatus",
   "fundingViewSwitch","showFundingList","showFundingCalendar","fundingCalendar","calendarMonthTitle","calendarTimingSummary","calendarGrid","calendarAgenda",
   "previousCalendarMonth","todayCalendarMonth","nextCalendarMonth","resultsToolbar"
 ].map((id) => [id, document.getElementById(id)]));
@@ -105,14 +94,6 @@ function safeUrl(value) {
   }
 }
 
-function selectedCommunityProfile() {
-  return communityProfileByGeoid.get(cleanText(elements.communityName?.value)) || null;
-}
-
-function selectedCommunityName() {
-  const profile = selectedCommunityProfile();
-  return profile ? communityDisplayName(profile) : "";
-}
 
 function replaceSelectOptions(select, placeholder, options, selectedValue = "") {
   if (!select) return;
@@ -126,56 +107,17 @@ function setCommunitySelectorStatus(message) {
 }
 
 function populateStateOptions(selectedState = "") {
-  const states = places.filter((stateName) => communityProfilesByState.has(stateName));
   replaceSelectOptions(
     elements.stateSelect,
     "Choose a state, D.C., or U.S. territory",
-    states.map((stateName) => `<option value="${escapeHtml(stateName)}">${escapeHtml(stateName)}</option>`),
+    places.map((stateName) => `<option value="${escapeHtml(stateName)}">${escapeHtml(stateName)}</option>`),
     selectedState
   );
   elements.stateSelect.disabled = false;
 }
 
-function populatePlaceTypeOptions(selectedType = "") {
-  const groups = communityProfilesByState.get(elements.stateSelect.value);
-  if (!groups) {
-    replaceSelectOptions(elements.placeTypeSelect, "Choose a state first", []);
-    replaceSelectOptions(elements.communityName, "Choose a place type first", []);
-    if (elements.loadCommunityProfile) elements.loadCommunityProfile.disabled = true;
-    setCommunitySelectorStatus("Choose a state or territory first.");
-    return;
-  }
-  const definitions = [
-    ["county_or_region", "County or county equivalent"],
-    ["town_or_city", "Town, city, or Census place"]
-  ];
-  const options = definitions
-    .filter(([value]) => groups[value].length)
-    .map(([value, label]) => `<option value="${value}">${escapeHtml(label)} (${groups[value].length.toLocaleString()})</option>`);
-  replaceSelectOptions(elements.placeTypeSelect, "Choose a place type", options, selectedType);
-  replaceSelectOptions(elements.communityName, "Choose a place type first", []);
-  if (elements.loadCommunityProfile) elements.loadCommunityProfile.disabled = true;
-  setCommunitySelectorStatus("Choose a county or a town, city, or Census place.");
-}
-
-function populateCommunityOptions(selectedGeoid = "") {
-  const groups = communityProfilesByState.get(elements.stateSelect.value);
-  const profiles = groups?.[elements.placeTypeSelect.value] || [];
-  const typeLabel = elements.placeTypeSelect.value === "county_or_region" ? "county or county equivalent" : "town, city, or Census place";
-  const options = profiles.map((profile) =>
-    `<option value="${escapeHtml(profile.geoid)}">${escapeHtml(communityDisplayName(profile))}</option>`
-  );
-  replaceSelectOptions(elements.communityName, `Choose a ${typeLabel}`, options, selectedGeoid);
-  if (elements.loadCommunityProfile) elements.loadCommunityProfile.disabled = !elements.communityName.value;
-  setCommunitySelectorStatus(profiles.length
-    ? `Choose from ${profiles.length.toLocaleString()} ${typeLabel}${profiles.length === 1 ? "" : "s"}.`
-    : "No matching Census places were found.");
-}
-
-function setCommunitySelection(stateName, placeType, geoid) {
+function setStateSelection(stateName) {
   populateStateOptions(stateName);
-  populatePlaceTypeOptions(placeType);
-  if (placeType) populateCommunityOptions(String(geoid || ""));
 }
 function summaryTopic(item) {
   const topics = cleanText(item.topic_tags)
@@ -211,8 +153,8 @@ function publicSummary(item) {
   return text.endsWith(".") || text.endsWith("!") || text.endsWith("?") ? text : text + ".";
 }
 function matchLabel(score) {
-  if (score >= 80) return "High";
-  if (score >= 65) return "Medium";
+  if (score >= (rankingThresholds.high ?? 80)) return "High";
+  if (score >= (rankingThresholds.medium ?? 65)) return "Medium";
   return "Broad";
 }
 
@@ -242,7 +184,7 @@ function matchesAny(text, groups) {
 }
 
 function isNational(geography) {
-  const value = geography.toLowerCase();
+  const value = cleanText(geography).toLowerCase();
   return ["national", "nationwide", "united states", "all states", "federal"].some((term) => value.includes(term));
 }
 
@@ -254,6 +196,12 @@ function appliesToPlace(geography, selectedPlace) {
   });
 }
 
+function coveredStates(item) {
+  const raw = item?.covered_states;
+  const values = Array.isArray(raw) ? raw : cleanText(raw).split(/[;,|]/);
+  return values.map((value) => cleanText(value)).filter(Boolean);
+}
+
 const appalachianPlaces = new Set([
   "Alabama", "Georgia", "Kentucky", "Maryland", "Mississippi", "New York", "North Carolina",
   "Ohio", "Pennsylvania", "South Carolina", "Tennessee", "Virginia", "West Virginia"
@@ -261,25 +209,27 @@ const appalachianPlaces = new Set([
 
 function isBroadArea(item, selectedPlace) {
   const geography = cleanText(item.geography).toLowerCase();
+  if (geography.includes("multi-state")) return false;
   if (geography.includes("appalachian region")) return appalachianPlaces.has(selectedPlace);
-  if (geography.includes("multi-state")) return !territoryPlaces.has(selectedPlace);
   return ["north america", "see program", "select localities across the country"].some((term) => geography.includes(term));
 }
 
 function matchesGeography(item, selectedPlace) {
   if (!selectedPlace || item.item_type === "Case Study") return true;
   const geography = cleanText(item.geography);
-  const territoryMultiState = territoryPlaces.has(selectedPlace) &&
-    geography.toLowerCase().includes("multi-state") &&
-    /(territor|insular|island area|office of insular affairs)/i.test(corpus(item));
-  return isNational(geography) || appliesToPlace(geography, selectedPlace) || territoryMultiState || isBroadArea(item, selectedPlace);
+  const regionalCoverage = coveredStates(item);
+  if (geography.toLowerCase().includes("multi-state")) return regionalCoverage.includes(selectedPlace);
+  if (regionalCoverage.length) return regionalCoverage.includes(selectedPlace);
+  if (appliesToPlace(geography, selectedPlace)) return true;
+  if (isNational(geography)) {
+    return !territoryPlaces.has(selectedPlace) || /(territor|insular|island area)/i.test(geography);
+  }
+  return isBroadArea(item, selectedPlace);
 }
 
 function selectedMatchFactors() {
   return {
-    selectedCommunity: selectedCommunityName().toLowerCase(),
     selectedPlace: elements.stateSelect.value,
-    selectedPlaceType: elements.placeTypeSelect.value,
     applicants: selectedValues(elements.applicantOptions),
     topics: selectedValues(elements.topicOptions),
     selectedStage: elements.stageSelect.value
@@ -287,29 +237,28 @@ function selectedMatchFactors() {
 }
 
 function scoreItem(item, text, factors) {
-  const {
-    selectedCommunity, selectedPlace, selectedPlaceType, applicants, topics, selectedStage
-  } = factors;
+  const { selectedPlace, applicants, topics, selectedStage } = factors;
   const topicText = topicCorpus(item);
-  let score = item.item_type === "Case Study" ? 52 : 45;
-  if (selectedCommunity && matchesAny(text, [selectedCommunity])) score += item.item_type === "Case Study" ? 24 : 14;
+  const base = item.item_type === "Case Study"
+    ? (rankingBase.caseStudy ?? 52)
+    : (item.item_type === "Resource" ? (rankingBase.resource ?? 45) : (rankingBase.funding ?? 45));
+  let score = base;
   if (item.item_type === "Case Study") {
-    if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) score += 18;
-    if (selectedPlaceType && cleanText(item.case_place_type) === selectedPlaceType) score += 12;
-    if (topics.length) score += Math.min(21, topics.filter((group) => matchesAny(topicText, [group])).length * 7);
-    if (selectedStage !== "Any step" && cleanText(item.project_stage).toLowerCase() === selectedStage.toLowerCase()) score += 8;
-    if (item.source_url) score += 5;
+    if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) score += rankingWeights.caseState ?? 18;
+    if (topics.length) score += Math.min(rankingWeights.caseTopicMaximum ?? 21, topics.filter((group) => matchesAny(topicText, [group])).length * (rankingWeights.caseTopicEach ?? 7));
+    if (selectedStage !== "Any step" && cleanText(item.project_stage).toLowerCase() === selectedStage.toLowerCase()) score += rankingWeights.caseStage ?? 8;
+    if (item.source_url) score += rankingWeights.caseSource ?? 5;
   } else {
-    if (item.status === "Open when checked" || item.status === "Available") score += 18;
-    if (item.status === "Recurring") score += 14;
-    if (item.status === "Cycle closed") score -= 18;
-    if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) score += 15;
-    if (selectedPlace && isNational(cleanText(item.geography))) score += territoryPlaces.has(selectedPlace) ? 2 : 8;
-    if (selectedPlace && isBroadArea(item, selectedPlace)) score += 2;
-    if (applicants.length && matchesAny(cleanText(item.eligible_users).toLowerCase(), applicants)) score += 12;
-    if (topics.length) score += Math.min(18, topics.filter((group) => matchesAny(topicText, [group])).length * 7);
-    if (selectedStage !== "Any step") score += cleanText(item.project_stage).toLowerCase() === "mixed" ? 4 : 10;
-    if (item.summary) score += 3;
+    if (item.status === "Open when checked" || item.status === "Available") score += rankingWeights.available ?? 18;
+    if (item.status === "Recurring") score += rankingWeights.recurring ?? 14;
+    if (item.status === "Cycle closed") score += rankingWeights.closed ?? -18;
+    if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) score += rankingWeights.selectedState ?? 15;
+    if (selectedPlace && coveredStates(item).includes(selectedPlace)) score += rankingWeights.regional ?? 12;
+    if (selectedPlace && isNational(cleanText(item.geography))) score += rankingWeights.nationwide ?? 8;
+    if (applicants.length && matchesAny(cleanText(item.eligible_users).toLowerCase(), applicants)) score += rankingWeights.applicant ?? 12;
+    if (topics.length) score += Math.min(rankingWeights.topicMaximum ?? 18, topics.filter((group) => matchesAny(topicText, [group])).length * (rankingWeights.topicEach ?? 7));
+    if (selectedStage !== "Any step") score += cleanText(item.project_stage).toLowerCase() === "mixed" ? (rankingWeights.mixedStage ?? 4) : (rankingWeights.exactStage ?? 10);
+    if (item.summary) score += rankingWeights.summary ?? 3;
   }
   return Math.max(1, Math.min(99, score));
 }
@@ -317,7 +266,7 @@ function scoreItem(item, text, factors) {
 function getMatches() {
   const factors = selectedMatchFactors();
   const {
-    selectedPlace, selectedPlaceType, applicants, topics, selectedStage
+    selectedPlace, applicants, topics, selectedStage
   } = factors;
   const keyword = elements.keywordSearch.value.trim().toLowerCase();
 
@@ -329,8 +278,6 @@ function getMatches() {
     if (keyword && !text.includes(keyword)) return false;
     if (item.item_type !== "Case Study" && !matchesAny(cleanText(item.eligible_users).toLowerCase(), applicants)) return false;
     if (!matchesAny(topicCorpus(item), topics)) return false;
-    if (item.item_type === "Case Study" && selectedPlaceType &&
-        cleanText(item.case_place_type) !== selectedPlaceType) return false;
     const stageText = cleanText(item.project_stage).toLowerCase();
     if (selectedStage !== "Any step") {
       const exactStage = matchesAny(stageText, [selectedStage.toLowerCase()]);
@@ -359,103 +306,6 @@ function getMatches() {
     return b.score - a.score || a.title.localeCompare(b.title);
   });
   return matches;
-}
-
-function optionLabels(options, selectedGroups, text) {
-  return selectedGroups
-    .filter((group) => matchesAny(text, [group]))
-    .map((group) => options.find(([value]) => value === group)?.[1])
-    .filter(Boolean);
-}
-
-function addUnique(list, message) {
-  if (message && !list.includes(message)) list.push(message);
-}
-
-function matchEvidence(item) {
-  const factors = selectedMatchFactors();
-  const {
-    selectedCommunity, selectedPlace, selectedPlaceType, applicants, topics, selectedStage
-  } = factors;
-  const text = corpus(item);
-  const topicText = topicCorpus(item);
-  const reasons = [];
-  const cautions = [];
-
-  if (selectedCommunity && matchesAny(text, [selectedCommunity])) {
-    addUnique(reasons, "Directly references your community.");
-  }
-
-  if (item.item_type === "Case Study") {
-    if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) {
-      addUnique(reasons, "Case study from your selected state or territory.");
-    }
-    if (selectedPlaceType && cleanText(item.case_place_type) === selectedPlaceType) {
-      addUnique(reasons, "Matches your selected community type.");
-    }
-    const matchedTopics = optionLabels(topicOptions, topics, topicText);
-    if (matchedTopics.length) {
-      addUnique(reasons, `Matches ${matchedTopics.slice(0, 2).join(" and ")}.`);
-    }
-    if (selectedStage !== "Any step" &&
-        cleanText(item.project_stage).toLowerCase() === selectedStage.toLowerCase()) {
-      addUnique(reasons, `Shows work at the ${selectedStage.toLowerCase()} stage.`);
-    }
-    if (!reasons.length) addUnique(reasons, "Provides a source-backed community example.");
-    addUnique(cautions, "Use this example as a precedent; it does not confirm program eligibility.");
-    return { reasons, cautions };
-  }
-
-  if (item.status === "Open when checked" || item.status === "Available") {
-    addUnique(reasons, "The program was available when last checked.");
-  } else if (item.status === "Recurring") {
-    addUnique(reasons, "The program has a recurring cycle.");
-  } else if (item.status === "Cycle closed") {
-    addUnique(cautions, "This funding cycle is closed; check for the next round.");
-  }
-
-  const geography = cleanText(item.geography);
-  const directPlaceMatch = selectedPlace && appliesToPlace(geography, selectedPlace);
-  const nationalMatch = selectedPlace && isNational(geography);
-  const broadAreaMatch = selectedPlace && isBroadArea(item, selectedPlace);
-  if (directPlaceMatch) {
-    addUnique(reasons, "Serves your selected state or territory.");
-  } else if (nationalMatch && !territoryPlaces.has(selectedPlace)) {
-    addUnique(reasons, "Serves communities nationwide.");
-  } else if (broadAreaMatch) {
-    addUnique(reasons, "Its broader service area may include your community.");
-    addUnique(cautions, "Confirm that your community is inside the program's service area.");
-  }
-  if (territoryPlaces.has(selectedPlace) && matchesGeography(item, selectedPlace) && !directPlaceMatch) {
-    addUnique(cautions, "Confirm that the program accepts applicants from your territory.");
-  }
-
-  const matchedApplicants = optionLabels(applicantOptions, applicants, cleanText(item.eligible_users).toLowerCase());
-  if (matchedApplicants.length) {
-    addUnique(reasons, `Lists ${matchedApplicants.slice(0, 2).join(" and ")} as a potential applicant.`);
-  }
-  const eligibility = cleanText(item.eligible_users);
-  if (!eligibility || /^(varies|see program|check with the program|-)|eligibility varies|eligible applicants$/i.test(eligibility)) {
-    addUnique(cautions, "Applicant eligibility is not confirmed; review the current program rules.");
-  }
-
-  const matchedTopics = optionLabels(topicOptions, topics, topicText);
-  if (matchedTopics.length) {
-    addUnique(reasons, `Matches ${matchedTopics.slice(0, 2).join(" and ")}.`);
-  }
-
-  if (selectedStage !== "Any step") {
-    const stage = cleanText(item.project_stage);
-    if (stage.toLowerCase() === "mixed") {
-      addUnique(reasons, "May support more than one project stage.");
-      addUnique(cautions, `Confirm that ${selectedStage.toLowerCase()} work is eligible.`);
-    } else if (matchesAny(stage.toLowerCase(), [selectedStage.toLowerCase()])) {
-      addUnique(reasons, `Supports the ${selectedStage.toLowerCase()} stage.`);
-    }
-  }
-
-  if (!reasons.length) addUnique(reasons, "Broad match for rural community work.");
-  return { reasons, cautions };
 }
 
 function makeLocalDate(year, month, day) {
@@ -700,7 +550,7 @@ function chooseFundingView(nextView) {
 function hasSubstantiveAnswers() {
   const factors = selectedMatchFactors();
   return Boolean(
-    factors.selectedCommunity || factors.selectedPlace || factors.selectedPlaceType ||
+    factors.selectedPlace ||
     factors.applicants.length || factors.topics.length || factors.selectedStage !== "Any step" ||
     elements.keywordSearch.value.trim()
   );
@@ -708,17 +558,6 @@ function hasSubstantiveAnswers() {
 
 function displayedMatchLabel(item) {
   return hasSubstantiveAnswers() ? matchLabel(item.score) : "Starting point";
-}
-
-function renderEvidence(item) {
-  const evidence = matchEvidence(item);
-  const reasons = evidence.reasons.slice(0, 3)
-    .map((reason) => `<li>${escapeHtml(reason)}</li>`)
-    .join("");
-  const cautions = evidence.cautions.length
-    ? `<p class="match-cautions"><strong>Check:</strong> ${escapeHtml(evidence.cautions.join(" "))}</p>`
-    : "";
-  return `<div class="match-reason"><strong>Why it fits:</strong><ul>${reasons}</ul>${cautions}</div>`;
 }
 
 function renderSourceLink(item, label) {
@@ -745,19 +584,17 @@ function renderCard(item, headingLevel = 3) {
         <p class="organization">${escapeHtml(item.case_place)}, ${escapeHtml(item.case_state)}${year}</p>
         <p class="summary">${escapeHtml(publicSummary(item))}</p>
         <details class="card-details">
-          <summary>Why it fits and details</summary>
-          ${renderEvidence(item)}
+          <summary>Case study details</summary>
           <p class="details"><strong>Topics:</strong> ${escapeHtml(item.topic_tags || "Community development")}</p>
         </details>
         ${renderSourceLink(item, "Read the example")}
-
       </div>
       <div class="score" aria-label="${escapeHtml(scoreLabel)}"><strong>${escapeHtml(scoreLabel)}</strong><span>${hasSubstantiveAnswers() ? "match level" : "add details to rank"}</span></div>
     </article>`;
   }
-  const selectedPlace = elements.stateSelect.value;
-  const nationalTerritoryListing = territoryPlaces.has(selectedPlace) && isNational(cleanText(item.geography)) && !appliesToPlace(item.geography, selectedPlace);
-  const geography = nationalTerritoryListing ? item.geography + " (confirm territory eligibility)" : item.geography;
+
+  const coverage = coveredStates(item);
+  const geography = coverage.length ? `Multi-State: ${coverage.join(", ")}` : item.geography;
   const classes = ["result-card", item.item_type === "Resource" ? "resource" : "funding", item.status === "Cycle closed" ? "closed" : ""].join(" ");
   const timing = item.deadline_or_availability || item.amount_or_cost || "Check current availability";
   const timingInfo = item.item_type === "Funding" ? fundingTiming(item) : null;
@@ -771,14 +608,14 @@ function renderCard(item, headingLevel = 3) {
       <${headingTag}>${escapeHtml(item.title)}</${headingTag}>
       <p class="organization">${escapeHtml(item.organization)}</p>
       <p class="summary">${escapeHtml(publicSummary(item))}</p>
+      <p class="eligibility"><strong>Who:</strong> ${escapeHtml(item.eligible_users || "Eligibility varies")}</p>
       <details class="card-details">
-        <summary>Why it fits and details</summary>
-        ${renderEvidence(item)}
-        <p class="details"><strong>Where:</strong> ${escapeHtml(geography)} &nbsp; <strong>Who:</strong> ${escapeHtml(item.eligible_users || "Eligibility varies")}</p>
+        <summary>Program details</summary>
+        <p class="details"><strong>Where:</strong> ${escapeHtml(geography)}</p>
+        ${item.coverage_note ? `<p class="details"><strong>Coverage note:</strong> ${escapeHtml(item.coverage_note)}</p>` : ""}
         <p class="details"><strong>${item.item_type === "Funding" ? "Application timing" : "Availability"}:</strong> ${timingInfo ? `<span class="timing-class ${escapeHtml(timingInfo.type)}">${escapeHtml(timingInfo.label)}</span><br>` : ""}<span class="timing-detail">${escapeHtml(timing)}</span> &nbsp; <strong>Last checked:</strong> ${escapeHtml(item.last_checked)}</p>
       </details>
-      ${renderSourceLink(item, item.item_type === "Resource" ? "Open the resource" : "View program details")}
-
+      ${renderSourceLink(item, "Program Website")}
     </div>
     <div class="score" aria-label="${escapeHtml(scoreLabel)}"><strong>${escapeHtml(scoreLabel)}</strong><span>${hasSubstantiveAnswers() ? "match level" : "add details to rank"}</span></div>
   </article>`;
@@ -786,9 +623,7 @@ function renderCard(item, headingLevel = 3) {
 
 function activeFilterSummary() {
   const values = [];
-  if (selectedCommunityName()) values.push(selectedCommunityName());
   if (elements.stateSelect.value) values.push(elements.stateSelect.value);
-  if (elements.placeTypeSelect.value) values.push(elements.placeTypeSelect.options[elements.placeTypeSelect.selectedIndex].text);
   if (elements.keywordSearch.value.trim()) values.push(`Search: ${elements.keywordSearch.value.trim()}`);
   const applicants = selectedValues(elements.applicantOptions);
   const topics = selectedValues(elements.topicOptions);
@@ -796,7 +631,7 @@ function activeFilterSummary() {
   if (topics.length) values.push(`${topics.length} topic${topics.length === 1 ? "" : "s"}`);
   if (elements.stageSelect.value !== "Any step") values.push(elements.stageSelect.value);
   if (elements.includeClosed.checked) values.push("Closed rounds shown");
-  return values.length ? values.join(" | ") : "Showing current national options. Add details to make the list more useful.";
+  return values.length ? values.join(" | ") : "Choose a state or territory to begin.";
 }
 
 function renderGroup(kind, title, description, items, total, className) {
@@ -825,9 +660,8 @@ function render() {
       ...caseResults.slice(0, each)
     ];
   }
-  const community = selectedCommunityName();
   const place = elements.stateSelect.value;
-  const label = community || place || "rural communities";
+  const label = place || "rural communities";
   const fundingMatches = fundingResults.length;
   const resourceMatches = resourceResults.length;
   const caseMatches = caseResults.length;
@@ -842,7 +676,7 @@ function render() {
   elements.communitySummary.textContent = currentMatches.length
     ? (hasSubstantiveAnswers()
       ? "Match levels compare your answers. They do not confirm eligibility or guarantee that another community's approach will work in your place."
-      : "These are starting points. Add community details and priorities to rank them for your needs.")
+      : "These are starting points. Choose priorities to rank them for your needs.")
     : "Try fewer choices or a wider search.";
   elements.matchCount.textContent = currentMatches.length.toLocaleString();
   elements.fundingMatchCount.textContent = fundingMatches.toLocaleString();
@@ -893,11 +727,12 @@ function downloadBlob(contents, mimeType, filename) {
 }
 
 function exportCsv() {
-  const headers = ["Item Type","Title","Organization or Program","Status","Geography","Who Can Use It","Project Step","Topics","Type of Help","Timing or Year","Summary","Current Link"];
+  const headers = ["Item Type","Title","Organization or Program","Status","Geography","Covered States","Coverage Note","Who Can Use It","Project Step","Topics","Type of Help","Timing or Year","Summary","Program Website"];
   const lines = [headers.map(csvCell).join(",")];
   currentMatches.forEach((item) => lines.push([
     item.item_type, item.title, item.organization, item.status,
     item.item_type === "Case Study" ? `${item.case_place}, ${item.case_state}` : item.geography,
+    item.item_type === "Case Study" ? "" : coveredStates(item).join("; "), item.coverage_note || "",
     item.eligible_users, item.project_stage, item.topic_tags, item.support_type,
     item.item_type === "Case Study" ? item.case_year : (item.deadline_or_availability || item.amount_or_cost),
     publicSummary(item), safeUrl(item.source_url)
@@ -938,7 +773,6 @@ async function exportWord() {
     window.alert("The Word export tool did not load. Refresh the page and try again.");
     return;
   }
-  const community = selectedCommunityName() || "Community";
   const place = elements.stateSelect.value || "United States";
   const funding = currentMatches.filter((item) => item.item_type === "Funding");
   const resources = currentMatches.filter((item) => item.item_type === "Resource");
@@ -954,7 +788,7 @@ async function exportWord() {
     wordRunXml("for", { italic: true }),
     wordRunXml(" Rural Communities (RERC)")
   ]));
-  body.push(wordParagraphXml([wordRunXml(community ? `${community}, ${place}` : place, { bold: true })]));
+  body.push(wordParagraphXml([wordRunXml(place, { bold: true })]));
   body.push(wordParagraphXml([wordRunXml(profile)]));
   body.push(wordParagraphXml([
     wordRunXml("This explorer does not determine eligibility. ", { bold: true }),
@@ -980,10 +814,13 @@ async function exportWord() {
       } else {
         body.push(wordParagraphXml([
           wordRunXml("Where: ", { bold: true }),
-          wordRunXml(item.geography),
+          wordRunXml(coveredStates(item).join(", ") || item.geography),
           wordRunXml(" | Who: ", { bold: true }),
           wordRunXml(item.eligible_users || "Eligibility varies")
         ]));
+        if (item.coverage_note) {
+          body.push(wordParagraphXml([wordRunXml("Coverage note: ", { bold: true }), wordRunXml(item.coverage_note)]));
+        }
         body.push(wordParagraphXml([
           wordRunXml("Last checked: ", { bold: true }),
           wordRunXml(item.last_checked || "Not recorded")
@@ -994,8 +831,8 @@ async function exportWord() {
         const relationshipId = "rId" + relationshipNumber++;
         relationships.push('<Relationship Id="' + relationshipId + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="' + xmlEscape(sourceUrl) + '" TargetMode="External"/>');
         body.push(wordParagraphXml([
-          wordRunXml(item.item_type === "Case Study" ? "Read the example: " : "Current program information: ", { bold: true }),
-          wordHyperlinkXml(sourceUrl, relationshipId)
+          wordRunXml(item.item_type === "Case Study" ? "Example: " : "Program: ", { bold: true }),
+          wordHyperlinkXml(item.item_type === "Case Study" ? "Read the example" : "Program Website", relationshipId)
         ]));
       }
     });
@@ -1093,7 +930,6 @@ function initialize() {
   elements.resourceCount.textContent = fundingResources.filter((item) => item.item_type === "Resource").length.toLocaleString();
   elements.caseStudyCount.textContent = caseStudies.length.toLocaleString();
   populateStateOptions();
-  populatePlaceTypeOptions();
   elements.stageSelect.innerHTML = stages.map((stage) => `<option>${escapeHtml(stage)}</option>`).join("");
   buildCheckList(elements.applicantOptions, applicantOptions, "applicant");
   buildCheckList(elements.topicOptions, topicOptions, "topic");
@@ -1104,16 +940,7 @@ function initialize() {
     elements.sortSelect.appendChild(deadlineOption);
   }
   elements.stateSelect.addEventListener("change", () => {
-    populatePlaceTypeOptions();
-    render();
-  });
-  elements.placeTypeSelect.addEventListener("change", () => {
-    populateCommunityOptions();
-    render();
-  });
-  elements.communityName.addEventListener("change", () => {
-    if (elements.loadCommunityProfile) elements.loadCommunityProfile.disabled = !elements.communityName.value;
-    setCommunitySelectorStatus(elements.communityName.value ? "Community selected. Loading public profile and map..." : "Choose a community.");
+    setCommunitySelectorStatus(elements.stateSelect.value ? "State or territory selected." : "Choose a state or territory first.");
     render();
   });
   elements.showFundingList.addEventListener("click", () => chooseFundingView("list"));
@@ -1142,7 +969,7 @@ function initialize() {
     const open = document.querySelector(".filters").classList.toggle("open");
     elements.toggleFilters.setAttribute("aria-expanded", String(open));
     const label = elements.toggleFilters.querySelector("span");
-    if (label) label.textContent = open ? "Hide community questions" : "Show community questions";
+    if (label) label.textContent = open ? "Hide questions" : "Show questions";
   });
   elements.resetButton.addEventListener("click", reset);
   elements.exportCsv.addEventListener("click", exportCsv);
@@ -1155,7 +982,6 @@ window.RERCExplorer = {
   elements,
   getMatches: () => currentMatches,
   render,
-  matchEvidence,
   publicSummary,
   parseDeadline,
   fundingTiming,
@@ -1163,15 +989,7 @@ window.RERCExplorer = {
   safeUrl,
   chooseMode,
   getMode: () => mode,
-  getSelectedCommunityProfile: selectedCommunityProfile,
-  getSelectedCommunityName: selectedCommunityName,
-  setCommunitySelection,
-  getCommunityCoverage: () => ({
-    profiles: selectableCommunityProfiles.length,
-    statesAndTerritories: communityProfilesByState.size,
-    countiesAndEquivalents: selectableCommunityProfiles.filter((profile) => profile.placeType === "county_or_region").length,
-    townsCitiesAndPlaces: selectableCommunityProfiles.filter((profile) => profile.placeType === "town_or_city").length
-  }),
+  setStateSelection,
   chooseFundingView,
   getFundingView: () => fundingView
 };

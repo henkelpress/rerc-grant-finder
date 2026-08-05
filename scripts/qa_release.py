@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import re
@@ -7,19 +8,19 @@ import subprocess
 import sys
 import zipfile
 from html.parser import HTMLParser
+from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+DATE_TAG = date.today().isoformat()
 PREFIX = "window.RERC_CATALOG = "
-COMMUNITY_PROFILES_PREFIX = "window.RERC_COMMUNITY_PROFILES="
 EXPECTED_RERCIE_VERSION = "0.5.0"
-EXPECTED_NOMINATIM_ENDPOINT = "https://nominatim.openstreetmap.org/search"
 EXPECTED_REFERRER_POLICY = "strict-origin-when-cross-origin"
 EXPECTED_CSP = (
     "default-src 'self'; script-src 'self'; style-src 'self'; "
     "img-src 'self' data:; "
-    "connect-src 'self' https://nominatim.openstreetmap.org; "
-    "frame-src https://www.openstreetmap.org; "
+    "connect-src 'self'; "
+    "frame-src 'none'; "
     "font-src 'self'; object-src 'none'; base-uri 'self'; "
     "form-action 'self'; upgrade-insecure-requests"
 )
@@ -73,6 +74,7 @@ def main() -> int:
     run("node", "--check", "ui-i18n.js")
     run(sys.executable, "scripts/qa_case_studies.py")
     run(sys.executable, "scripts/qa_funding_deadlines.py")
+    run(sys.executable, "scripts/qa_geography_coverage.py")
 
     raw = (ROOT / "data.js").read_text(encoding="utf-8").strip()
     assert raw.startswith(PREFIX) and raw.endswith(";")
@@ -123,7 +125,6 @@ def main() -> int:
         "resourceMatchCount": "strong",
         "caseStudyMatchCount": "strong",
         "planWorkspace": "aside",
-        "communitySnapshot": "section",
         "shareWorkspace": "button",
     }
     assert required_v2_elements.keys() <= elements_by_id.keys()
@@ -163,7 +164,7 @@ def main() -> int:
         for tag, attrs in site_contract.elements
         if tag == "script" and attrs.get("src")
     }
-    assert {"community_profiles.js", "ui-i18n.js", "app.js", "planner.js"} <= script_sources
+    assert {"site-config.js", "ui-i18n.js", "app.js", "planner.js"} <= script_sources
     rercie_download = next(
         (
             attrs.get("href", "")
@@ -188,139 +189,72 @@ def main() -> int:
     assert meta_by_http_equiv.get("content-security-policy") == EXPECTED_CSP
 
     planner = (ROOT / "planner.js").read_text(encoding="utf-8")
-    nominatim_urls = set(
-        re.findall(r"https://nominatim\.openstreetmap\.org[^\"'`\s)]*", planner)
-    )
-    assert nominatim_urls == {EXPECTED_NOMINATIM_ENDPOINT}
-    assert f'new URL("{EXPECTED_NOMINATIM_ENDPOINT}")' in planner
-    assert 'url.searchParams.set("format", "jsonv2")' in planner
-    assert 'url.searchParams.set("countrycodes", geocodeCountryCode())' in planner
-    assert 'url.searchParams.set("q", query)' in planner
-    assert 'url.searchParams.set("limit", "8")' in planner
-    assert 'matchingGeocodeResult(results)' in planner
-    assert 'return "us"' in planner
-    assert 'expectedStateAliases' in planner
-    assert '"U.S. Virgin Islands": "United States Virgin Islands"' in planner
-    assert '"Northern Mariana Islands": "Commonwealth of the Northern Mariana Islands"' in planner
-    assert 'referrerPolicy: "no-referrer"' not in planner
-    assert 'anchor.referrerPolicy = "no-referrer"' in planner
+    assert not any(value in planner for value in (
+        "nominatim.openstreetmap.org", "OpenStreetMap", "communityMap", "loadProjectedProfile",
+        "locateCommunity", "Why it matches", "Why it fits",
+    ))
+    assert "profileRows(model.profile)" in planner
 
-    profile_path = ROOT / "community_profiles.js"
-    assert profile_path.is_file()
-    assert profile_path.stat().st_size <= 20_000_000
-    profiles = parse_javascript_assignment(
-        profile_path,
-        COMMUNITY_PROFILES_PREFIX,
-    )
-    assert isinstance(profiles, list) and 0 < len(profiles) <= 50_000
-    required_profile_strings = {
-        "id",
-        "community",
-        "name",
-        "geoid",
-        "state",
-        "stateCode",
-        "placeType",
-        "source",
-        "vintage",
-        "coverageNote",
-    }
-    allowed_place_types = {
-        "town_or_city",
-        "county_or_region",
-        "tribal_community",
-        "statewide_or_multi_community",
-    }
-    profile_ids: set[str] = set()
-    for profile_record in profiles:
-        assert isinstance(profile_record, dict)
-        assert required_profile_strings <= profile_record.keys()
-        assert all(
-            isinstance(profile_record[field], str)
-            for field in required_profile_strings
-        )
-        assert all(
-            profile_record[field].strip()
-            for field in required_profile_strings - {"coverageNote"}
-        )
-        assert profile_record["placeType"] in allowed_place_types
-        assert profile_record["id"] not in profile_ids
-        profile_ids.add(profile_record["id"])
-        for field in (
-            "population",
-            "medianHouseholdIncome",
-            "povertyRate",
-            "broadbandRate",
-        ):
-            if field in profile_record:
-                assert (
-                    isinstance(profile_record[field], (int, float))
-                    and not isinstance(profile_record[field], bool)
-                )
-
-    selectable_profiles = [
-        profile for profile in profiles
-        if profile["placeType"] in {"town_or_city", "county_or_region"}
-    ]
-    assert len(selectable_profiles) == 35_902
-    assert sum(profile["placeType"] == "county_or_region" for profile in selectable_profiles) == 3_293
-    assert sum(profile["placeType"] == "town_or_city" for profile in selectable_profiles) == 32_609
-    assert len({profile["state"] for profile in selectable_profiles}) == 56
-    assert all(
-        any(profile["state"] == jurisdiction for profile in selectable_profiles)
-        for jurisdiction in (
-            "District of Columbia",
-            "American Samoa",
-            "Guam",
-            "Northern Mariana Islands",
-            "Puerto Rico",
-            "U.S. Virgin Islands",
-        )
-    )
     app_js = (ROOT / "app.js").read_text(encoding="utf-8")
-    assert "item.eligible_users" in app_js
-    assert "confirm territory eligibility" in app_js
-    assert "selectedStage !== \"Any step\"" in app_js
-    assert "counties" in app_js and "cities" in app_js
-    assert 'stageText !== "mixed"' not in app_js
-    assert "View program details" in app_js and "Open the resource" in app_js
-    assert "source-backed examples from Protos" not in index
-    assert "window.RERC_CASE_STUDIES" in app_js
-    assert "Read the example" in app_js
-    assert "placeTypeSelect" in index
-    assert all(value in app_js for value in ("town_or_city", "county_or_region"))
-    assert 'id="communityName"' in index and '<select id="communityName"' in index
-    assert 'id="placeTypeSelect"' in index and 'disabled' in index
-    assert "Includes every county or county equivalent and every Census place" in index
-    assert "getCommunityCoverage" in app_js and "communityProfilesByState" in app_js
-    assert "renderCardActions" not in app_js
-    assert "planner-card-actions" in planner
+    config_js = (ROOT / "site-config.js").read_text(encoding="utf-8")
+    assert "function coveredStates(item)" in app_js
+    assert "function matchesGeography(item, selectedPlace)" in app_js
+    assert 'geography.toLowerCase().includes("multi-state")' in app_js
+    assert "regionalCoverage.includes(selectedPlace)" in app_js
+    assert "Program Website" in app_js and "<strong>Who:</strong>" in app_js
+    who_position = app_js.index("<strong>Who:</strong>")
+    assert who_position < app_js.index("<details class=\"card-details\">", who_position)
+    assert "Why it fits" not in app_js and "Why it matches" not in app_js
+    assert "coverage_note" in app_js and "covered_states" in app_js
+    assert all(value in config_js for value in ("filters", "ranking", "thresholds", "weights", "failClosedWithoutRegionalCoverage"))
+
+    assert 'id="stateSelect"' in index and 'required' in index
+    assert 'id="placeTypeSelect"' not in index and 'id="communityName"' not in index and 'id="communityMap"' not in index
+    assert "Choose one state, D.C., or U.S. territory." in index
+    assert "Regional programs appear only when their documented service area includes your selection." in index
+    assert "source-backed examples from Protos" not in index and "community profile" not in index.lower()
+    assert "why it fits" not in index.lower()
     assert all(value in index for value in ("fundingViewSwitch", "showFundingCalendar", "calendarGrid", "calendarAgenda"))
     assert all(value in app_js for value in ("renderFundingCalendar", "chooseFundingView", "fundingDeadlineEntries", "fundingTiming", "fundingTimingCounts"))
     assert "calendarTimingSummary" in index and "deadline-status" in planner
-    ui_i18n = (ROOT / "ui-i18n.js").read_text(encoding="utf-8")
-    assert all(value in ui_i18n for value in ("Application timing", "Last checked", "Check current availability", "Check the official program page.", "No upcoming dated funding deadline found."))
+    assert "renderCardActions" not in app_js and "planner-card-actions" in planner
+    assert "window.RERC_CASE_STUDIES" in app_js and "Read the example" in app_js
     assert "topicCorpus(item)" in app_js and "broadFundingStage" in app_js
-    assert "cleanText(item.case_place_type) !== selectedPlaceType" in app_js
+    assert "selectedStage !== \"Any step\"" in app_js
     assert "<${headingTag}>${escapeHtml(item.title)}</${headingTag}>" in app_js
+
+    ui_i18n = (ROOT / "ui-i18n.js").read_text(encoding="utf-8")
+    assert all(value in ui_i18n for value in (
+        "Application timing", "Last checked", "Check current availability",
+        "Check the official program page.", "No upcoming dated funding deadline found.",
+        "Program Website", "Coverage note:",
+    ))
+    assert "Why it fits" not in ui_i18n and "Community profile" not in ui_i18n
+
+    manifest = json.loads((ROOT / "maintenance" / "multistate_coverage.json").read_text(encoding="utf-8"))
+    regional = [item for item in items if item.get("geography", "").strip().lower() == "multi-state"]
+    assert len(regional) == len(manifest["records"]) == 20
+    assert {item["item_id"] for item in regional} == {row["item_id"] for row in manifest["records"]}
+    assert all(item.get("covered_states") and item.get("coverage_note") and item.get("coverage_source_url", "").startswith("https://") for item in regional)
+
     assert "later standalone retest could not run" not in index.lower()
-    assert "outline: 3px solid var(--gold)" in (ROOT / "styles.css").read_text(encoding="utf-8")
+    styles = (ROOT / "styles.css").read_text(encoding="utf-8")
+    assert "outline: 3px solid var(--gold)" in styles
+    assert "object-fit: contain" in styles and "object-position: center" in styles
     assert (ROOT / ".gitattributes").read_text(encoding="utf-8").count("eol=lf") >= 8
     assert (ROOT / "scripts" / "qa_public_site.cjs").is_file()
     assert not (ROOT / "scripts" / "qa_public_site_cases.cjs").exists()
     assert not (ROOT / "scripts" / "qa_public_site_final.cjs").exists()
-    assert "qa_public_site.cjs" in (ROOT / ".github" / "workflows" / "qa.yml").read_text(encoding="utf-8")
+    qa_workflow = (ROOT / ".github" / "workflows" / "qa.yml").read_text(encoding="utf-8")
+    assert "qa_public_site.cjs" in qa_workflow and "qa_geography_coverage.py" in qa_workflow
     workflow = (ROOT / ".github" / "workflows" / "deploy-pages.yml").read_text(encoding="utf-8")
     assert "__pycache__" in workflow and "*.pyc" in workflow
     source_health = (ROOT / ".github" / "workflows" / "source-health.yml").read_text(encoding="utf-8")
     discovery = (ROOT / ".github" / "workflows" / "discover-federal-opportunities.yml").read_text(encoding="utf-8")
-    styles = (ROOT / "styles.css").read_text(encoding="utf-8")
     assert "17 10 * * *" in source_health and "actions/cache/restore@v4" in source_health
     assert "23 11 * * *" in discovery
     assert ".source-monitor/" in (ROOT / ".gitignore").read_text(encoding="utf-8")
     assert 'id="nextDeadlinePanel"' in index and "renderNextDeadline" in app_js
-    assert "object-fit: contain" in styles and "object-position: center" in styles
-
     case_raw = (ROOT / "case_studies.js").read_text(encoding="utf-8").strip()
     case_prefix = "window.RERC_CASE_STUDIES="
     assert case_raw.startswith(case_prefix) and case_raw.endswith(";")
@@ -333,33 +267,44 @@ def main() -> int:
     assert case_by_id["RERC-CASE-BROWNFIELDS-SUCCESS-STORIES-WELLSBURG-WV-A-LOCAL-MANUFACTURING-EXPANSION-TAKES-FLIGHT-WV-2017"]["summary"].startswith("Wellsburg and regional partners")
 
     downloads = ROOT / "downloads"
-    static_docx = downloads / "RERC_Community_Explorer_Appendix_2026-07-20.docx"
-    static_xlsx = downloads / "RERC_Community_Explorer_Master_2026-07-20.xlsx"
-    static_csv = downloads / "RERC_Community_Explorer_Master_2026-07-20.csv"
+    static_docx = downloads / f"RERC_Community_Explorer_Appendix_{DATE_TAG}.docx"
+    static_xlsx = downloads / f"RERC_Community_Explorer_Master_{DATE_TAG}.xlsx"
+    static_csv = downloads / f"RERC_Community_Explorer_Master_{DATE_TAG}.csv"
     assert static_docx.stat().st_size > 100_000
     assert static_xlsx.stat().st_size > 100_000
     assert static_csv.stat().st_size > 100_000
-    csv_row_count = len(static_csv.read_text(encoding="utf-8-sig").splitlines()) - 1
-    assert csv_row_count >= 1200
+    with static_csv.open("r", encoding="utf-8-sig", newline="") as handle:
+        csv_rows = list(csv.DictReader(handle))
+    csv_row_count = len(csv_rows)
+    assert csv_row_count == 1302
+    assert {"Covered States", "Coverage Note", "Coverage Source URL", "Official URL"} <= set(csv_rows[0])
+    assert "Why It May Help" not in csv_rows[0]
+    assert sum(bool(row["Covered States"]) for row in csv_rows) == len(regional)
+    assert sum(bool(row["Coverage Source URL"]) for row in csv_rows) == len(regional)
+    assert not any(re.search(r"[A-Za-z]:\\|private_internal|needs_image_review|lorem ipsum|TODO", json.dumps(row), re.I) for row in csv_rows)
     with zipfile.ZipFile(static_docx) as package:
         names = set(package.namelist())
         assert "word/comments.xml" not in names
         document_xml = package.read("word/document.xml").decode("utf-8")
-        assert document_xml.count("<w:hyperlink") == csv_row_count
+        assert "<w:ins" not in document_xml and "<w:del" not in document_xml
+        assert "Why it may help" not in document_xml
+        assert not re.search(r"[A-Za-z]:\\\\|private_internal|needs_image_review|lorem ipsum|TODO", document_xml, re.I)
+        assert document_xml.count("<w:hyperlink") == csv_row_count + len(regional)
         assert document_xml.count("<w:cantSplit") > 4000
         assert document_xml.count("<w:keepNext") > 4000
         app_xml = package.read("docProps/app.xml").decode("utf-8")
         core_xml = package.read("docProps/core.xml").decode("utf-8")
         assert "Microsoft Office Word" in app_xml and "Macintosh" not in app_xml
         assert "<ns0:Pages>" not in app_xml and "<Pages>" not in app_xml
-        assert "2026-07-18T00:00:00Z" in core_xml
+        assert f"{DATE_TAG}T00:00:00Z" in core_xml
     with zipfile.ZipFile(static_xlsx) as package:
         names = set(package.namelist())
         assert not any(name.startswith("xl/comments") for name in names)
+        assert not any(b"<f" in package.read(name) for name in names if name.startswith("xl/worksheets/sheet") and name.endswith(".xml"))
         workbook_xml = package.read("xl/workbook.xml").decode("utf-8")
         assert all(name in workbook_xml for name in ("Funding", "Resources", "Community Examples"))
     sha256 = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
-    package_report = json.loads((downloads / "RERC_Community_Explorer_QA_2026-07-20.json").read_text(encoding="utf-8"))
+    package_report = json.loads((downloads / f"RERC_Community_Explorer_QA_{DATE_TAG}.json").read_text(encoding="utf-8"))
     assert csv_row_count == package_report["records"]
     head_commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip()
     assert package_report["status"] == "PASS"
@@ -371,7 +316,7 @@ def main() -> int:
     assert "source commit used to generate" in package_report["release_binding_note"]
     assert package_report["site_sha256"] == {
         name: git_blob_sha256(head_commit, name)
-        for name in ("index.html", "styles.css", "rercie.css", "app.js", "planner.js", "ui-i18n.js", "data.js", "case_studies.js", "community_profiles.js", "favicon.svg", "vendor/jszip.min.js", "vendor/lucide.min.js", "assets/hero-outdoor.jpg", "assets/rerc-e-eagle.jpg", "README.md")
+        for name in ("index.html", "styles.css", "rercie.css", "app.js", "planner.js", "ui-i18n.js", "site-config.js", "data.js", "case_studies.js", "maintenance/multistate_coverage.json", "favicon.svg", "vendor/jszip.min.js", "vendor/lucide.min.js", "assets/hero-outdoor.jpg", "assets/rerc-e-eagle.jpg", "README.md")
     }
     assert package_report["docx"]["sha256"] == sha256(static_docx)
     assert package_report["xlsx"]["sha256"] == sha256(static_xlsx)
@@ -512,7 +457,8 @@ def main() -> int:
             "catalog_integrity",
             "v2_site_contract",
             "planner_security_contract",
-            "community_profiles",
+            "state_only_geography",
+            "regional_coverage",
             "case_studies",
             "downloads",
             "rerc_e_0.5.0",

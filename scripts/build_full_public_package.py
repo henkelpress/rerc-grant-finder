@@ -60,13 +60,15 @@ def normalized_records() -> list[dict[str, str]]:
                 "Status": clean(item.get("status")),
                 "Availability or Year": clean(item.get("deadline_or_availability") or item.get("case_year")),
                 "Geography": clean(item.get("case_state") or item.get("geography")),
+                "Covered States": "; ".join(clean(value) for value in item.get("covered_states", []) if clean(value)),
+                "Coverage Note": clean(item.get("coverage_note")),
+                "Coverage Source URL": clean(item.get("coverage_source_url")),
                 "Community": clean(item.get("case_place")),
                 "Community Type": clean(item.get("case_place_type")),
                 "Best For": clean(item.get("eligible_users")),
                 "Project Stage": clean(item.get("project_stage")),
                 "Topics": clean(item.get("topic_tags")),
                 "Summary": clean(item.get("summary")),
-                "Why It May Help": clean(item.get("why_it_matters")),
                 "Amount or Cost": clean(item.get("amount_or_cost")),
                 "Match or Cost": clean(item.get("match_or_cost")),
                 "Official URL": clean(item.get("source_url")),
@@ -164,7 +166,9 @@ def add_record_table(document: Document, row: dict[str, str], index: int) -> Non
     fields = [
         ("Summary", row["Summary"]),
         ("Best for", row["Best For"]),
-        ("Why it may help", row["Why It May Help"]),
+        ("Covered states", row["Covered States"]),
+        ("Coverage note", row["Coverage Note"]),
+        ("Coverage source", row["Coverage Source URL"]),
         ("Project stage", row["Project Stage"]),
         ("Topics", row["Topics"]),
         ("Amount or cost", row["Amount or Cost"]),
@@ -182,8 +186,9 @@ def add_record_table(document: Document, row: dict[str, str], index: int) -> Non
         cells[0].text = label
         cells[0].paragraphs[0].runs[0].font.bold = True
         set_cell_shading(cells[0], LIGHT_GREEN if index % 2 else LIGHT_BLUE)
-        if label == "Official source":
-            add_hyperlink(cells[1].paragraphs[0], "Open official page", value)
+        if label in {"Official source", "Coverage source"}:
+            link_text = "Program Website" if label == "Official source" else "Coverage source"
+            add_hyperlink(cells[1].paragraphs[0], link_text, value)
             cells[1].paragraphs[0].add_run(f" ({value})")
         else:
             cells[1].text = value
@@ -226,8 +231,9 @@ def build_docx(records: list[dict[str, str]], path: Path) -> None:
     document.core_properties.author = "Recreation Economy for Rural Communities"
     document.core_properties.last_modified_by = "Recreation Economy for Rural Communities"
     document.core_properties.comments = ""
-    document.core_properties.created = datetime(2026, 7, 18, tzinfo=timezone.utc)
-    document.core_properties.modified = datetime(2026, 7, 18, tzinfo=timezone.utc)
+    artifact_timestamp = datetime.fromisoformat(DATE_TAG).replace(tzinfo=timezone.utc)
+    document.core_properties.created = artifact_timestamp
+    document.core_properties.modified = artifact_timestamp
     title = document.add_paragraph(style="Title")
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     title.add_run("RERC Community Explorer")
@@ -300,10 +306,11 @@ def add_sheet(workbook: Workbook, title: str, rows: list[dict[str, str]]) -> Non
     for row in sheet.iter_rows(min_row=2):
         for cell in row:
             cell.alignment = Alignment(wrap_text=True, vertical="top")
-        url_cell = row[headers.index("Official URL")]
-        if url_cell.value:
-            url_cell.hyperlink = url_cell.value
-            url_cell.style = "Hyperlink"
+        for url_header in ("Official URL", "Coverage Source URL"):
+            url_cell = row[headers.index(url_header)]
+            if url_cell.value:
+                url_cell.hyperlink = url_cell.value
+                url_cell.style = "Hyperlink"
     if rows:
         table = Table(displayName=re.sub(r"[^A-Za-z0-9]", "", title) + "Table", ref=sheet.dimensions)
         table.tableStyleInfo = TableStyleInfo(name="TableStyleMedium4", showRowStripes=True, showColumnStripes=False)
@@ -390,7 +397,7 @@ def validate(records: list[dict[str, str]], docx: Path, xlsx: Path, csv_path: Pa
         "release_binding_note": "This is the source commit used to generate the files. See the GitHub release and RELEASE_MANIFEST.json for the final release commit.",
         "site_sha256": {
             name: git_blob_sha256(source_commit, name)
-            for name in ("index.html", "styles.css", "rercie.css", "app.js", "planner.js", "ui-i18n.js", "data.js", "case_studies.js", "community_profiles.js", "favicon.svg", "vendor/jszip.min.js", "vendor/lucide.min.js", "assets/hero-outdoor.jpg", "assets/rerc-e-eagle.jpg", "README.md")
+            for name in ("index.html", "styles.css", "rercie.css", "app.js", "planner.js", "ui-i18n.js", "site-config.js", "data.js", "case_studies.js", "maintenance/multistate_coverage.json", "favicon.svg", "vendor/jszip.min.js", "vendor/lucide.min.js", "assets/hero-outdoor.jpg", "assets/rerc-e-eagle.jpg", "README.md")
         },
         "source_sha256": {
             "data.js": git_blob_sha256(source_commit, "data.js"),

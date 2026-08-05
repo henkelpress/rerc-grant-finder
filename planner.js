@@ -5,7 +5,6 @@
   const DB_NAME = "rerc-community-planner";
   const DB_VERSION = 1;
   const WORKSPACE_STORE = "workspaces";
-  const GEOCODE_STORE = "geocodeCache";
   const DEFAULT_WORKSPACE_ID = "local";
   const LANGUAGE_KEY = "rerc.language";
   const LAST_WORKSPACE_KEY = "rerc.lastWorkspaceId";
@@ -30,20 +29,12 @@
       allMatches: "Show all matches",
       noSaved: "No items saved yet.",
       noDeadlines: "Save funding options to see their application timing here.",
-      noProfile: "Choose a community and load its public profile.",
-      profileUnavailable: "No public profile was found for this community.",
-      profileLoaded: "Community profile loaded.",
-      profileSource: "Source",
-      profileVintage: "Data year",
-      profileCoverage: "Coverage note",
       officialEnglish:
         "Official program names, rules, and source material may remain in English. Confirm requirements with the program.",
       plan: "Plan",
       design: "Design",
       build: "Build",
       operate: "Operate",
-      whyMatch: "Why it matches",
-      cautions: "Check before applying",
       dueSoon: "Due soon",
       dueToday: "Due today",
       pastDue: "Past date",
@@ -55,7 +46,6 @@
       variableTiming: "Deadlines vary by program",
       activePeriodTiming: "Active program period",
       datePendingTiming: "Next deadline not announced",
-      openSource: "Open official source",
       compareTitle: "Compare saved options",
       compareLimit: "Choose up to three items to compare.",
       shareReady: "Private share link ready. Project title and notes are not included.",
@@ -66,17 +56,10 @@
       imported: "Workspace imported.",
       exported: "Workspace exported.",
       deleted: "Local workspace data deleted.",
-      located: "Community location found.",
-      locateFailed: "The community could not be located. Check the name and try again.",
-      locateConsent:
-        "The selected community is located automatically with OpenStreetMap Nominatim.",
-      mapFallback: "Interactive map unavailable. Coordinates are shown as an accessible text fallback.",
-      osmAttribution: "Map data © OpenStreetMap contributors",
       next: "Next",
       back: "Back",
-      editProfile: "Edit profile",
       stepOf: "Step {step} of {total}",
-      completePlace: "Choose a state or territory, place type, and community to continue.",
+      completePlace: "Choose a state or territory to continue.",
       calendarExported: "Calendar exported.",
       csvExported: "Saved-plan CSV exported.",
       docxExported: "Saved-plan Word document exported.",
@@ -86,7 +69,7 @@
         "Include your project notes in the RERC-e handoff? The file stays on this computer unless you share it.",
       installerFallback: "If RERC-e is not installed, download the Windows installer.",
       projectWorkspace: "Community plan",
-      communitySnapshot: "Community snapshot",
+      communitySnapshot: "Selected location",
       roadmap: "Project roadmap",
       deadlines: "Reviewed deadlines",
       language: "Language",
@@ -126,20 +109,12 @@
       allMatches: "Mostrar todos los resultados",
       noSaved: "Todavía no hay elementos guardados.",
       noDeadlines: "Guarde opciones de financiamiento para ver aquí sus fechas y plazos.",
-      noProfile: "Elija una comunidad y cargue su perfil público.",
-      profileUnavailable: "No se encontró un perfil público para esta comunidad.",
-      profileLoaded: "Perfil de la comunidad cargado.",
-      profileSource: "Fuente",
-      profileVintage: "Año de los datos",
-      profileCoverage: "Nota de cobertura",
       officialEnglish:
         "Los nombres, reglas y fuentes oficiales pueden permanecer en inglés. Confirme los requisitos con el programa.",
       plan: "Planificar",
       design: "Diseñar",
       build: "Construir",
       operate: "Operar",
-      whyMatch: "Por qué coincide",
-      cautions: "Revise antes de solicitar",
       dueSoon: "Vence pronto",
       dueToday: "Vence hoy",
       pastDue: "Fecha pasada",
@@ -151,7 +126,6 @@
       variableTiming: "Las fechas varían según el programa",
       activePeriodTiming: "Período activo del programa",
       datePendingTiming: "Próxima fecha no anunciada",
-      openSource: "Abrir fuente oficial",
       compareTitle: "Comparar opciones guardadas",
       compareLimit: "Elija hasta tres elementos para comparar.",
       shareReady: "Enlace privado listo. El título y las notas no están incluidos.",
@@ -162,17 +136,10 @@
       imported: "Espacio de trabajo importado.",
       exported: "Espacio de trabajo exportado.",
       deleted: "Se borraron los datos locales.",
-      located: "Se encontró la ubicación de la comunidad.",
-      locateFailed: "No se pudo encontrar la comunidad. Revise el nombre e inténtelo de nuevo.",
-      locateConsent:
-        "La comunidad seleccionada se ubica automáticamente con OpenStreetMap Nominatim.",
-      mapFallback: "El mapa interactivo no está disponible. Las coordenadas se muestran como texto accesible.",
-      osmAttribution: "Datos del mapa © colaboradores de OpenStreetMap",
       next: "Siguiente",
       back: "Atrás",
-      editProfile: "Editar perfil",
       stepOf: "Paso {step} de {total}",
-      completePlace: "Elija un estado o territorio, un tipo de lugar y una comunidad para continuar.",
+      completePlace: "Elija un estado o territorio para continuar.",
       calendarExported: "Calendario exportado.",
       csvExported: "CSV del plan exportado.",
       docxExported: "Documento Word del plan exportado.",
@@ -182,7 +149,7 @@
         "¿Quiere incluir sus notas del proyecto en el archivo para RERC-e? El archivo permanece en este equipo a menos que lo comparta.",
       installerFallback: "Si RERC-e no está instalado, descargue el instalador para Windows.",
       projectWorkspace: "Plan comunitario",
-      communitySnapshot: "Resumen de la comunidad",
+      communitySnapshot: "Ubicación seleccionada",
       roadmap: "Ruta del proyecto",
       deadlines: "Fechas revisadas",
       language: "Idioma",
@@ -222,7 +189,6 @@
     wizardStep: 1,
     map: null,
     marker: null,
-    lastGeocodeAt: 0,
     saveTimer: null,
     observer: null,
   };
@@ -395,9 +361,6 @@
         if (!db.objectStoreNames.contains(WORKSPACE_STORE)) {
           db.createObjectStore(WORKSPACE_STORE, { keyPath: "id" });
         }
-        if (!db.objectStoreNames.contains(GEOCODE_STORE)) {
-          db.createObjectStore(GEOCODE_STORE, { keyPath: "query" });
-        }
       };
       request.onsuccess = function () { resolve(request.result); };
       request.onerror = function () { reject(request.error || new Error("indexeddb-open")); };
@@ -548,26 +511,6 @@
     });
   }
 
-  function evidenceFor(item) {
-    try {
-      const raw = typeof explorer().matchEvidence === "function"
-        ? explorer().matchEvidence(item)
-        : null;
-      if (Array.isArray(raw)) return { reasons: raw.map(String), cautions: [] };
-      if (raw && typeof raw === "object") {
-        return {
-          reasons: (raw.reasons || raw.matches || raw.evidence || []).map(String),
-          cautions: (raw.cautions || raw.warnings || []).map(String),
-        };
-      }
-      if (typeof raw === "string" && raw.trim()) return { reasons: [raw.trim()], cautions: [] };
-    } catch (error) {
-      reportError(error);
-    }
-    const fallback = textValue(item.why_it_matters || item.summary, 800);
-    return { reasons: fallback ? [fallback] : [], cautions: [] };
-  }
-
   function summaryFor(item) {
     try {
       if (typeof explorer().publicSummary === "function") {
@@ -579,24 +522,6 @@
       reportError(error);
     }
     return textValue(item.summary, 1200);
-  }
-
-  function appendEvidence(parent, item) {
-    const evidence = evidenceFor(item);
-    if (evidence.reasons.length) {
-      const title = document.createElement("strong");
-      title.textContent = t("whyMatch") + ": ";
-      parent.appendChild(title);
-      parent.appendChild(document.createTextNode(evidence.reasons.join(" ")));
-    }
-    if (evidence.cautions.length) {
-      const caution = document.createElement("p");
-      const title = document.createElement("strong");
-      title.textContent = t("cautions") + ": ";
-      caution.appendChild(title);
-      caution.appendChild(document.createTextNode(evidence.cautions.join(" ")));
-      parent.appendChild(caution);
-    }
   }
 
   function createSavedCard(item, compact) {
@@ -622,10 +547,6 @@
       const summary = document.createElement("p");
       summary.textContent = summaryFor(item);
       card.appendChild(summary);
-      const evidence = document.createElement("p");
-      evidence.className = "match-evidence";
-      appendEvidence(evidence, item);
-      card.appendChild(evidence);
       const source = safeAnchor(item.source_url, t("openSource"));
       if (source) card.appendChild(source);
     }
@@ -985,18 +906,6 @@
       });
       body.appendChild(row);
     });
-    const evidenceRow = document.createElement("tr");
-    const evidenceLabel = document.createElement("th");
-    evidenceLabel.scope = "row";
-    evidenceLabel.textContent = t("whyMatch");
-    evidenceRow.appendChild(evidenceLabel);
-    items.forEach(function (item) {
-      const cell = document.createElement("td");
-      const evidence = evidenceFor(item);
-      cell.textContent = evidence.reasons.join(" ") || t("unavailable");
-      evidenceRow.appendChild(cell);
-    });
-    body.appendChild(evidenceRow);
     table.appendChild(body);
     tableRoot.appendChild(table);
   }
@@ -1022,7 +931,6 @@
     renderRoadmap();
     renderDeadlines();
     renderComparison();
-    renderCommunitySnapshot();
     if (state.savedOnly) renderSavedOnly();
     else decorateResults();
     syncSavedOnlyControl();
@@ -1091,12 +999,8 @@
     }
     if (typeof state.showWizardStep === "function") state.showWizardStep(1, { focus: false });
     if (focusMissing) {
-      const name = byId("communityName");
       const stateSelect = byId("stateSelect");
-      const placeType = byId("placeTypeSelect");
-      const target = stateSelect && !stateSelect.value
-        ? stateSelect
-        : (placeType && !placeType.value ? placeType : name);
+      const target = stateSelect;
       if (target) window.requestAnimationFrame(function () { target.focus({ preventScroll: true }); });
     }
   }
@@ -1114,10 +1018,8 @@
       button.setAttribute("aria-disabled", button.disabled ? "true" : "false");
     });
     if (ready) {
-      const name = byId("communityName");
       const stateSelect = byId("stateSelect");
-      const placeType = byId("placeTypeSelect");
-      [stateSelect, placeType, name].forEach(function (control) {
+      [stateSelect].forEach(function (control) {
         if (!control) return;
         control.setCustomValidity("");
         control.removeAttribute("aria-invalid");
@@ -1129,10 +1031,8 @@
   function requireCommunityInfo() {
     if (syncCommunityGate()) return true;
     const stateSelect = byId("stateSelect");
-    const placeType = byId("placeTypeSelect");
-    const name = byId("communityName");
     const message = t("completePlace");
-    const controls = [stateSelect, placeType, name];
+    const controls = [stateSelect];
     controls.forEach(function (control) {
       if (!control) return;
       const missing = !control.value;
@@ -1364,10 +1264,8 @@
     });
   }
   function hasPlaceSelection() {
-    const name = byId("communityName");
     const stateSelect = byId("stateSelect");
-    const placeType = byId("placeTypeSelect");
-    return Boolean(stateSelect && stateSelect.value && placeType && placeType.value && name && name.value);
+    return Boolean(stateSelect && stateSelect.value);
   }
 
   function selectedValues(root) {
@@ -1379,7 +1277,7 @@
 
   function controlledFilters() {
     const values = {};
-    ["stateSelect", "placeTypeSelect", "stageSelect", "sortSelect", "limitSelect"].forEach(function (id) {
+    ["stateSelect", "stageSelect", "sortSelect", "limitSelect"].forEach(function (id) {
       const element = byId(id);
       if (element && element.value) values[id] = textValue(element.value, 100);
     });
@@ -1396,7 +1294,7 @@
 
   function applyControlledFilters(filters) {
     if (!filters || typeof filters !== "object") return;
-    ["stateSelect", "placeTypeSelect", "stageSelect", "sortSelect", "limitSelect"].forEach(function (id) {
+    ["stateSelect", "stageSelect", "sortSelect", "limitSelect"].forEach(function (id) {
       const element = byId(id);
       const value = textValue(filters[id], 100);
       if (element && value && Array.from(element.options || []).some(function (option) { return option.value === value; })) {
@@ -1421,322 +1319,23 @@
 
   function captureProfileFromFilters() {
     const stateSelect = byId("stateSelect");
-    const placeType = byId("placeTypeSelect");
-    const selected = typeof explorer().getSelectedCommunityProfile === "function"
-      ? explorer().getSelectedCommunityProfile()
-      : null;
-    const profile = selected ? Object.assign({}, selected) : {};
-    if (selected && typeof explorer().getSelectedCommunityName === "function") {
-      profile.community = explorer().getSelectedCommunityName();
-      profile.name = profile.community;
-    }
+    const profile = {};
     if (stateSelect && stateSelect.value) {
       profile.state = stateSelect.options[stateSelect.selectedIndex]
         ? stateSelect.options[stateSelect.selectedIndex].text.trim().slice(0, 120)
         : stateSelect.value.slice(0, 120);
       profile.stateCode = stateSelect.value.slice(0, 120);
+      profile.community = profile.state;
+      profile.name = profile.state;
+      profile.placeType = "state_or_territory";
     }
-    if (placeType && placeType.value) profile.placeType = placeType.value.slice(0, 80);
     state.workspace.profile = sanitizeProfile(profile);
     schedulePersist();
-    renderProfileSummary();
   }
-  function projectedProfiles() {
-    const raw = window.RERC_COMMUNITY_PROFILES;
-    if (Array.isArray(raw)) return raw;
-    if (raw && typeof raw === "object") {
-      return Object.keys(raw).map(function (key) {
-        const value = raw[key];
-        return value && typeof value === "object" ? Object.assign({ geoid: key }, value) : null;
-      }).filter(Boolean);
-    }
-    return [];
-  }
-
-  function findProjectedProfile() {
-    if (typeof explorer().getSelectedCommunityProfile === "function") {
-      return explorer().getSelectedCommunityProfile();
-    }
-    const currentGeoid = textValue(state.workspace.profile.geoid, 80);
-    return projectedProfiles().find(function (profile) {
-      return currentGeoid && textValue(profile.geoid, 80) === currentGeoid;
-    }) || null;
-  }
-  async function loadProjectedProfile() {
-    if (!requireCommunityInfo()) return;
-    captureProfileFromFilters();
-    const projected = findProjectedProfile();
-    if (!projected) {
-      setStatus("profileStatus", t("profileUnavailable"), "warning");
-      renderProfileSummary();
-      return;
-    }
-    state.workspace.profile = sanitizeProfile(Object.assign({}, state.workspace.profile, projected));
-    await persistWorkspace();
-    setStatus("profileStatus", t("profileLoaded"), "success");
-    renderProfileSummary();
-    renderCommunitySnapshot();
-    try {
-      await locateCommunity();
-    } catch (error) {
-      renderMap();
-      setStatus("mapStatus", t("locateFailed"), "warning");
-      reportError(error);
-    }
-  }
-
   function profileRows(profile) {
-    const rows = [];
-    [
-      ["community", profile.community || profile.name],
-      ["geography", [profile.county, profile.state].filter(Boolean).join(", ")],
-      ["profileSource", profile.source],
-      ["profileVintage", profile.vintage],
-      ["profileCoverage", profile.coverageNote],
-    ].forEach(function (row) {
-      if (row[1]) rows.push({ label: t(row[0]), value: String(row[1]) });
-    });
-    if (Number.isFinite(profile.population)) {
-      rows.push({ label: "Population", value: new Intl.NumberFormat(state.language).format(profile.population) });
-    } else if (profile.populationLabel) {
-      rows.push({ label: "Population", value: profile.populationLabel });
-    }
-    if (Number.isFinite(profile.medianHouseholdIncome)) {
-      rows.push({
-        label: "Median household income",
-        value: new Intl.NumberFormat(state.language, { style: "currency", currency: "USD", maximumFractionDigits: 0 })
-          .format(profile.medianHouseholdIncome),
-      });
-    } else if (profile.medianIncomeLabel) {
-      rows.push({ label: "Median household income", value: profile.medianIncomeLabel });
-    }
-    return rows;
+    if (!profile || !profile.state) return [];
+    return [{ label: t("geography"), value: String(profile.state) }];
   }
-
-  function renderDefinitionList(root, rows) {
-    root.replaceChildren();
-    const list = document.createElement("dl");
-    rows.forEach(function (row) {
-      const wrapper = document.createElement("div");
-      const term = document.createElement("dt");
-      const description = document.createElement("dd");
-      term.textContent = row.label;
-      description.textContent = row.value;
-      wrapper.append(term, description);
-      list.appendChild(wrapper);
-    });
-    root.appendChild(list);
-  }
-
-  function renderProfileSummary() {
-    const section = byId("communityProfileSummary");
-    if (section) section.hidden = false;
-    const root = byId("profileSummaryContent");
-    if (root) {
-      const rows = profileRows(state.workspace.profile);
-      if (rows.length) renderDefinitionList(root, rows);
-      else {
-        root.replaceChildren();
-        const empty = document.createElement("p");
-        empty.textContent = t("noProfile");
-        root.appendChild(empty);
-      }
-      const notice = document.createElement("p");
-      notice.className = "language-notice";
-      notice.textContent = t("officialEnglish");
-      root.appendChild(notice);
-    }
-    const priority = byId("prioritySummaryContent");
-    if (priority) {
-      priority.replaceChildren();
-      const filters = controlledFilters();
-      const topics = filters.topicOptions || [];
-      const applicants = filters.applicantOptions || [];
-      const summary = document.createElement("p");
-      summary.textContent = [
-        topics.length ? topics.join(", ") : "",
-        applicants.length ? applicants.join(", ") : "",
-        filters.stageSelect || "",
-      ].filter(Boolean).join(" · ") || t("unavailable");
-      priority.appendChild(summary);
-    }
-  }
-
-  function renderCommunitySnapshot() {
-    const root = byId("communitySnapshot");
-    if (!root) return;
-    const rows = profileRows(state.workspace.profile);
-    if (!rows.length) {
-      root.replaceChildren();
-      const empty = document.createElement("p");
-      empty.textContent = t("noProfile");
-      root.appendChild(empty);
-      return;
-    }
-    renderDefinitionList(root, rows);
-    const note = document.createElement("p");
-    note.className = "profile-limitations";
-    note.textContent = state.workspace.profile.coverageNote || t("officialEnglish");
-    root.appendChild(note);
-  }
-
-  function geocodeCountryCode() {
-    // Nominatim returns U.S. territories under country_code=us; state validation keeps them distinct.
-    return "us";
-  }
-
-  function geocodePlaceName() {
-    const community = typeof explorer().getSelectedCommunityName === "function"
-      ? explorer().getSelectedCommunityName()
-      : "";
-    return community
-      .replace(/\s+(city|town|village|borough|municipality|municipio|subdistrict|zona urbana)$/i, "")
-      .replace(/\s+CDP(?:\s+\([^)]*\))?$/i, "")
-      .trim();
-  }
-
-  function geocodeStateName() {
-    const selected = textValue(byId("stateSelect") && byId("stateSelect").value, 120);
-    return {
-      "U.S. Virgin Islands": "United States Virgin Islands",
-      "Northern Mariana Islands": "Commonwealth of the Northern Mariana Islands",
-    }[selected] || selected;
-  }
-
-  function geocodeQuery() {
-    return [geocodePlaceName(), geocodeStateName(), "United States"].filter(Boolean).join(", ").slice(0, 300);
-  }
-
-  function expectedStateAliases() {
-    const selected = textValue(byId("stateSelect") && byId("stateSelect").value, 120).toLowerCase();
-    const aliases = {
-      "u.s. virgin islands": ["u.s. virgin islands", "united states virgin islands", "virgin islands"],
-      "northern mariana islands": ["northern mariana islands", "commonwealth of the northern mariana islands"],
-    };
-    return aliases[selected] || [selected];
-  }
-
-  function matchingGeocodeResult(results) {
-    const stateAliases = expectedStateAliases();
-    return results.find(function (candidate) {
-      const address = candidate && candidate.address && typeof candidate.address === "object" ? candidate.address : {};
-      const stateName = textValue(address.state || address.region, 120).toLowerCase();
-      const countryCode = textValue(address.country_code, 8).toLowerCase();
-      const displayName = textValue(candidate && candidate.display_name, 400).toLowerCase();
-      const stateMatches = stateAliases.some(function (alias) {
-        return stateName === alias || displayName.includes(alias);
-      });
-      return stateMatches && (!countryCode || countryCode === "us");
-    }) || null;
-  }  async function locateCommunity() {
-    const query = geocodeQuery();
-    if (!hasPlaceSelection()) {
-      setStatus("mapStatus", t("completePlace"), "warning");
-      return;
-    }
-    setStatus("mapStatus", t("locateConsent"), "info");
-    const cacheKey = query.toLowerCase().replace(/\s+/g, " ").trim();
-    const cached = await dbGet(GEOCODE_STORE, cacheKey);
-    let result = cached && cached.result;
-    if (!result) {
-      const elapsed = Date.now() - state.lastGeocodeAt;
-      if (elapsed < 1000) await delay(1000 - elapsed);
-      const url = new URL("https://nominatim.openstreetmap.org/search");
-      url.searchParams.set("format", "jsonv2");
-      url.searchParams.set("q", query);
-      url.searchParams.set("countrycodes", geocodeCountryCode());
-      url.searchParams.set("limit", "8");
-      url.searchParams.set("addressdetails", "1");
-      state.lastGeocodeAt = Date.now();
-      const response = await fetch(url.toString(), {
-        headers: { Accept: "application/json" },
-      });
-      if (!response.ok) throw new Error("nominatim-" + response.status);
-      const results = await response.json();
-      if (!Array.isArray(results) || !results.length) throw new Error("nominatim-empty");
-      const matched = matchingGeocodeResult(results);
-      if (!matched) throw new Error("nominatim-state-mismatch");
-      result = {
-        latitude: Number(matched.lat),
-        longitude: Number(matched.lon),
-        displayName: textValue(matched.display_name, 400),
-      };
-      if (!Number.isFinite(result.latitude) || !Number.isFinite(result.longitude)) {
-        throw new Error("nominatim-coordinates");
-      }
-      await dbPut(GEOCODE_STORE, {
-        query: cacheKey,
-        result: result,
-        cachedAt: new Date().toISOString(),
-      });
-    }
-    state.workspace.profile = sanitizeProfile(Object.assign({}, state.workspace.profile, result));
-    await persistWorkspace();
-    renderMap();
-    renderCommunitySnapshot();
-    setStatus("mapStatus", t("located"), "success");
-  }
-
-  function delay(milliseconds) {
-    return new Promise(function (resolve) { window.setTimeout(resolve, milliseconds); });
-  }
-
-  function renderMap() {
-    const root = byId("communityMap");
-    if (!root) return;
-    const profile = state.workspace.profile;
-    const latitude = Number(profile.latitude);
-    const longitude = Number(profile.longitude);
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-      root.setAttribute("aria-label", t("noProfile"));
-      root.replaceChildren();
-      const message = document.createElement("p");
-      message.className = "map-placeholder";
-      message.textContent = hasPlaceSelection() ? "Loading the selected community map..." : t("noProfile");
-      root.appendChild(message);
-      if (hasPlaceSelection()) {
-        const searchUrl = new URL("https://www.openstreetmap.org/search");
-        searchUrl.searchParams.set("query", geocodeQuery());
-        const fallback = safeAnchor(searchUrl.href, "Open this place in OpenStreetMap");
-        if (fallback) {
-          fallback.className = "map-fallback-link";
-          root.appendChild(fallback);
-        }
-      }
-      return;
-    }
-    const place = textValue(profile.community || profile.name, 200) || t("community");
-    root.setAttribute("aria-label", [place, latitude.toFixed(5), longitude.toFixed(5)].join(", "));
-    root.replaceChildren();
-
-    const latitudeSpan = 0.06;
-    const longitudeSpan = 0.09;
-    const bbox = [
-      longitude - longitudeSpan,
-      latitude - latitudeSpan,
-      longitude + longitudeSpan,
-      latitude + latitudeSpan,
-    ].map(function (value) { return value.toFixed(6); }).join(",");
-    const mapUrl = new URL("https://www.openstreetmap.org/export/embed.html");
-    mapUrl.searchParams.set("bbox", bbox);
-    mapUrl.searchParams.set("layer", "mapnik");
-    mapUrl.searchParams.set("marker", latitude.toFixed(6) + "," + longitude.toFixed(6));
-
-    const frame = document.createElement("iframe");
-    frame.className = "osm-map-frame";
-    frame.title = "Interactive OpenStreetMap of " + place;
-    frame.loading = "eager";
-    frame.referrerPolicy = "strict-origin-when-cross-origin";
-    frame.src = mapUrl.href;
-    root.appendChild(frame);
-
-    const attribution = safeAnchor("https://www.openstreetmap.org/copyright", t("osmAttribution"));
-    if (attribution) {
-      attribution.className = "map-attribution";
-      root.appendChild(attribution);
-    }
-  }
-
   function safeHttpUrl(value) {
     try {
       if (typeof explorer().safeUrl === "function") {
@@ -1916,14 +1515,10 @@
 
   function projectExportModel(includeNotes) {
     const items = savedItems().map(function (item) {
-      const evidence = evidenceFor(item);
-      const deadline = reviewedDeadline(item);
       return {
         item: item,
         phase: state.workspace.roadmapAssignments[itemId(item)] || inferPhase(item),
-        reasons: evidence.reasons,
-        cautions: evidence.cautions,
-        deadline: deadline,
+        deadline: reviewedDeadline(item),
       };
     });
     return {
@@ -1956,10 +1551,7 @@
     }
     const headers = [
       "Project title",
-      "Community",
       "State or territory",
-      "Profile source",
-      "Profile vintage",
       "Item ID",
       "Type",
       "Title",
@@ -1972,8 +1564,6 @@
       "Amount or cost",
       "Match or cost share",
       "Reviewed deadline",
-      "Why it matches",
-      "Cautions",
       "Summary",
       "Official source",
       "Project notes",
@@ -1983,10 +1573,7 @@
       const item = entry.item;
       rows.push([
         model.title,
-        model.profile.community || model.profile.name || "",
         model.profile.state || "",
-        model.profile.source || "",
-        model.profile.vintage || "",
         itemId(item),
         item.item_type,
         item.title,
@@ -1999,8 +1586,6 @@
         item.amount_or_cost,
         item.match_or_cost,
         entry.deadline ? isoDate(entry.deadline.date) : "",
-        entry.reasons.join(" "),
-        entry.cautions.join(" "),
         summaryFor(item),
         safeHttpUrl(item.source_url),
         model.notes,
@@ -2068,8 +1653,6 @@
           [t("amount"), item.amount_or_cost],
           [t("match"), item.match_or_cost],
           [t("deadline"), item.deadline_or_availability],
-          [t("whyMatch"), entry.reasons.join(" ")],
-          [t("cautions"), entry.cautions.join(" ")],
         ].forEach(function (row) {
           if (row[1]) body.push(docxParagraph(row[0] + ": " + row[1]));
         });
@@ -2265,8 +1848,6 @@
           match_or_cost: textValue(item.match_or_cost, 500),
           deadline_or_availability: textValue(item.deadline_or_availability, 1000),
           summary: summaryFor(item),
-          whyMatch: entry.reasons,
-          cautions: entry.cautions,
           roadmapPhase: entry.phase,
           source_url: safeHttpUrl(item.source_url),
         };
@@ -2290,7 +1871,7 @@
   }
 
   async function deleteLocalData() {
-    await Promise.all([dbClear(WORKSPACE_STORE), dbClear(GEOCODE_STORE)]);
+    await dbClear(WORKSPACE_STORE);
     localStorage.removeItem(LANGUAGE_KEY);
     localStorage.removeItem(LAST_WORKSPACE_KEY);
     state.language = "en";
@@ -2356,7 +1937,6 @@
         else button.setAttribute("aria-pressed", language === state.language ? "true" : "false");
       });
     }
-    renderProfileSummary();
     refreshWorkspaceUI();
     if (window.RERCI18N) window.RERCI18N.setLanguage(state.language);
   }
@@ -2377,14 +1957,9 @@
       notes.value = state.workspace.projectNotes;
       notes.maxLength = MAX_NOTES;
     }
-    if (typeof explorer().setCommunitySelection === "function" && state.workspace.profile.stateCode) {
-      explorer().setCommunitySelection(
-        state.workspace.profile.stateCode,
-        state.workspace.profile.placeType,
-        state.workspace.profile.geoid
-      );
+    if (typeof explorer().setStateSelection === "function" && state.workspace.profile.stateCode) {
+      explorer().setStateSelection(state.workspace.profile.stateCode);
     }
-    renderProfileSummary();
   }
 
   function setupEventHandlers() {
@@ -2445,14 +2020,6 @@
         if (focusable) focusable.focus();
       }
     });
-    bind("loadCommunityProfile", "click", function () { loadProjectedProfile().catch(reportError); });
-    bind("refreshProfile", "click", function () { loadProjectedProfile().catch(reportError); });
-    bind("locateCommunity", "click", function () {
-      locateCommunity().catch(function (error) {
-        setStatus("mapStatus", t("locateFailed"), "error");
-        reportError(error);
-      });
-    });
     bind("exportCalendar", "click", exportCalendar);
     bind("exportPlanWord", "click", function () { exportPlanDocx().catch(reportError); });
     bind("exportPlanCsv", "click", exportPlanCsv);
@@ -2491,10 +2058,8 @@
         schedulePersist();
       });
     }
-    const communityName = byId("communityName");
     const communityState = byId("stateSelect");
-    const communityType = byId("placeTypeSelect");
-    [communityState, communityType, communityName].forEach(function (control) {
+    [communityState].forEach(function (control) {
       if (!control) return;
       control.addEventListener("change", function () {
         control.setCustomValidity("");
@@ -2507,11 +2072,7 @@
     if (filters) {
       filters.addEventListener("change", function (event) {
         captureProfileFromFilters();
-        renderProfileSummary();
         syncCommunityGate();
-        if (event.target && event.target.id === "communityName" && event.target.value) {
-          loadProjectedProfile().catch(reportError);
-        }
       });
     }
     const roadmap = byId("roadmap");
@@ -2553,17 +2114,7 @@
     setupEventHandlers();
     applyLanguage();
     refreshWorkspaceUI();
-    renderMap();
-    if (hasPlaceSelection() && (!Number.isFinite(state.workspace.profile.latitude) || !Number.isFinite(state.workspace.profile.longitude))) {
-      try {
-        await locateCommunity();
-      } catch (error) {
-        setStatus("mapStatus", t("locateFailed"), "warning");
-        reportError(error);
-      }
-    } else {
-      setStatus("mapStatus", hasPlaceSelection() ? t("located") : t("locateConsent"), "info");
-    }
+    syncCommunityGate();
     document.documentElement.classList.add("rerc-planner-ready");
     document.dispatchEvent(new CustomEvent("rerc:planner-ready", {
       detail: { schema: SCHEMA_VERSION, workspaceId: state.workspace.id },
