@@ -1,6 +1,6 @@
 "use strict";
 
-// EPA maintainers can adjust public filters and match ranking here without changing app.js.
+// Maintainers can adjust public filters and match ranking here without changing app.js.
 window.RERC_SITE_CONFIG = {
   schemaVersion: 1,
   geography: {
@@ -17,7 +17,7 @@ window.RERC_SITE_CONFIG = {
       ["school|schools|college|colleges|university|universities|library|libraries|museum|museums", "School, library, or museum"],
       ["utility|utilities|authority|authorities|district|districts", "Utility or public authority"],
       ["landowner|landowners|individual|individuals|families", "Landowner or individual"],
-      ["eligible|applicant|applicants|public agency|public agencies|sponsor|sponsors|organization|organizations|customer|customers|owner|owners|student|students|farmer|farmers|fishermen|worker|workers|sportsmen|resident|residents|member|members|partner|partners|representative|representatives|planner|planners|consultant|consultants|recipient|recipients|institution|institutions|entity|entities|government|governments|community|communities|state|states|varies|see program|check with the program", "Other or varies by program"]
+      ["__other__", "Other or varies by program"]
     ],
     topics: [
       ["trail|park|recreation|outdoor access", "Parks, trails, and outdoor access"],
@@ -32,7 +32,18 @@ window.RERC_SITE_CONFIG = {
       ["energy|electric|electricity|power|grid|renewable|efficiency|climate|brownfield|cleanup", "Energy, climate, and cleanup"],
       ["planning|community development|data|mapping|capacity|technical assistance", "Planning and local capacity"]
     ],
-    stages: ["Any step", "Planning", "Early Design", "Engineering", "Construction", "Implementation", "Operations/Maintenance", "Capacity Building", "Acquisition", "Cleanup"]
+    stages: ["Any step", "Planning", "Early Design", "Engineering", "Construction", "Implementation", "Operations/Maintenance", "Capacity Building", "Acquisition", "Cleanup"],
+    stageAliases: {
+      "Planning": "planning|assessment|feasibility|application|idea|project screening",
+      "Early Design": "early design|concept design|conceptual design|predevelopment|pre-development|design",
+      "Engineering": "engineering|final design|design and engineering|preconstruction",
+      "Construction": "construction|capital project|development",
+      "Implementation": "implementation|delivery",
+      "Operations/Maintenance": "operations|maintenance|stewardship",
+      "Capacity Building": "capacity building|training|technical assistance|business development|workforce",
+      "Acquisition": "acquisition|land purchase|easement",
+      "Cleanup": "cleanup|remediation|brownfield"
+    }
   },
   ranking: {
     thresholds: { high: 80, medium: 65 },

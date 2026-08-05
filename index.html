@@ -49,13 +49,13 @@
   </nav>
   <main id="finder" class="explorer-shell">
     <div class="explorer-main">
-      <button id="toggleFilters" class="filter-toggle" type="button" aria-expanded="true" aria-controls="communityFilters"><i data-lucide="sliders-horizontal" aria-hidden="true"></i><span>Hide community questions</span></button>
+      <button id="toggleFilters" class="filter-toggle" type="button" aria-expanded="true" aria-controls="communityFilters"><i data-lucide="sliders-horizontal" aria-hidden="true"></i><span>Hide questions</span></button>
 
       <form id="communityFilters" class="filters wizard-flow open" aria-labelledby="filterTitle">
         <header class="wizard-heading">
           <p class="eyebrow">Find programs</p>
           <h2 id="filterTitle">First, choose your state or territory.</h2>
-          <p id="filterNote">We will show state, regional, and national programs that cover your selection. Match levels use the priorities you choose next; they do not decide eligibility.</p>
+          <p id="filterNote">Choose a state or territory. We will show programs that cover it. Then choose your priorities to rank the list. A match is not an eligibility decision.</p>
         </header>
 
         <section class="wizard-panel" data-wizard-panel="1" aria-labelledby="communityPanelTitle">
@@ -67,7 +67,7 @@
             <label class="field field-wide" for="stateSelect"><span>State, D.C., or U.S. territory <b aria-hidden="true">*</b></span><select id="stateSelect" aria-describedby="communityRequirement communityCoverage" required></select></label>
           </div>
           <p id="communityRequirement" class="required-note">A state or territory is required before you continue.</p>
-          <p id="communityCoverage" class="coverage-note">Regional programs appear only when their documented service area includes your selection. Always confirm current eligibility on the program website.</p>
+          <p id="communityCoverage" class="coverage-note">Regional programs appear only in the states and territories they serve. Check the program website before you apply.</p>
           <p id="profileStatus" class="status-message" role="status" aria-live="polite">Choose a state or territory first.</p>
         </section>
         <section class="wizard-panel" data-wizard-panel="2" aria-labelledby="priorityPanelTitle">
@@ -203,7 +203,7 @@
       <p class="eyebrow">Optional Windows tool</p>
       <h2 id="rercieTitle">Meet RERC-e, your local grant-writing guide.</h2>
       <p>RERC-e helps you review likely matches and start a grant draft with your own notes.</p>
-      <p>The setup guide explains each step. You do not need an account, command line, or AI key to write on your computer. RERC-e checks its public community file first. If your community is not there, you can add a free Census API key and ask RERC-e to check Census.</p>
+      <p>The guide walks you through setup. You do not need an account, command line, or AI key. RERC-e checks its built-in community file first. If needed, you can add a free Census API key.</p>
       <p>RERC-e is a community-built companion published by Timberwing Systems, an EPR, P.C. initiative. It is not an EPA grant program, does not determine eligibility, and does not submit applications.</p>
       <p class="writer-note">The first time you use RERC-e, it downloads Google Gemma (about 0.81 GB). Before you apply, verify dates and rules on the official funding page.</p>
     </div>
@@ -219,11 +219,11 @@
     <div><strong>Recreation Economy <em>for</em> Rural Communities</strong><p>This community-built explorer is not an EPA grant program. Program rules and dates can change. Check the funder's page before you apply or make a decision.</p></div>
     <a href="https://www.epa.gov/smartgrowth/recreation-economy-rural-communities" target="_blank" rel="noopener">Learn about RERC at EPA.gov</a>
   </footer>
-  <nav class="mobile-nav" aria-label="Explorer navigation">
-    <a href="#communityFilters" data-mobile-action="filters"><i data-lucide="map-pin" aria-hidden="true"></i><span>Community</span></a>
-    <a href="#matchesWorkspace"><i data-lucide="search" aria-hidden="true"></i><span>Matches</span></a>
-    <button type="button" data-mobile-action="saved"><span class="mobile-icon"><i data-lucide="bookmark" aria-hidden="true"></i><b id="mobileSavedCount">0</b></span><span>Saved</span></button>
-    <a href="#planWorkspace"><i data-lucide="list-checks" aria-hidden="true"></i><span>Plan</span></a>
+  <nav id="plannerMobileNav" class="mobile-nav" aria-label="Explorer navigation">
+    <a href="#communityFilters" data-mobile-action="filters" data-label-key="start"><i data-lucide="map-pin" aria-hidden="true"></i><span>Start</span></a>
+    <a href="#matchesWorkspace" data-label-key="matches"><i data-lucide="search" aria-hidden="true"></i><span>Matches</span></a>
+    <button type="button" data-mobile-action="saved" data-label-key="saved"><span class="mobile-icon"><i data-lucide="bookmark" aria-hidden="true"></i><b id="mobileSavedCount">0</b></span><span>Saved</span></button>
+    <a href="#planWorkspace" data-label-key="myPlan"><i data-lucide="list-checks" aria-hidden="true"></i><span>Plan</span></a>
   </nav>
 
   <dialog id="compareDialog" class="app-dialog" aria-labelledby="compareTitle">

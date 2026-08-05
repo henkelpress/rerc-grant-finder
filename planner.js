@@ -92,12 +92,15 @@
       title: "Title",
       notesExcluded: "Project title and notes are never placed in share links.",
       localOnly: "Saved on this device only.",
+      start: "Start",
+      matches: "Matches",
       explore: "Explore",
       filters: "Filters",
       myPlan: "My plan",
       choicesPage: "{label}: choices {start}-{end} of {total}",
       applicantChoices: "Applicant choices",
       topicChoices: "Topic choices",
+      startupError: "The planner could not start in this browser.",
     },
     es: {
       saved: "Guardado",
@@ -172,12 +175,15 @@
       title: "Título",
       notesExcluded: "El título y las notas nunca se incluyen en enlaces compartidos.",
       localOnly: "Guardado solo en este dispositivo.",
+      start: "Inicio",
+      matches: "Opciones",
       explore: "Explorar",
       filters: "Filtros",
       myPlan: "Mi plan",
       choicesPage: "{label}: opciones {start}-{end} de {total}",
       applicantChoices: "Opciones de solicitante",
       topicChoices: "Opciones de tema",
+      startupError: "El planificador no pudo iniciar en este navegador.",
     },
   };
 
@@ -683,7 +689,7 @@
         const select = document.createElement("select");
         select.id = selectId;
         select.dataset.roadmapId = itemId(item);
-        select.setAttribute("aria-label", textValue(item.title, 500) + " phase");
+        select.setAttribute("aria-label", textValue(item.title, 500) + " " + t("stage"));
         PHASES.forEach(function (value) {
           const option = document.createElement("option");
           option.value = value;
@@ -995,7 +1001,7 @@
     if (toggle) {
       toggle.setAttribute("aria-expanded", "true");
       const label = toggle.querySelector("span");
-      if (label) label.textContent = "Hide community questions";
+      if (label) label.textContent = "Hide questions";
     }
     if (typeof state.showWizardStep === "function") state.showWizardStep(1, { focus: false });
     if (focusMissing) {
@@ -1226,8 +1232,8 @@
       nav.querySelectorAll("a, button").forEach(function (item) {
         const href = item.getAttribute("href") || "";
         if (item.dataset.mobileAction === "saved") item.dataset.labelKey = "saved";
-        else if (href === "#communityFilters") { item.dataset.labelKey = "filters"; item.dataset.mobileAction = "filters"; }
-        else if (href === "#matchesWorkspace") { item.dataset.labelKey = "explore"; item.dataset.mobileAction = "explore"; }
+        else if (href === "#communityFilters") { item.dataset.labelKey = "start"; item.dataset.mobileAction = "filters"; }
+        else if (href === "#matchesWorkspace") { item.dataset.labelKey = "matches"; item.dataset.mobileAction = "explore"; }
         else if (href === "#planWorkspace") { item.dataset.labelKey = "myPlan"; item.dataset.mobileAction = "plan"; }
       });
     }
@@ -1885,6 +1891,7 @@
 
   function applyLanguage() {
     document.documentElement.lang = state.language;
+    if (window.RERCI18N) window.RERCI18N.setLanguage(state.language);
     const labels = {
       showSavedOnly: state.savedOnly ? "allMatches" : "savedOnly",
       openCompare: "compare",
@@ -1938,7 +1945,6 @@
       });
     }
     refreshWorkspaceUI();
-    if (window.RERCI18N) window.RERCI18N.setLanguage(state.language);
   }
 
   async function setLanguage(language) {
@@ -2129,7 +2135,7 @@
     initialize().catch(function (error) {
       reportError(error);
       document.documentElement.classList.add("rerc-planner-error");
-      setStatus("shareStatus", "The local planner could not start in this browser.", "error");
+      setStatus("shareStatus", t("startupError"), "error");
     });
   }
 

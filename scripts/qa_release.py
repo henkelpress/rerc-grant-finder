@@ -277,7 +277,7 @@ def main() -> int:
         csv_rows = list(csv.DictReader(handle))
     csv_row_count = len(csv_rows)
     assert csv_row_count == 1302
-    assert {"Covered States", "Coverage Note", "Coverage Source URL", "Official URL"} <= set(csv_rows[0])
+    assert {"Covered States", "Coverage Note", "Coverage Source URL", "Type of Help", "Official URL"} <= set(csv_rows[0])
     assert "Why It May Help" not in csv_rows[0]
     assert sum(bool(row["Covered States"]) for row in csv_rows) == len(regional)
     assert sum(bool(row["Coverage Source URL"]) for row in csv_rows) == len(regional)
@@ -297,12 +297,16 @@ def main() -> int:
         assert "Microsoft Office Word" in app_xml and "Macintosh" not in app_xml
         assert "<ns0:Pages>" not in app_xml and "<Pages>" not in app_xml
         assert f"{DATE_TAG}T00:00:00Z" in core_xml
+        assert "Timberwing Systems, an EPR, P.C. initiative" in core_xml
+        assert "not an EPA grant program" in document_xml
     with zipfile.ZipFile(static_xlsx) as package:
         names = set(package.namelist())
         assert not any(name.startswith("xl/comments") for name in names)
         assert not any(b"<f" in package.read(name) for name in names if name.startswith("xl/worksheets/sheet") and name.endswith(".xml"))
         workbook_xml = package.read("xl/workbook.xml").decode("utf-8")
         assert all(name in workbook_xml for name in ("Funding", "Resources", "Community Examples"))
+        core_xml = package.read("docProps/core.xml").decode("utf-8")
+        assert "Timberwing Systems, an EPR, P.C. initiative" in core_xml
     sha256 = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
     package_report = json.loads((downloads / f"RERC_Community_Explorer_QA_{DATE_TAG}.json").read_text(encoding="utf-8"))
     assert csv_row_count == package_report["records"]

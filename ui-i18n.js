@@ -9,6 +9,15 @@
 
   const ES = {
     "Start with your state": "Empiece con su estado",
+    "Start": "Inicio",
+    "Choose a state or territory. We will show programs that cover it. Then choose your priorities to rank the list. A match is not an eligibility decision.": "Elija un estado o territorio. Mostraremos los programas que lo cubren. Luego elija sus prioridades para ordenar la lista. Una coincidencia no determina la elegibilidad.",
+    "Regional programs appear only in the states and territories they serve. Check the program website before you apply.": "Los programas regionales aparecen solo en los estados y territorios que atienden. Revise el sitio del programa antes de solicitar.",
+    "The guide walks you through setup. You do not need an account, command line, or AI key. RERC-e checks its built-in community file first. If needed, you can add a free Census API key.": "La gu\u00eda le muestra c\u00f3mo instalar RERC-e. No necesita una cuenta, comandos ni una clave de IA. RERC-e revisa primero su archivo de comunidades. Si hace falta, puede agregar una clave gratuita del Censo.",
+    "Community examples from across the country": "Ejemplos de comunidades de todo el pa\u00eds",
+    "Examples may come from other states. Your topic choices help rank them. Match levels do not confirm eligibility or results.": "Los ejemplos pueden ser de otros estados. Sus temas ayudan a ordenarlos. El nivel de coincidencia no confirma la elegibilidad ni los resultados.",
+    "Match levels compare your priorities. They do not confirm eligibility.": "Los niveles de coincidencia comparan sus prioridades. No confirman la elegibilidad.",
+    "Examples from communities across the country": "Ejemplos de comunidades de todo el pa\u00eds",
+    "Use your topic choices to find useful ideas. An example may come from another state.": "Use sus temas para encontrar ideas \u00fatiles. Un ejemplo puede ser de otro estado.",
     "Choose your state": "Elija su estado",
     "Location": "Ubicaci\u00f3n",
     "Find programs": "Buscar programas",
@@ -262,6 +271,18 @@
     }
     match = value.match(/^(\d+) total matches; (\d+) cards displayed for (.+)\.$/);
     if (match) return `${match[1]} opciones en total; se muestran ${match[2]} tarjetas para ${match[3]}.`;
+    match = value.match(/^(\d+) total matches; (\d+) cards displayed\.$/);
+    if (match) return `${match[1]} opciones en total; se muestran ${match[2]} tarjetas.`;
+    match = value.match(/^Funding and resources for (.+), plus community examples$/);
+    if (match) return `Financiamiento y recursos para ${match[1]}, m\u00e1s ejemplos comunitarios`;
+    match = value.match(/^(.+) - Due today$/);
+    if (match) return `${match[1]} - Vence hoy`;
+    match = value.match(/^(.+) - (\d+) days? left$/);
+    if (match) return `${match[1]} - Quedan ${match[2]} d\u00edas`;
+    match = value.match(/^\+(\d+) more$/);
+    if (match) return `+${match[1]} m\u00e1s`;
+    match = value.match(/^View (.+) program details$/);
+    if (match) return `Ver detalles del programa ${match[1]}`;
     match = value.match(/^Search: (.+)$/);
     if (match) return `Búsqueda: ${match[1]}`;
     match = value.match(/^(\d+) results?$/);
@@ -357,7 +378,12 @@
     observer.observe(document.body, { childList: true, subtree: true, characterData: true });
   }
 
-  window.RERCI18N = { apply, setLanguage, getLanguage: () => language };
+  window.RERCI18N = {
+    apply,
+    setLanguage,
+    getLanguage: () => language,
+    translate: (value) => language === "es" ? translateTemplate(String(value || "")) : String(value || "")
+  };
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initialize, { once: true });
   } else {

@@ -22,6 +22,7 @@ People choose a state or territory, select All, Funding, Resources, or Case stud
 - `app.js`
 - `site-config.js`
 - `data.js`
+- `maintenance/catalog.csv` and `scripts/catalog_maintenance.py`
 - `case_studies.js`
 - `assets/`
 - `downloads/`
@@ -52,6 +53,7 @@ The reviewed source and Timberwing Systems license are in `rercie/`. Model weigh
 
 ## Release QA
 
+- `python scripts/catalog_maintenance.py check`
 - `python scripts/qa_release.py`
 - `python scripts/qa_case_studies.py`
 - `python scripts/qa_geography_coverage.py`
@@ -60,7 +62,7 @@ The reviewed source and Timberwing Systems license are in `rercie/`. Model weigh
 
 ## Automated Checks
 
-The `Daily Grant and Resource Update Check` workflow checks every catalog source each day, compares available source signals such as status, redirects, ETag, last-modified date, and content length with the prior run, and uploads a review report. The `Daily Federal Opportunity Discovery` workflow searches the public Grants.gov API each day and uploads a review queue of posted and forecasted opportunities related to rural development, outdoor recreation, trails, tourism, community development, economic development, and technical assistance.
+The `Daily Grant and Resource Update Check` workflow checks every catalog source and regional coverage source each day, compares available source signals such as status, redirects, ETag, last-modified date, and content length with the prior run, and uploads a review report. The `Daily Federal Opportunity Discovery` workflow searches the public Grants.gov API each day and uploads a review queue of posted and forecasted opportunities related to rural development, outdoor recreation, trails, tourism, community development, economic development, and technical assistance.
 
 New opportunities, changed source signals, and status changes require human review before they enter the public catalog. The monitoring workflows do not publish unreviewed records.
 

@@ -28,13 +28,13 @@ def load_urls() -> list[str]:
     for prefix, collection_key, url_key in formats:
         if raw.startswith(prefix) and raw.endswith(";"):
             data = json.loads(raw[len(prefix) : -1])
-            return sorted(
-                {
-                    str(item.get(url_key, "")).strip()
-                    for item in data.get(collection_key, [])
-                    if str(item.get(url_key, "")).strip()
-                }
-            )
+            urls = set()
+            for item in data.get(collection_key, []):
+                for field in (url_key, "coverage_source_url"):
+                    value = str(item.get(field, "")).strip()
+                    if value:
+                        urls.add(value)
+            return sorted(urls)
     raise ValueError("data.js is not in a recognized public catalog format")
 
 

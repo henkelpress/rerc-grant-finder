@@ -31,7 +31,7 @@ const defaultApplicantOptions = [
   ["school|schools|college|colleges|university|universities|library|libraries|museum|museums", "School, library, or museum"],
   ["utility|utilities|authority|authorities|district|districts", "Utility or public authority"],
   ["landowner|landowners|individual|individuals|families", "Landowner or individual"],
-  ["eligible|applicant|applicants|public agency|public agencies|sponsor|sponsors|organization|organizations|customer|customers|owner|owners|student|students|farmer|farmers|fishermen|worker|workers|sportsmen|resident|residents|member|members|partner|partners|representative|representatives|planner|planners|consultant|consultants|recipient|recipients|institution|institutions|entity|entities|government|governments|community|communities|state|states|varies|see program|check with the program", "Other or varies by program"]
+  ["__other__", "Other or varies by program"]
 ];
 
 const defaultTopicOptions = [
@@ -57,6 +57,8 @@ const topicOptions = Array.isArray(filterConfig.topics) && filterConfig.topics.l
   ? filterConfig.topics : defaultTopicOptions;
 const stages = Array.isArray(filterConfig.stages) && filterConfig.stages.length
   ? filterConfig.stages : defaultStages;
+const stageAliases = filterConfig.stageAliases || {};
+const specificApplicantGroups = applicantOptions.filter(([value]) => value !== "__other__").map(([value]) => value);
 
 const elements = Object.fromEntries([
   "stateSelect","keywordSearch","applicantOptions","topicOptions","stageSelect",
@@ -183,9 +185,35 @@ function matchesAny(text, groups) {
   }));
 }
 
+function matchesApplicants(text, groups) {
+  if (!groups.length) return true;
+  const explicit = groups.filter((group) => group !== "__other__");
+  if (explicit.length && matchesAny(text, explicit)) return true;
+  if (!groups.includes("__other__")) return false;
+  return !specificApplicantGroups.some((group) => matchesAny(text, [group]));
+}
+
+function matchesStage(item, selectedStage) {
+  if (selectedStage === "Any step") return true;
+  const terms = stageAliases[selectedStage] || selectedStage.toLowerCase();
+  return matchesAny(cleanText(item.project_stage).toLowerCase(), [terms]);
+}
+
+function isClosed(item) {
+  if (cleanText(item.status).toLowerCase() === "cycle closed") return true;
+  return /\b(?:cycle|round|application(?: period)?|applications?)\b.{0,35}\b(?:closed|ended|not accepting)\b|\bnot accepting applications\b/i.test(cleanText(item.deadline_or_availability));
+}
+
 function isNational(geography) {
   const value = cleanText(geography).toLowerCase();
   return ["national", "nationwide", "united states", "all states", "federal"].some((term) => value.includes(term));
+}
+
+function isNationalForPlace(item, selectedPlace) {
+  if (!isNational(item.geography)) return false;
+  if (!territoryPlaces.has(selectedPlace)) return true;
+  const coverageText = [item.geography, item.eligible_users, item.coverage_note].join(" ").toLowerCase();
+  return /territor|insular|island area/.test(coverageText) || matchesAny(coverageText, [selectedPlace.toLowerCase()]);
 }
 
 function appliesToPlace(geography, selectedPlace) {
@@ -209,9 +237,8 @@ const appalachianPlaces = new Set([
 
 function isBroadArea(item, selectedPlace) {
   const geography = cleanText(item.geography).toLowerCase();
-  if (geography.includes("multi-state")) return false;
   if (geography.includes("appalachian region")) return appalachianPlaces.has(selectedPlace);
-  return ["north america", "see program", "select localities across the country"].some((term) => geography.includes(term));
+  return false;
 }
 
 function matchesGeography(item, selectedPlace) {
@@ -221,9 +248,8 @@ function matchesGeography(item, selectedPlace) {
   if (geography.toLowerCase().includes("multi-state")) return regionalCoverage.includes(selectedPlace);
   if (regionalCoverage.length) return regionalCoverage.includes(selectedPlace);
   if (appliesToPlace(geography, selectedPlace)) return true;
-  if (isNational(geography)) {
-    return !territoryPlaces.has(selectedPlace) || /(territor|insular|island area)/i.test(geography);
-  }
+  if (isNationalForPlace(item, selectedPlace)) return true;
+  if (isNational(geography)) return false;
   return isBroadArea(item, selectedPlace);
 }
 
@@ -249,15 +275,15 @@ function scoreItem(item, text, factors) {
     if (selectedStage !== "Any step" && cleanText(item.project_stage).toLowerCase() === selectedStage.toLowerCase()) score += rankingWeights.caseStage ?? 8;
     if (item.source_url) score += rankingWeights.caseSource ?? 5;
   } else {
-    if (item.status === "Open when checked" || item.status === "Available") score += rankingWeights.available ?? 18;
-    if (item.status === "Recurring") score += rankingWeights.recurring ?? 14;
-    if (item.status === "Cycle closed") score += rankingWeights.closed ?? -18;
+    if (isClosed(item)) score += rankingWeights.closed ?? -18;
+    else if (item.status === "Open when checked" || item.status === "Available") score += rankingWeights.available ?? 18;
+    else if (item.status === "Recurring") score += rankingWeights.recurring ?? 14;
     if (selectedPlace && appliesToPlace(item.geography, selectedPlace)) score += rankingWeights.selectedState ?? 15;
     if (selectedPlace && coveredStates(item).includes(selectedPlace)) score += rankingWeights.regional ?? 12;
-    if (selectedPlace && isNational(cleanText(item.geography))) score += rankingWeights.nationwide ?? 8;
-    if (applicants.length && matchesAny(cleanText(item.eligible_users).toLowerCase(), applicants)) score += rankingWeights.applicant ?? 12;
+    if (selectedPlace && isNationalForPlace(item, selectedPlace)) score += rankingWeights.nationwide ?? 8;
+    if (applicants.length && matchesApplicants(cleanText(item.eligible_users).toLowerCase(), applicants)) score += rankingWeights.applicant ?? 12;
     if (topics.length) score += Math.min(rankingWeights.topicMaximum ?? 18, topics.filter((group) => matchesAny(topicText, [group])).length * (rankingWeights.topicEach ?? 7));
-    if (selectedStage !== "Any step") score += cleanText(item.project_stage).toLowerCase() === "mixed" ? (rankingWeights.mixedStage ?? 4) : (rankingWeights.exactStage ?? 10);
+    if (selectedStage !== "Any step") score += cleanText(item.project_stage).toLowerCase() === "mixed" ? (rankingWeights.mixedStage ?? 4) : (matchesStage(item, selectedStage) ? (rankingWeights.exactStage ?? 10) : 0);
     if (item.summary) score += rankingWeights.summary ?? 3;
   }
   return Math.max(1, Math.min(99, score));
@@ -272,15 +298,15 @@ function getMatches() {
 
   const matches = catalog.filter((item) => {
     if (mode !== "All" && item.item_type !== mode) return false;
-    if (!elements.includeClosed.checked && item.status === "Cycle closed") return false;
+    if (!elements.includeClosed.checked && isClosed(item)) return false;
     if (!matchesGeography(item, selectedPlace)) return false;
     const text = corpus(item);
     if (keyword && !text.includes(keyword)) return false;
-    if (item.item_type !== "Case Study" && !matchesAny(cleanText(item.eligible_users).toLowerCase(), applicants)) return false;
+    if (item.item_type !== "Case Study" && !matchesApplicants(cleanText(item.eligible_users).toLowerCase(), applicants)) return false;
     if (!matchesAny(topicCorpus(item), topics)) return false;
     const stageText = cleanText(item.project_stage).toLowerCase();
     if (selectedStage !== "Any step") {
-      const exactStage = matchesAny(stageText, [selectedStage.toLowerCase()]);
+      const exactStage = matchesStage(item, selectedStage);
       const broadFundingStage = item.item_type !== "Case Study" && stageText === "mixed";
       if (!exactStage && !broadFundingStage) return false;
     }
@@ -415,6 +441,10 @@ function fundingTimingCounts(items) {
   });
   return counts;
 }
+function uiText(value) {
+  return window.RERCI18N?.translate ? window.RERCI18N.translate(value) : value;
+}
+
 function renderNextDeadline(items) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -436,7 +466,8 @@ function renderNextDeadline(items) {
   }
 
   const days = Math.round((next.date - today) / 86400000);
-  const dateText = new Intl.DateTimeFormat("en-US", {
+  const locale = document.documentElement.lang === "es" ? "es-US" : "en-US";
+  const dateText = new Intl.DateTimeFormat(locale, {
     year: "numeric",
     month: "long",
     day: "numeric"
@@ -444,7 +475,7 @@ function renderNextDeadline(items) {
   const source = safeUrl(next.item.source_url);
   elements.nextDeadlinePanel.classList.remove("empty");
   elements.nextDeadlineDate.textContent = dateText;
-  elements.nextDeadlineMeta.textContent = `${next.item.title} - ${days === 0 ? "Due today" : `${days} day${days === 1 ? "" : "s"} left`}`;
+  elements.nextDeadlineMeta.textContent = uiText(`${next.item.title} - ${days === 0 ? "Due today" : `${days} day${days === 1 ? "" : "s"} left`}`);
   elements.nextDeadlineLink.hidden = !source;
   if (source) {
     elements.nextDeadlineLink.href = source;
@@ -550,7 +581,6 @@ function chooseFundingView(nextView) {
 function hasSubstantiveAnswers() {
   const factors = selectedMatchFactors();
   return Boolean(
-    factors.selectedPlace ||
     factors.applicants.length || factors.topics.length || factors.selectedStage !== "Any step" ||
     elements.keywordSearch.value.trim()
   );
@@ -595,7 +625,7 @@ function renderCard(item, headingLevel = 3) {
 
   const coverage = coveredStates(item);
   const geography = coverage.length ? `Multi-State: ${coverage.join(", ")}` : item.geography;
-  const classes = ["result-card", item.item_type === "Resource" ? "resource" : "funding", item.status === "Cycle closed" ? "closed" : ""].join(" ");
+  const classes = ["result-card", item.item_type === "Resource" ? "resource" : "funding", isClosed(item) ? "closed" : ""].join(" ");
   const timing = item.deadline_or_availability || item.amount_or_cost || "Check current availability";
   const timingInfo = item.item_type === "Funding" ? fundingTiming(item) : null;
   return `<article class="${classes}" data-item-id="${escapeHtml(itemId)}">
@@ -672,10 +702,14 @@ function render() {
     "Case Study": "Case studies"
   }[mode];
 
-  elements.communityTitle.textContent = `${modeLabel} for ${label}`;
+  elements.communityTitle.textContent = mode === "Case Study"
+    ? "Community examples from across the country"
+    : (mode === "All" ? "Funding and resources for " + label + ", plus community examples" : modeLabel + " for " + label);
   elements.communitySummary.textContent = currentMatches.length
     ? (hasSubstantiveAnswers()
-      ? "Match levels compare your answers. They do not confirm eligibility or guarantee that another community's approach will work in your place."
+      ? (mode === "Case Study" || mode === "All"
+        ? "Examples may come from other states. Your topic choices help rank them. Match levels do not confirm eligibility or results."
+        : "Match levels compare your priorities. They do not confirm eligibility.")
       : "These are starting points. Choose priorities to rank them for your needs.")
     : "Try fewer choices or a wider search.";
   elements.matchCount.textContent = currentMatches.length.toLocaleString();
@@ -690,7 +724,7 @@ function render() {
   elements.results.hidden = calendarActive;
   if (calendarActive) renderFundingCalendar(fundingResults);
   elements.activeFilters.textContent = activeFilterSummary();
-  elements.matchAnnouncement.textContent = calendarActive ? `${fundingMatches} funding matches shown in calendar view for ${label}.` : `${currentMatches.length} total matches; ${visible.length} cards displayed for ${label}.`;
+  elements.matchAnnouncement.textContent = calendarActive ? `${fundingMatches} funding matches shown in calendar view for ${label}.` : `${currentMatches.length} total matches; ${visible.length} cards displayed.`;
   if (!visible.length) {
     elements.results.innerHTML = `<div class="empty-state"><h3>No matches yet</h3><p>Clear one or more answers, or turn on closed rounds to see future options.</p></div>`;
   } else if (mode === "All") {
@@ -700,7 +734,7 @@ function render() {
     elements.results.innerHTML = [
       renderGroup("Funding", "Ways to pay for the work", "Grants, loans, tax credits, and other funding options.", shownFunding, fundingMatches, "funding-group"),
       renderGroup("Resources", "Tools and technical help", "Guides, data, training, and hands-on support.", shownResources, resourceMatches, "resource-group"),
-      renderGroup("Case studies", "Examples from other communities", "Source-backed examples to help teams compare approaches and ask better questions.", shownCases, caseMatches, "case-group")
+      renderGroup("Case studies", "Examples from communities across the country", "Use your topic choices to find useful ideas. An example may come from another state.", shownCases, caseMatches, "case-group")
     ].join("");
   } else {
     elements.results.innerHTML = visible.map((item) => renderCard(item, 3)).join("");
@@ -991,7 +1025,11 @@ window.RERCExplorer = {
   getMode: () => mode,
   setStateSelection,
   chooseFundingView,
-  getFundingView: () => fundingView
+  getFundingView: () => fundingView,
+  matchesGeography,
+  matchesStage,
+  matchesApplicants,
+  isClosed
 };
 
 initialize();

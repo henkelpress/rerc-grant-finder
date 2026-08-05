@@ -67,6 +67,7 @@ def normalized_records() -> list[dict[str, str]]:
                 "Community Type": clean(item.get("case_place_type")),
                 "Best For": clean(item.get("eligible_users")),
                 "Project Stage": clean(item.get("project_stage")),
+                "Type of Help": clean(item.get("support_type")),
                 "Topics": clean(item.get("topic_tags")),
                 "Summary": clean(item.get("summary")),
                 "Amount or Cost": clean(item.get("amount_or_cost")),
@@ -170,6 +171,7 @@ def add_record_table(document: Document, row: dict[str, str], index: int) -> Non
         ("Coverage note", row["Coverage Note"]),
         ("Coverage source", row["Coverage Source URL"]),
         ("Project stage", row["Project Stage"]),
+        ("Type of help", row["Type of Help"]),
         ("Topics", row["Topics"]),
         ("Amount or cost", row["Amount or Cost"]),
         ("Match or cost", row["Match or Cost"]),
@@ -228,8 +230,8 @@ def build_docx(records: list[dict[str, str]], path: Path) -> None:
     configure_document(document)
     document.core_properties.title = "RERC Community Explorer: Funding, Resources, and Community Examples"
     document.core_properties.subject = "Public funding, technical resources, and official community examples"
-    document.core_properties.author = "Recreation Economy for Rural Communities"
-    document.core_properties.last_modified_by = "Recreation Economy for Rural Communities"
+    document.core_properties.author = "Timberwing Systems, an EPR, P.C. initiative"
+    document.core_properties.last_modified_by = "Timberwing Systems, an EPR, P.C. initiative"
     document.core_properties.comments = ""
     artifact_timestamp = datetime.fromisoformat(DATE_TAG).replace(tzinfo=timezone.utc)
     document.core_properties.created = artifact_timestamp
@@ -262,7 +264,7 @@ def build_docx(records: list[dict[str, str]], path: Path) -> None:
     note = document.add_paragraph()
     note.add_run("How to use this appendix. ").bold = True
     note.add_run(
-        "Check current funding rules on the official page before applying. Community examples show approaches used elsewhere; they do not guarantee eligibility or results."
+        "This independent tool was prepared by Timberwing Systems, an EPR, P.C. initiative. It is not an EPA grant program. Check current rules on the official page before applying. Community examples do not guarantee eligibility or results."
     )
     document.add_page_break()
 
@@ -276,7 +278,7 @@ def build_docx(records: list[dict[str, str]], path: Path) -> None:
             document.add_section(WD_SECTION.NEW_PAGE)
         document.add_heading(heading, level=1)
         matching = [row for row in records if row["Type"] == kind]
-        intro = document.add_paragraph(f"{len(matching):,} public records. Use the filters in the online explorer to make a shorter community-specific appendix.")
+        intro = document.add_paragraph(f"{len(matching):,} public records. Use the online explorer to make a shorter appendix for your state and project topics.")
         intro.runs[0].italic = True
         for index, row in enumerate(matching, 1):
             add_record_table(document, row, index)
@@ -298,8 +300,9 @@ def add_sheet(workbook: Workbook, title: str, rows: list[dict[str, str]]) -> Non
     sheet.auto_filter.ref = sheet.dimensions
     sheet.sheet_view.showGridLines = False
     widths = {
-        "A": 19, "B": 42, "C": 30, "D": 20, "E": 18, "F": 22, "G": 24, "H": 21,
-        "I": 42, "J": 18, "K": 42, "L": 70, "M": 55, "N": 18, "O": 18, "P": 55, "Q": 15, "R": 24,
+        "A": 19, "B": 42, "C": 30, "D": 20, "E": 32, "F": 24, "G": 42, "H": 55,
+        "I": 55, "J": 22, "K": 20, "L": 55, "M": 24, "N": 28, "O": 55, "P": 70,
+        "Q": 24, "R": 20, "S": 55, "T": 16, "U": 26,
     }
     for column, width in widths.items():
         sheet.column_dimensions[column].width = width
@@ -330,6 +333,8 @@ def build_xlsx(records: list[dict[str, str]], path: Path) -> None:
     readme["B5"] = DATE_TAG
     readme["A7"] = "Use"
     readme["B7"] = "Filter each sheet. Open the official URL to verify current details before applying or citing an example."
+    readme["A8"] = "Publisher"
+    readme["B8"] = "Timberwing Systems, an EPR, P.C. initiative. Independent tool; not an EPA grant program."
     readme["A9"] = "Public records"
     readme["B9"] = len(records)
     readme["A10"] = "Funding"
@@ -348,8 +353,8 @@ def build_xlsx(records: list[dict[str, str]], path: Path) -> None:
     add_sheet(workbook, "Community Examples", [row for row in records if row["Type"] == "Community Example"])
     workbook.properties.title = "RERC Community Explorer Master"
     workbook.properties.subject = "Funding, resources, and community examples"
-    workbook.properties.creator = "Recreation Economy for Rural Communities"
-    workbook.properties.lastModifiedBy = "Recreation Economy for Rural Communities"
+    workbook.properties.creator = "Timberwing Systems, an EPR, P.C. initiative"
+    workbook.properties.lastModifiedBy = "Timberwing Systems, an EPR, P.C. initiative"
     workbook.save(path)
 
 
@@ -394,7 +399,7 @@ def validate(records: list[dict[str, str]], docx: Path, xlsx: Path, csv_path: Pa
         "resources": type_counts["Resource"],
         "community_examples": type_counts["Community Example"],
         "catalog_source_commit": source_commit,
-        "release_binding_note": "This is the source commit used to generate the files. See the GitHub release and RELEASE_MANIFEST.json for the final release commit.",
+        "release_binding_note": "This is the source commit used to generate the files. The QA report records the generated file hashes.",
         "site_sha256": {
             name: git_blob_sha256(source_commit, name)
             for name in ("index.html", "styles.css", "rercie.css", "app.js", "planner.js", "ui-i18n.js", "site-config.js", "data.js", "case_studies.js", "maintenance/multistate_coverage.json", "favicon.svg", "vendor/jszip.min.js", "vendor/lucide.min.js", "assets/hero-outdoor.jpg", "assets/rerc-e-eagle.jpg", "README.md")

@@ -4,14 +4,23 @@ This site uses a state-or-territory starting point. It does not claim to determi
 
 ## Routine catalog edits
 
-Edit the matching record in `data.js`. Keep these fields current and public-facing:
+Edit `maintenance/catalog.csv` in Excel. One row equals one funding or resource record. Keep these fields current and public-facing:
 
-- `status`: plain-language current state, such as `Open when checked`, `Recurring`, `Cycle closed`, or `Available`.
-- `deadline_or_availability`: the next known deadline; otherwise use `Rolling`, `Ongoing`, or a clear next-cycle note.
-- `last_checked`: review date in `YYYY-MM-DD` format.
-- `eligible_users`: the public `Who` statement shown on each card.
-- `summary`: a short factual description.
+- `status`: current state, such as `Open when checked`, `Recurring`, `Cycle closed`, or `Available`;
+- `deadline_or_availability`: the next known deadline, `Rolling`, `Ongoing`, or a clear next-cycle note;
+- `last_checked`: review date in `YYYY-MM-DD` format;
+- `eligible_users`: the public `Who` statement shown on each card;
+- `summary`: a short factual description;
 - `source_url`: the current official program website.
+
+After saving the CSV, run:
+
+```powershell
+python scripts/catalog_maintenance.py import
+python scripts/catalog_maintenance.py check
+```
+
+The import command validates all 826 record IDs, updates `data.js`, and normalizes the CSV. To discard spreadsheet edits and rebuild the CSV from the public catalog, run `python scripts/catalog_maintenance.py export`.
 
 Never paste email chains, staff notes, private paths, API keys, or unreviewed claims into public records.
 
@@ -47,6 +56,7 @@ Match levels only rank the programs already allowed by geography. They do not de
 Run these checks before publication:
 
 ```powershell
+python scripts/catalog_maintenance.py check
 python scripts/sync_multistate_coverage.py
 python scripts/qa_geography_coverage.py
 python scripts/qa_funding_deadlines.py

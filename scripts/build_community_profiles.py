@@ -22,7 +22,7 @@ from urllib.request import Request, urlopen
 
 
 SCHEMA_VERSION = "1.0.0"
-DEFAULT_ENV_FILE = Path(r"C:\Users\hinkl\.env")
+DEFAULT_ENV_FILE = Path(os.environ.get("RERC_ENV_FILE", Path.home() / ".env"))
 ACS_ENDPOINT = "https://api.census.gov/data/2024/acs/acs5/profile"
 ISLAND_ENDPOINTS = {
     "dpas": {

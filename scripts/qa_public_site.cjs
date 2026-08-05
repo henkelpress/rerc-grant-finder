@@ -103,21 +103,40 @@ async function main() {
       psegExcluded: !oregonIds.includes("RERC-FND-0269")
     };
     await selectStateFromAnyPhase(page, "New Jersey");
+    await page.evaluate(() => { const control = document.getElementById("includeClosed"); control.checked = true; control.dispatchEvent(new Event("change", { bubbles: true })); });
     const newJerseyIds = await resultIds(page);
     checks.newJerseyRegional = {
       pseg: newJerseyIds.includes("RERC-FND-0269"),
       craft3Excluded: !newJerseyIds.includes("RERC-FND-0255")
     };
+    await page.evaluate(() => { const control = document.getElementById("includeClosed"); control.checked = false; control.dispatchEvent(new Event("change", { bubbles: true })); });
     await selectStateFromAnyPhase(page, "Puerto Rico");
     const puertoRicoIds = await resultIds(page);
     checks.territoryRegional = {
       coralFund: puertoRicoIds.includes("RERC-FND-0261"),
       insularOiaExcluded: !["RERC-FND-0257", "RERC-FND-0262", "RERC-FND-0265", "RERC-FND-0267", "RERC-FND-0648"].some((id) => puertoRicoIds.includes(id))
     };
+    checks.runtimeGeography = await page.evaluate(() => {
+      const byId = new Map(window.RERCExplorer.catalog.map((item) => [item.item_id, item]));
+      const territories = ["American Samoa", "Guam", "Northern Mariana Islands", "Puerto Rico", "U.S. Virgin Islands"];
+      const territoryNationalIds = ["RERC-FND-0288", "RERC-FND-0287", "RERC-FND-0273", "RERC-RES-0037", "RERC-RES-0045"];
+      const reachableIds = ["RERC-RES-NEW-2026-015", "RERC-RES-NEW-2026-018", "RERC-RES-NEW-2026-020", "RERC-RES-NEW-2026-031"];
+      return {
+        territoryNational: territoryNationalIds.every((id) => territories.every((place) => window.RERCExplorer.matchesGeography(byId.get(id), place))),
+        formerlyUnreachable: reachableIds.every((id) => ["Virginia", "Alaska", "Hawaii", "Puerto Rico"].some((place) => window.RERCExplorer.matchesGeography(byId.get(id), place))),
+        fiveStarBounded: window.RERCExplorer.matchesGeography(byId.get("RERC-FND-0476"), "Puerto Rico")
+          && window.RERCExplorer.matchesGeography(byId.get("RERC-FND-0476"), "U.S. Virgin Islands")
+          && !window.RERCExplorer.matchesGeography(byId.get("RERC-FND-0476"), "Guam"),
+        stages: window.RERCExplorer.matchesStage(byId.get("RERC-FND-0282"), "Early Design")
+          && window.RERCExplorer.matchesStage(byId.get("RERC-FND-0282"), "Construction"),
+        otherApplicant: !window.RERCExplorer.matchesApplicants(byId.get("RERC-FND-0007").eligible_users.toLowerCase(), ["__other__"])
+      };
+    });
     check("regional_coverage", Object.values(checks.virginiaRegional).every(Boolean)
       && Object.values(checks.oregonRegional).every(Boolean)
       && Object.values(checks.newJerseyRegional).every(Boolean)
-      && Object.values(checks.territoryRegional).every(Boolean));
+      && Object.values(checks.territoryRegional).every(Boolean)
+      && Object.values(checks.runtimeGeography).every(Boolean));
 
     await selectStateFromAnyPhase(page, "Virginia");
     await page.evaluate(() => window.RERCExplorer.chooseMode("Funding"));
@@ -202,17 +221,26 @@ async function main() {
     const spanishOption = page.locator('#languageDialog input[value="es"]');
     await spanishOption.click(); await page.locator("#languageDialog").waitFor({ state: "hidden" }); await page.waitForTimeout(100);
     await page.evaluate(() => window.RERCExplorer.chooseMode("Funding"));
+    await page.waitForTimeout(150);
     await page.locator('article[data-item-id="RERC-FND-0271"] details').evaluate((node) => { node.open = true; });
+    const spanishDeadlineText = await page.locator("#nextDeadlineMeta").innerText();
+    const spanishMobileStartText = await page.locator('[data-mobile-action="filters"]').innerText();
     checks.spanish = {
+      deadlineText: spanishDeadlineText,
+      mobileStartText: spanishMobileStartText,
       lang: await page.locator("html").getAttribute("lang") === "es",
       stateIntro: /Primero, elija/.test(await page.locator("#communityFilters").innerText()),
       resources: /Recursos/.test(await page.locator("#showResources").innerText()),
       download: /Descargar RERC-e/.test(await page.locator("#rercieDownload").innerText()),
       website: /Sitio web del programa/.test(await page.locator('article[data-item-id="RERC-FND-0271"]').innerText()),
       who: /Qui[eé]n:/.test(await page.locator('article[data-item-id="RERC-FND-0271"]').innerText()),
-      coverage: /Nota de cobertura:/.test(await page.locator('article[data-item-id="RERC-FND-0271"]').innerText())
+      coverage: /Nota de cobertura:/.test(await page.locator('article[data-item-id="RERC-FND-0271"]').innerText()),
+      deadline: /Quedan \d+ d.as|Vence hoy/u.test(spanishDeadlineText),
+      mobileStart: /Inicio/.test(spanishMobileStartText),
+      title: /Financiamiento para Virginia/.test(await page.locator("#communityTitle").innerText()),
+      noEnglishDynamic: !/days? left|Due today/.test(await page.locator("body").innerText())
     };
-    check("spanish_applied", Object.values(checks.spanish).every(Boolean));
+    check("spanish_applied", Object.entries(checks.spanish).filter(([key]) => !key.endsWith("Text")).every(([, value]) => Boolean(value)));
     await page.locator("#openLanguage").click(); await page.locator('#languageDialog input[value="en"]').click();
     await page.locator("#languageDialog").waitFor({ state: "hidden" });
     check("english_restored", await page.locator("html").getAttribute("lang") === "en");
