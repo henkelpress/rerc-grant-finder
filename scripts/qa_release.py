@@ -211,7 +211,7 @@ def main() -> int:
     assert 'id="stateSelect"' in index and 'required' in index
     assert 'id="placeTypeSelect"' not in index and 'id="communityName"' not in index and 'id="communityMap"' not in index
     assert "Choose one state, D.C., or U.S. territory." in index
-    assert "Regional programs appear only when their documented service area includes your selection." in index
+    assert "Regional programs appear only in the states and territories they serve." in index
     assert "source-backed examples from Protos" not in index and "community profile" not in index.lower()
     assert "why it fits" not in index.lower()
     assert all(value in index for value in ("fundingViewSwitch", "showFundingCalendar", "calendarGrid", "calendarAgenda"))
