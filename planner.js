@@ -55,7 +55,9 @@
       invalidWorkspace: "This workspace file is invalid or unsupported.",
       imported: "Workspace imported.",
       exported: "Workspace exported.",
-      deleted: "Local workspace data deleted.",
+      deleted: "Saved history cleared on this device.",
+      clearHistoryConfirm: "Clear saved matches, comparison choices, roadmap assignments, and local notes on this device?",
+      stateChanged: "Saved matches were cleared because you selected a different state or territory.",
       next: "Next",
       back: "Back",
       stepOf: "Step {step} of {total}",
@@ -697,6 +699,7 @@
           option.selected = value === phase;
           select.appendChild(option);
         });
+        select.value = phase;
         row.append(label, select);
         section.appendChild(row);
       });
@@ -1623,6 +1626,10 @@
     return "<w:p>" + styleXml + content + "</w:p>";
   }
 
+  function docxPageBreak() {
+    return '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
+  }
+
   async function exportPlanDocx() {
     const model = projectExportModel(true);
     if (!model.items.length) {
@@ -1645,9 +1652,10 @@
     PHASES.forEach(function (phase) {
       const entries = model.items.filter(function (entry) { return entry.phase === phase; });
       if (!entries.length) return;
-      body.push(docxParagraph(t(phase.toLowerCase()), "Heading2"));
       entries.forEach(function (entry) {
         const item = entry.item;
+        body.push(docxPageBreak());
+        body.push(docxParagraph(t(phase.toLowerCase()), "Heading2"));
         body.push(docxParagraph(textValue(item.title, 500), "Heading3"));
         [
           [t("organization"), item.organization],
@@ -1877,6 +1885,7 @@
   }
 
   async function deleteLocalData() {
+    if (!window.confirm(t("clearHistoryConfirm"))) return;
     await dbClear(WORKSPACE_STORE);
     localStorage.removeItem(LANGUAGE_KEY);
     localStorage.removeItem(LAST_WORKSPACE_KEY);
@@ -2026,7 +2035,6 @@
         if (focusable) focusable.focus();
       }
     });
-    bind("exportCalendar", "click", exportCalendar);
     bind("exportPlanWord", "click", function () { exportPlanDocx().catch(reportError); });
     bind("exportPlanCsv", "click", exportPlanCsv);
     bind("exportWorkspaceFile", "click", exportWorkspace);
@@ -2068,6 +2076,19 @@
     [communityState].forEach(function (control) {
       if (!control) return;
       control.addEventListener("change", function () {
+        const previousState = textValue(state.workspace.profile.stateCode, 120);
+        const nextState = textValue(control.value, 120);
+        if (previousState && nextState && previousState !== nextState) {
+          state.workspace.savedIds = [];
+          state.workspace.compareIds = [];
+          state.workspace.roadmapAssignments = {};
+          state.workspace.projectTitle = "";
+          state.workspace.projectNotes = "";
+          state.savedOnly = false;
+          hydrateInputs();
+          persistWorkspace().then(refreshWorkspaceUI).catch(reportError);
+          setStatus("profileStatus", t("stateChanged"), "info");
+        }
         control.setCustomValidity("");
         control.removeAttribute("aria-invalid");
         syncCommunityGate();
