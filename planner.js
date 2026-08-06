@@ -25,13 +25,13 @@
   const TEXT = {
     en: {
       saved: "Saved",
-      save: "Save",
-      remove: "Remove",
+      save: "Add to plan",
+      remove: "Remove from plan",
       compare: "Compare",
       comparing: "Comparing",
       savedOnly: "Show saved only",
       allMatches: "Show all matches",
-      noSaved: "No items saved yet.",
+      noSaved: "No saved matches yet. Add options to build a plan.",
       noDeadlines: "Save funding options to see their application timing here.",
       officialEnglish:
         "Official program names, rules, and source material may remain in English. Confirm requirements with the program.",
@@ -63,6 +63,8 @@
       clearHistoryConfirm: "Reset this roadmap? This removes saved matches, comparison choices, phase assignments, and local notes on this device.",
       stateChanged: "Saved matches were cleared because you selected a different state or territory.",
       phaseChanged: "Moved to {phase}.",
+      addedToPlan: "Added to your plan.",
+      removedFromPlan: "Removed from your plan.",
       next: "Next",
       back: "Back",
       stepOf: "Step {step} of {total}",
@@ -111,13 +113,13 @@
     },
     es: {
       saved: "Guardado",
-      save: "Guardar",
-      remove: "Quitar",
+      save: "Agregar al plan",
+      remove: "Quitar del plan",
       compare: "Comparar",
       comparing: "Comparando",
       savedOnly: "Mostrar solo lo guardado",
       allMatches: "Mostrar todos los resultados",
-      noSaved: "Todavía no hay elementos guardados.",
+      noSaved: "Aún no hay opciones guardadas. Agregue opciones para crear un plan.",
       noDeadlines: "Guarde opciones de financiamiento para ver aquí sus fechas y plazos.",
       officialEnglish:
         "Los nombres, reglas y fuentes oficiales pueden permanecer en inglés. Confirme los requisitos con el programa.",
@@ -148,6 +150,8 @@
       deleted: "Esta ruta se reiniciÃ³ en este dispositivo.",
       clearHistoryConfirm: "Â¿Reiniciar esta ruta? Se eliminarÃ¡n las opciones guardadas, comparaciones, etapas y notas locales de este dispositivo.",
       phaseChanged: "Se moviÃ³ a {phase}.",
+      addedToPlan: "Se agregó a su plan.",
+      removedFromPlan: "Se quitó de su plan.",
       next: "Siguiente",
       back: "Atrás",
       stepOf: "Paso {step} de {total}",
@@ -639,16 +643,19 @@
 
   async function toggleSaved(id) {
     const index = state.workspace.savedIds.indexOf(id);
+    let messageKey = "addedToPlan";
     if (index >= 0) {
       state.workspace.savedIds.splice(index, 1);
       state.workspace.compareIds = state.workspace.compareIds.filter(function (value) { return value !== id; });
       delete state.workspace.roadmapAssignments[id];
+      messageKey = "removedFromPlan";
     } else if (state.workspace.savedIds.length < MAX_IDS && catalogMap().has(id)) {
       state.workspace.savedIds.push(id);
       state.workspace.roadmapAssignments[id] = inferPhase(catalogMap().get(id));
     }
     await persistWorkspace();
     refreshWorkspaceUI();
+    setStatus("plannerStatus", t(messageKey), "success");
   }
 
   async function toggleCompare(id) {
@@ -711,6 +718,9 @@
         const selectId = "roadmap-" + cssSafeId(itemId(item));
         label.htmlFor = selectId;
         label.textContent = textValue(item.title, 500);
+        const stageLabel = document.createElement("span");
+        stageLabel.className = "roadmap-stage-label";
+        stageLabel.textContent = t("stage");
         const select = document.createElement("select");
         select.id = selectId;
         select.dataset.roadmapId = itemId(item);
@@ -723,7 +733,7 @@
           select.appendChild(option);
         });
         select.value = phase;
-        row.append(label, select);
+        row.append(label, stageLabel, select);
         section.appendChild(row);
       });
       root.appendChild(section);
@@ -1909,15 +1919,20 @@
 
   async function deleteLocalData() {
     if (!window.confirm(t("clearHistoryConfirm"))) return;
+    // Retain the current community context while replacing the browser-local roadmap.
+    // This lets a subsequent state change safely clear any newly added selections.
+    const retainedProfile = sanitizeProfile(state.workspace.profile);
     await dbClear(WORKSPACE_STORE);
     const freshWorkspaceId = createWorkspaceId();
     localStorage.setItem(LAST_WORKSPACE_KEY, freshWorkspaceId);
     state.workspace = defaultWorkspace(freshWorkspaceId);
+    state.workspace.profile = retainedProfile;
     state.savedOnly = false;
     await persistWorkspace();
     hydrateInputs();
     refreshWorkspaceUI();
     setStatus("shareStatus", t("deleted"), "success");
+    setStatus("plannerStatus", t("deleted"), "success");
   }
 
   function applyLanguage() {
@@ -2132,7 +2147,7 @@
         state.workspace.roadmapAssignments[select.dataset.roadmapId] = select.value;
         persistWorkspace().then(function () {
           refreshWorkspaceUI();
-          setStatus("shareStatus", t("phaseChanged", { phase: t(select.value.toLowerCase()) }), "success");
+          setStatus("plannerStatus", t("phaseChanged", { phase: t(select.value.toLowerCase()) }), "success");
         }).catch(reportError);
       });
     }

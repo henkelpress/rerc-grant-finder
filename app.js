@@ -564,7 +564,7 @@ function render() {
   elements.activeFilters.textContent = activeFilterSummary();
   elements.matchAnnouncement.textContent = `${currentMatches.length} total matches; ${visible.length} cards displayed.`;
   if (!visible.length) {
-    elements.results.innerHTML = `<div class="empty-state"><h3>No matches yet</h3><p>Clear one or more answers, or turn on closed rounds to see future options.</p></div>`;
+    elements.results.innerHTML = `<div class="empty-state"><h3>No matches yet</h3><p>Try fewer answers, include closed rounds, or start over.</p><button class="secondary-button" type="button" data-reset-filters>Reset answers</button></div>`;
   } else if (mode === "All") {
     const shownFunding = visible.filter((item) => item.item_type === "Funding");
     const shownResources = visible.filter((item) => item.item_type === "Resource");
@@ -834,6 +834,9 @@ function initialize() {
     if (label) label.textContent = open ? "Hide questions" : "Show questions";
   });
   elements.resetButton.addEventListener("click", reset);
+  document.addEventListener("click", (event) => {
+    if (event.target.closest("[data-reset-filters]")) reset();
+  });
   elements.exportCsv.addEventListener("click", exportCsv);
   elements.exportWord.addEventListener("click", exportWord);
   render();

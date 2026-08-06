@@ -237,6 +237,11 @@ fieldset legend { margin-bottom: 9px; }
 .roadmap, .deadline-list { display: grid; gap: 8px; }
 .roadmap-item, .deadline-item { padding: 10px 0; border-top: 1px solid var(--line); }
 .roadmap-item:first-child, .deadline-item:first-child { border-top: 0; }
+.planner-status { padding: 8px 10px; color: var(--forest); background: #edf6f0; border-left: 3px solid var(--rerc-green); }
+.roadmap-item { display: grid; gap: 7px; }
+.roadmap-item label { font-weight: 800; overflow-wrap: anywhere; }
+.roadmap-stage-label { color: var(--muted); font-size: 0.8rem; font-weight: 800; }
+.roadmap-item select { min-height: 44px; padding: 8px 10px; color: var(--ink); background: var(--white); border: 1px solid #8d9f97; border-radius: 4px; font: inherit; }
 .deadline-item { display: grid; gap: 8px; min-width: 0; padding: 13px 0; }
 .deadline-item h3 { margin: 0; color: var(--forest); font-size: 0.96rem; line-height: 1.25; overflow-wrap: anywhere; }
 .deadline-main { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 10px; }

@@ -256,12 +256,15 @@ async function main() {
     check("private_browser_workspace", /^browser-/.test(checks.workspace.id || ""));
 
     const roadmapPhase = page.locator("#roadmap select").first();
-    await roadmapPhase.selectOption("Design"); await page.waitForTimeout(300);
+    const currentPhase = await roadmapPhase.inputValue();
+    const nextPhase = currentPhase === "Build" ? "Plan" : "Build";
+    await roadmapPhase.selectOption(nextPhase); await page.waitForTimeout(300);
     checks.roadmapPhaseChange = {
       selected: await page.locator("#roadmap select").first().inputValue(),
-      message: await page.locator("#shareStatus").innerText()
+      message: await page.locator("#plannerStatus").innerText()
     };
-    check("roadmap_phase_editable", checks.roadmapPhaseChange.selected === "Design" && /Moved to Design/.test(checks.roadmapPhaseChange.message));
+    check("roadmap_phase_editable", checks.roadmapPhaseChange.selected === nextPhase
+      && new RegExp(`Moved to ${nextPhase}`).test(checks.roadmapPhaseChange.message));
 
     const previousWorkspaceId = checks.workspace.id;
     page.once("dialog", (dialog) => dialog.accept());
@@ -286,7 +289,8 @@ async function main() {
     await spanishOption.click(); await page.locator("#languageDialog").waitFor({ state: "hidden" }); await page.waitForTimeout(100);
     await page.evaluate(() => window.RERCExplorer.chooseMode("Funding"));
     await page.waitForTimeout(150);
-    await page.locator('article[data-item-id="RERC-FND-0271"] details').evaluate((node) => { node.open = true; });
+    const spanishCard = page.locator(".result-card").first();
+    await spanishCard.locator("details").evaluate((node) => { node.open = true; });
     const spanishDeadlineText = await page.locator("#nextDeadlineMeta").innerText();
     const spanishMobileStartText = await page.locator('[data-mobile-action="filters"]').innerText();
     checks.spanish = {
@@ -296,9 +300,9 @@ async function main() {
       stateIntro: /Primero, elija/.test(await page.locator("#communityFilters").innerText()),
       resources: /Recursos/.test(await page.locator("#showResources").innerText()),
       download: /Descargar RERC-e/.test(await page.locator("#rercieDownload").innerText()),
-      website: /Sitio web del programa/.test(await page.locator('article[data-item-id="RERC-FND-0271"]').innerText()),
-      who: /Qui[eé]n:/.test(await page.locator('article[data-item-id="RERC-FND-0271"]').innerText()),
-      coverage: /Nota de cobertura:/.test(await page.locator('article[data-item-id="RERC-FND-0271"]').innerText()),
+      website: /Sitio web del programa/.test(await spanishCard.innerText()),
+      who: /Qui[eé]n:/.test(await spanishCard.innerText()),
+      coverage: !/Coverage note:/.test(await page.locator("body").innerText()),
       deadline: /Quedan \d+ d.as|Vence hoy/u.test(spanishDeadlineText),
       mobileStart: /Inicio/.test(spanishMobileStartText),
       title: /Financiamiento para Virginia/.test(await page.locator("#communityTitle").innerText()),

@@ -15,13 +15,15 @@ const chromePath = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
     await page.locator('[data-action="planner-save"]').first().click();
     await page.waitForTimeout(300);
 
-    await page.locator("#roadmap select").first().selectOption("Design");
+    const currentPhase = await page.locator("#roadmap select").first().inputValue();
+    const nextPhase = currentPhase === "Build" ? "Plan" : "Build";
+    await page.locator("#roadmap select").first().selectOption(nextPhase);
     await page.waitForTimeout(300);
     const before = await page.evaluate(function () {
       return {
         id: localStorage.getItem("rerc.activeWorkspaceId.v2"),
         phase: document.querySelector("#roadmap select")?.value,
-        status: document.querySelector("#shareStatus")?.textContent,
+        status: document.querySelector("#plannerStatus")?.textContent,
       };
     });
 
@@ -36,8 +38,8 @@ const chromePath = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
       };
     });
 
-    const passed = /^browser-/.test(before.id || "") && before.phase === "Design" &&
-      /Moved to Design/.test(before.status || "") && /^browser-/.test(after.id || "") &&
+    const passed = /^browser-/.test(before.id || "") && before.phase === nextPhase &&
+      new RegExp(`Moved to ${nextPhase}`).test(before.status || "") && /^browser-/.test(after.id || "") &&
       after.id !== before.id && after.count === 0 && /Reset roadmap/.test(after.button || "");
     console.log(JSON.stringify({ status: passed ? "PASS" : "FAIL", before, after }, null, 2));
     process.exitCode = passed ? 0 : 1;

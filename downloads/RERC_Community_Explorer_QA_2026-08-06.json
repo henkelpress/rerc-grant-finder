@@ -5,15 +5,15 @@
   "funding": 659,
   "resources": 167,
   "community_examples": 476,
-  "catalog_source_commit": "819f0355d012080fe10e260b2425fd98e29581b4",
+  "catalog_source_commit": "43a0d177232a574cd213312f729a40c42f14d4ea",
   "release_binding_note": "This is the source commit used to generate the files. The QA report records the generated file hashes.",
   "site_sha256": {
-    "index.html": "907762551631365e88ec817da87269f81724f3b24589846d6dd73ec4d3575edf",
+    "index.html": "745dc32108504b4273389269a43cbf9e7e8c06e57d1db960aa2c74c45d643dca",
     "styles.css": "4c59dcdd0a7e7bc3d0d8c5f337899b138d2bc28e2eb90a905af678f01a35a6fa",
     "rercie.css": "8cc33fa867b0afb38c5523efb3d8f1d1c7dd76dce336b6b403549b39fae02a46",
     "app.js": "1e544493a8427020067d8f9d990be115e59073765f3b193dd7baa26e5509d60f",
-    "planner.js": "f816a697869ad7fb2016ca5c83e3b11b753d52700f0dd1c1e39b3a95ab07d5db",
-    "ui-i18n.js": "0478a7f1ea290a3c63b666224b333876a8618600c926532724928d8e309f1a99",
+    "planner.js": "dde2bf0f9e3dd3e98d8f92d1e173e4c874f876aedf731aa78f791a14b0d8f2af",
+    "ui-i18n.js": "d955e7f29673b5d6837c0025f8fcbd70b49a1f2a6ba3db503e91c3aec899f9e6",
     "deadline-utils.js": "9630163876672f5d0dd801ba18ab96b1c91b076a657e6b42f0130f7db959d402",
     "site-config.js": "d1622e9f468135db43b664a2cba38d3ba75f51b011d41184714f9e4452b501cb",
     "data.js": "e17246eaaf244a05838b306a785bfaee149e2303dc74f03b362f3c138b909bf7",
@@ -33,12 +33,12 @@
   "docx": {
     "file": "RERC_Community_Explorer_Appendix_2026-08-06.docx",
     "bytes": 386301,
-    "sha256": "392192f90fe5631408cf7cad255a84ec8ceb33ef6ab2ffd5fac02c80298f1941"
+    "sha256": "54f62c47e92df3b85a700a01c21383413b5126e6473ff4284d25bccd8e61ec95"
   },
   "xlsx": {
     "file": "RERC_Community_Explorer_Master_2026-08-06.xlsx",
     "bytes": 378647,
-    "sha256": "812a456f357ba851d6af194007d6167009b93c5fd146420ba3b53364afc6fc47"
+    "sha256": "7991d1fd070f12a03eccd6c4b8e6c2438b83f453bf24eaa2abba134b012b7999"
   },
   "csv": {
     "file": "RERC_Community_Explorer_Master_2026-08-06.csv",

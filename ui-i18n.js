@@ -20,6 +20,8 @@
     "120 results": "120 resultados",
     "Saved funding timing": "Fechas de financiamiento guardadas",
     "Reset roadmap": "Reiniciar ruta",
+    "Your plan is saved only in this browser. Reset it before sharing this device.": "Su plan se guarda solo en este navegador. Reinícielo antes de compartir este dispositivo.",
+    "Use Add to plan on any result to add it here.": "Use Agregar al plan en cualquier resultado para añadirlo aquí.",
     "Help improve the explorer": "Ayude a mejorar el explorador",
     "Tell us what needs work or what belongs here.": "D\u00edganos qu\u00e9 necesita mejorar o qu\u00e9 debe incluirse.",
     "Use the first form for site feedback. Use the second form to suggest a funding opportunity, resource, or community case study. Suggestions are reviewed before they are added.": "Use el primer formulario para enviar comentarios sobre el sitio. Use el segundo para sugerir una oportunidad de financiamiento, recurso o caso pr\u00e1ctico comunitario. Las sugerencias se revisan antes de agregarse.",
@@ -239,6 +241,7 @@
     "Source-backed examples to help teams compare approaches and ask better questions.": "Ejemplos con fuentes para comparar enfoques y hacer mejores preguntas.",
     "Try fewer answers or a wider search.": "Pruebe con menos respuestas o una búsqueda más amplia.",
     "No matches yet": "Aún no hay opciones",
+    "Try fewer answers, include closed rounds, or start over.": "Pruebe con menos respuestas, incluya oportunidades cerradas o comience de nuevo.",
     "Clear one or more answers, or turn on closed rounds to see future options.": "Borre una o más respuestas o incluya convocatorias cerradas para ver opciones futuras.",
     "These are starting points. Add community details and priorities to rank them for your needs.": "Estos son puntos de partida. Agregue datos y prioridades de la comunidad para ordenarlos según sus necesidades.",
     "Try fewer choices or a wider search.": "Pruebe con menos opciones o una búsqueda más amplia."
