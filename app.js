@@ -61,19 +61,23 @@ const stageAliases = filterConfig.stageAliases || {};
 const specificApplicantGroups = applicantOptions.filter(([value]) => value !== "__other__").map(([value]) => value);
 
 const elements = Object.fromEntries([
-  "stateSelect","keywordSearch","applicantOptions","topicOptions","stageSelect",
+  "stateSelect","keywordSearch","applicantOptions","topicOptions","fundingTypeOptions","caseStudyPhaseOptions","stageSelect",
   "includeClosed","toggleFilters","resetButton","sortSelect","limitSelect","exportWord","exportCsv","communityTitle","communitySummary",
   "matchCount","fundingMatchCount","resourceMatchCount","caseStudyMatchCount","activeFilters","results","matchAnnouncement",
   "fundingCount","resourceCount","caseStudyCount","showFunding","showResources","showCases",
   "nextDeadlinePanel","nextDeadlineDate","nextDeadlineMeta","nextDeadlineLink","profileStatus",
-  "fundingViewSwitch","showFundingList","showFundingCalendar","fundingCalendar","calendarMonthTitle","calendarTimingSummary","calendarGrid","calendarAgenda",
-  "previousCalendarMonth","todayCalendarMonth","nextCalendarMonth","resultsToolbar"
+  "resultsToolbar"
 ].map((id) => [id, document.getElementById(id)]));
 
 let mode = "All";
 let currentMatches = [];
-let fundingView = "list";
-let calendarCursor = null;
+const fundingFilterOptions = [
+  ["grant", "Grant"],
+  ["loan", "Loan or financing"],
+  ["match", "Match or cost share required"],
+  ["amount", "Award amount listed"]
+];
+const caseStudyPhaseOptions = [["Plan", "Plan"], ["Design", "Design"], ["Build", "Build"], ["Operate", "Operate"]];
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'"]/g, (character) => ({
@@ -258,8 +262,29 @@ function selectedMatchFactors() {
     selectedPlace: elements.stateSelect.value,
     applicants: selectedValues(elements.applicantOptions),
     topics: selectedValues(elements.topicOptions),
+    fundingFilters: selectedValues(elements.fundingTypeOptions),
+    caseStudyPhases: selectedValues(elements.caseStudyPhaseOptions),
     selectedStage: elements.stageSelect.value
   };
+}
+
+function fundingFilterLabels(item) {
+  const text = `${cleanText(item.title)} ${cleanText(item.support_type)} ${cleanText(item.amount_or_cost)} ${cleanText(item.match_or_cost)}`.toLowerCase();
+  const labels = [];
+  if (/\bgrant\b/.test(text)) labels.push("grant");
+  if (/\bloan\b|\bfinanc|\bcredit\b/.test(text)) labels.push("loan");
+  if (/\bmatch\b|cost share|local share|non-federal share/.test(text)) labels.push("match");
+  const amount = cleanText(item.amount_or_cost).toLowerCase();
+  if (amount && !/varies|not listed|check|unknown|n\/a/.test(amount)) labels.push("amount");
+  return labels;
+}
+
+function caseStudyPhase(item) {
+  const text = `${cleanText(item.project_stage)} ${cleanText(item.topic_tags)}`.toLowerCase();
+  if (/design|engineer|predevelopment/.test(text)) return "Design";
+  if (/build|construct|implement|acquisition|capital/.test(text)) return "Build";
+  if (/operat|maint|capacity|business/.test(text)) return "Operate";
+  return "Plan";
 }
 
 function scoreItem(item, text, factors) {
@@ -292,7 +317,7 @@ function scoreItem(item, text, factors) {
 function getMatches() {
   const factors = selectedMatchFactors();
   const {
-    selectedPlace, applicants, topics, selectedStage
+    selectedPlace, applicants, topics, fundingFilters, caseStudyPhases, selectedStage
   } = factors;
   const keyword = elements.keywordSearch.value.trim().toLowerCase();
 
@@ -304,6 +329,8 @@ function getMatches() {
     if (keyword && !text.includes(keyword)) return false;
     if (item.item_type !== "Case Study" && !matchesApplicants(cleanText(item.eligible_users).toLowerCase(), applicants)) return false;
     if (!matchesAny(topicCorpus(item), topics)) return false;
+    if (item.item_type === "Funding" && fundingFilters.length && !fundingFilters.some((filter) => fundingFilterLabels(item).includes(filter))) return false;
+    if (item.item_type === "Case Study" && caseStudyPhases.length && !caseStudyPhases.includes(caseStudyPhase(item))) return false;
     const stageText = cleanText(item.project_stage).toLowerCase();
     if (selectedStage !== "Any step") {
       const exactStage = matchesStage(item, selectedStage);
@@ -391,100 +418,6 @@ function renderNextDeadline(items) {
     elements.nextDeadlineLink.removeAttribute("href");
   }
 }
-function fundingDeadlineEntries(items) {
-  const today = new Date();
-  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  return items
-    .filter((item) => item.item_type === "Funding")
-    .map((item) => ({ item, date: parseDeadline(item) }))
-    .filter((entry) => entry.date && entry.date >= start)
-    .sort((a, b) => a.date - b.date || a.item.title.localeCompare(b.item.title));
-}
-
-function dateKey(date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
-function renderFundingCalendar(items) {
-  if (!elements.calendarGrid || !elements.calendarAgenda) return;
-  const entries = fundingDeadlineEntries(items);
-  const timingCounts = fundingTimingCounts(items);
-  const pendingCount = timingCounts.recurring + timingCounts.variable + timingCounts.active_period + timingCounts.date_pending;
-  if (elements.calendarTimingSummary) elements.calendarTimingSummary.textContent = `${entries.length} upcoming dates. ${timingCounts.rolling} rolling or ongoing. ${pendingCount} dates to confirm.`;
-  if (!calendarCursor) {
-    const anchor = entries[0]?.date || new Date();
-    calendarCursor = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
-  }
-  const year = calendarCursor.getFullYear();
-  const month = calendarCursor.getMonth();
-  const locale = document.documentElement.lang === "es" ? "es-US" : "en-US";
-  elements.calendarMonthTitle.textContent = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" }).format(calendarCursor);
-
-  const monthEntries = new Map();
-  entries.forEach((entry) => {
-    if (entry.date.getFullYear() !== year || entry.date.getMonth() !== month) return;
-    const key = dateKey(entry.date);
-    if (!monthEntries.has(key)) monthEntries.set(key, []);
-    monthEntries.get(key).push(entry);
-  });
-
-  const weekdayFormatter = new Intl.DateTimeFormat(locale, { weekday: "short" });
-  const weekdays = Array.from({ length: 7 }, (_, index) => {
-    const label = weekdayFormatter.format(new Date(2026, 0, 4 + index));
-    return `<div class="calendar-weekday" role="columnheader">${escapeHtml(label)}</div>`;
-  });
-  const cells = [];
-  const leading = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  for (let index = 0; index < leading; index += 1) {
-    cells.push('<div class="calendar-day outside" role="gridcell" aria-hidden="true"></div>');
-  }
-  for (let day = 1; day <= daysInMonth; day += 1) {
-    const current = new Date(year, month, day);
-    const dayEntries = monthEntries.get(dateKey(current)) || [];
-    const links = dayEntries.slice(0, 2).map(({ item }) => {
-      const source = safeUrl(item.source_url);
-      const title = escapeHtml(item.title);
-      return source
-        ? `<a href="${escapeHtml(source)}" target="_blank" rel="noopener" title="${title}">${title}</a>`
-        : `<span title="${title}">${title}</span>`;
-    }).join("");
-    const more = dayEntries.length > 2 ? `<span class="calendar-more">+${dayEntries.length - 2} more</span>` : "";
-    const today = new Date();
-    const isToday = current.getFullYear() === today.getFullYear() && current.getMonth() === today.getMonth() && current.getDate() === today.getDate();
-    cells.push(`<div class="calendar-day${dayEntries.length ? " has-deadline" : ""}${isToday ? " today" : ""}" role="gridcell" aria-label="${escapeHtml(new Intl.DateTimeFormat(locale, { month: "long", day: "numeric", year: "numeric" }).format(current))}"><strong>${day}</strong>${links}${more}</div>`);
-  }
-  elements.calendarGrid.innerHTML = weekdays.join("") + cells.join("");
-
-  if (!entries.length) {
-    elements.calendarAgenda.innerHTML = `<p class="empty-copy">No upcoming dated funding deadlines are available. ${timingCounts.rolling} options are rolling or ongoing; ${pendingCount} need a new cycle date.</p>`;
-    return;
-  }
-  elements.calendarAgenda.innerHTML = entries.slice(0, 12).map(({ item, date }) => {
-    const source = safeUrl(item.source_url);
-    const title = escapeHtml(item.title);
-    const formatted = escapeHtml(new Intl.DateTimeFormat(locale, { month: "short", day: "numeric", year: "numeric" }).format(date));
-    const titleMarkup = source
-      ? `<a href="${escapeHtml(source)}" target="_blank" rel="noopener">${title}</a>`
-      : `<strong>${title}</strong>`;
-    return `<article class="calendar-agenda-item"><time datetime="${dateKey(date)}">${formatted}</time><div>${titleMarkup}<small>${escapeHtml(item.organization || "")}</small></div></article>`;
-  }).join("");
-}
-
-function chooseFundingView(nextView) {
-  fundingView = nextView === "calendar" ? "calendar" : "list";
-  [elements.showFundingList, elements.showFundingCalendar].forEach((button) => {
-    if (!button) return;
-    const active = button === (fundingView === "calendar" ? elements.showFundingCalendar : elements.showFundingList);
-    button.classList.toggle("active", active);
-    button.setAttribute("aria-pressed", String(active));
-  });
-  if (fundingView === "calendar" && !calendarCursor) {
-    const next = fundingDeadlineEntries(currentMatches)[0]?.date || new Date();
-    calendarCursor = new Date(next.getFullYear(), next.getMonth(), 1);
-  }
-  render();
-}
 function hasSubstantiveAnswers() {
   const factors = selectedMatchFactors();
   return Boolean(
@@ -566,6 +499,10 @@ function activeFilterSummary() {
   const topics = selectedValues(elements.topicOptions);
   if (applicants.length) values.push(`${applicants.length} applicant choice${applicants.length === 1 ? "" : "s"}`);
   if (topics.length) values.push(`${topics.length} topic${topics.length === 1 ? "" : "s"}`);
+  const fundingFilters = selectedValues(elements.fundingTypeOptions);
+  const caseStudyPhases = selectedValues(elements.caseStudyPhaseOptions);
+  if (fundingFilters.length) values.push(`${fundingFilters.length} funding filter${fundingFilters.length === 1 ? "" : "s"}`);
+  if (caseStudyPhases.length) values.push(`${caseStudyPhases.join(", ")} case studies`);
   if (elements.stageSelect.value !== "Any step") values.push(elements.stageSelect.value);
   if (elements.includeClosed.checked) values.push("Closed rounds shown");
   return values.length ? values.join(" | ") : "Choose a state or territory to begin.";
@@ -624,14 +561,8 @@ function render() {
   elements.resourceMatchCount.textContent = resourceMatches.toLocaleString();
   elements.caseStudyMatchCount.textContent = caseMatches.toLocaleString();
   renderNextDeadline(fundingResults);
-  const calendarActive = mode === "Funding" && fundingView === "calendar";
-  elements.fundingViewSwitch.hidden = mode !== "Funding";
-  elements.fundingCalendar.hidden = !calendarActive;
-  elements.resultsToolbar.hidden = calendarActive;
-  elements.results.hidden = calendarActive;
-  if (calendarActive) renderFundingCalendar(fundingResults);
   elements.activeFilters.textContent = activeFilterSummary();
-  elements.matchAnnouncement.textContent = calendarActive ? `${fundingMatches} funding matches shown in calendar view for ${label}.` : `${currentMatches.length} total matches; ${visible.length} cards displayed.`;
+  elements.matchAnnouncement.textContent = `${currentMatches.length} total matches; ${visible.length} cards displayed.`;
   if (!visible.length) {
     elements.results.innerHTML = `<div class="empty-state"><h3>No matches yet</h3><p>Clear one or more answers, or turn on closed rounds to see future options.</p></div>`;
   } else if (mode === "All") {
@@ -704,6 +635,10 @@ function wordParagraphXml(runs, style = "") {
   return "<w:p>" + properties + runs.join("") + "</w:p>";
 }
 
+function wordPageBreakXml() {
+  return '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
+}
+
 function wordHyperlinkXml(text, relationshipId) {
   return '<w:hyperlink r:id="' + relationshipId + '"><w:r><w:rPr><w:color w:val="1B6A8F"/><w:u w:val="single"/></w:rPr><w:t>' +
     xmlEscape(text) + "</w:t></w:r></w:hyperlink>";
@@ -737,8 +672,9 @@ async function exportWord() {
   ], "Notice"));
 
   const addSection = (title, items) => {
-    body.push(wordParagraphXml([wordRunXml(title + " (" + items.length + ")")], "Heading2"));
     items.forEach((item) => {
+      body.push(wordPageBreakXml());
+      body.push(wordParagraphXml([wordRunXml(title)], "Heading2"));
       body.push(wordParagraphXml([wordRunXml(item.title)], "Heading3"));
       body.push(wordParagraphXml([
         wordRunXml(item.organization, { bold: true }),
@@ -754,10 +690,10 @@ async function exportWord() {
         ]));
       } else {
         body.push(wordParagraphXml([
-          wordRunXml("Where: ", { bold: true }),
-          wordRunXml(coveredStates(item).join(", ") || item.geography),
-          wordRunXml(" | Who: ", { bold: true }),
-          wordRunXml(item.eligible_users || "Eligibility varies")
+          wordRunXml("Who: ", { bold: true }),
+          wordRunXml(item.eligible_users || "Eligibility varies"),
+          wordRunXml(" | Where: ", { bold: true }),
+          wordRunXml(coveredStates(item).join(", ") || item.geography)
         ]));
         if (item.coverage_note) {
           body.push(wordParagraphXml([wordRunXml("Coverage note: ", { bold: true }), wordRunXml(item.coverage_note)]));
@@ -845,7 +781,7 @@ function reset() {
   elements.stageSelect.value = "Any step";
   elements.includeClosed.checked = false;
   elements.sortSelect.value = "score";
-  elements.limitSelect.value = "30";
+  elements.limitSelect.value = "all";
   document.querySelectorAll(".filters input[type=checkbox]").forEach((input) => { input.checked = false; });
   mode = "All";
   document.querySelectorAll("[data-mode]").forEach((button) => {
@@ -874,6 +810,8 @@ function initialize() {
   elements.stageSelect.innerHTML = stages.map((stage) => `<option>${escapeHtml(stage)}</option>`).join("");
   buildCheckList(elements.applicantOptions, applicantOptions, "applicant");
   buildCheckList(elements.topicOptions, topicOptions, "topic");
+  buildCheckList(elements.fundingTypeOptions, fundingFilterOptions, "funding-filter");
+  buildCheckList(elements.caseStudyPhaseOptions, caseStudyPhaseOptions, "case-study-phase");
   if (!elements.sortSelect.querySelector('option[value="deadline"]')) {
     const deadlineOption = document.createElement("option");
     deadlineOption.value = "deadline";
@@ -883,23 +821,6 @@ function initialize() {
   elements.stateSelect.addEventListener("change", () => {
     setCommunitySelectorStatus(elements.stateSelect.value ? "State or territory selected." : "Choose a state or territory first.");
     render();
-  });
-  elements.showFundingList.addEventListener("click", () => chooseFundingView("list"));
-  elements.showFundingCalendar.addEventListener("click", () => chooseFundingView("calendar"));
-  elements.previousCalendarMonth.addEventListener("click", () => {
-    const current = calendarCursor || new Date();
-    calendarCursor = new Date(current.getFullYear(), current.getMonth() - 1, 1);
-    renderFundingCalendar(currentMatches);
-  });
-  elements.todayCalendarMonth.addEventListener("click", () => {
-    const today = new Date();
-    calendarCursor = new Date(today.getFullYear(), today.getMonth(), 1);
-    renderFundingCalendar(currentMatches);
-  });
-  elements.nextCalendarMonth.addEventListener("click", () => {
-    const current = calendarCursor || new Date();
-    calendarCursor = new Date(current.getFullYear(), current.getMonth() + 1, 1);
-    renderFundingCalendar(currentMatches);
   });
   document.querySelectorAll("[data-mode]").forEach((button) => button.addEventListener("click", () => chooseMode(button.dataset.mode)));
   elements.showFunding.addEventListener("click", () => chooseMode("Funding"));
@@ -931,8 +852,6 @@ window.RERCExplorer = {
   chooseMode,
   getMode: () => mode,
   setStateSelection,
-  chooseFundingView,
-  getFundingView: () => fundingView,
   matchesGeography,
   matchesStage,
   matchesApplicants,
