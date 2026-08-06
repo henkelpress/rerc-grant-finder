@@ -7,7 +7,11 @@
   const WORKSPACE_STORE = "workspaces";
   const DEFAULT_WORKSPACE_ID = "local";
   const LANGUAGE_KEY = "rerc.language";
-  const LAST_WORKSPACE_KEY = "rerc.lastWorkspaceId";
+  // A browser-local ID keeps one visitor's saved plan separate from another's.
+  // Do not derive this from IP address: IPs can be shared, change frequently,
+  // and would require collecting personal data on a static public site.
+  const LAST_WORKSPACE_KEY = "rerc.activeWorkspaceId.v2";
+  const WORKSPACE_ID_PREFIX = "browser-";
   const MAX_IDS = 100;
   const MAX_COMPARE = 3;
   const MAX_NOTES = 12000;
@@ -55,9 +59,10 @@
       invalidWorkspace: "This workspace file is invalid or unsupported.",
       imported: "Workspace imported.",
       exported: "Workspace exported.",
-      deleted: "Saved history cleared on this device.",
-      clearHistoryConfirm: "Clear saved matches, comparison choices, roadmap assignments, and local notes on this device?",
+      deleted: "This roadmap was reset on this device.",
+      clearHistoryConfirm: "Reset this roadmap? This removes saved matches, comparison choices, phase assignments, and local notes on this device.",
       stateChanged: "Saved matches were cleared because you selected a different state or territory.",
+      phaseChanged: "Moved to {phase}.",
       next: "Next",
       back: "Back",
       stepOf: "Step {step} of {total}",
@@ -140,7 +145,9 @@
       invalidWorkspace: "El archivo del espacio de trabajo no es válido o compatible.",
       imported: "Espacio de trabajo importado.",
       exported: "Espacio de trabajo exportado.",
-      deleted: "Se borraron los datos locales.",
+      deleted: "Esta ruta se reiniciÃ³ en este dispositivo.",
+      clearHistoryConfirm: "Â¿Reiniciar esta ruta? Se eliminarÃ¡n las opciones guardadas, comparaciones, etapas y notas locales de este dispositivo.",
+      phaseChanged: "Se moviÃ³ a {phase}.",
       next: "Siguiente",
       back: "Atrás",
       stepOf: "Paso {step} de {total}",
@@ -262,6 +269,22 @@
       profile: {},
       updatedAt: new Date().toISOString(),
     };
+  }
+
+  function createWorkspaceId() {
+    if (window.crypto && typeof window.crypto.randomUUID === "function") {
+      return WORKSPACE_ID_PREFIX + window.crypto.randomUUID();
+    }
+    const random = Math.random().toString(36).slice(2, 14);
+    return WORKSPACE_ID_PREFIX + Date.now().toString(36) + "-" + random;
+  }
+
+  function activeWorkspaceId() {
+    const stored = textValue(localStorage.getItem(LAST_WORKSPACE_KEY), 80);
+    if (stored.indexOf(WORKSPACE_ID_PREFIX) === 0) return stored;
+    const id = createWorkspaceId();
+    localStorage.setItem(LAST_WORKSPACE_KEY, id);
+    return id;
   }
 
   function sanitizeProfile(profile) {
@@ -1514,7 +1537,7 @@
     if (new Blob([text]).size > MAX_FILE_BYTES) throw new Error("workspace-size");
     const parsed = JSON.parse(text);
     state.workspace = sanitizeWorkspace(parsed, true);
-    state.workspace.id = DEFAULT_WORKSPACE_ID;
+    state.workspace.id = activeWorkspaceId();
     localStorage.setItem(LAST_WORKSPACE_KEY, state.workspace.id);
     await persistWorkspace();
     hydrateInputs();
@@ -1887,13 +1910,12 @@
   async function deleteLocalData() {
     if (!window.confirm(t("clearHistoryConfirm"))) return;
     await dbClear(WORKSPACE_STORE);
-    localStorage.removeItem(LANGUAGE_KEY);
-    localStorage.removeItem(LAST_WORKSPACE_KEY);
-    state.language = "en";
-    state.workspace = defaultWorkspace(DEFAULT_WORKSPACE_ID);
+    const freshWorkspaceId = createWorkspaceId();
+    localStorage.setItem(LAST_WORKSPACE_KEY, freshWorkspaceId);
+    state.workspace = defaultWorkspace(freshWorkspaceId);
     state.savedOnly = false;
+    await persistWorkspace();
     hydrateInputs();
-    applyLanguage();
     refreshWorkspaceUI();
     setStatus("shareStatus", t("deleted"), "success");
   }
@@ -2108,7 +2130,10 @@
         const select = event.target.closest("[data-roadmap-id]");
         if (!select || !PHASES.includes(select.value)) return;
         state.workspace.roadmapAssignments[select.dataset.roadmapId] = select.value;
-        persistWorkspace().then(refreshWorkspaceUI).catch(reportError);
+        persistWorkspace().then(function () {
+          refreshWorkspaceUI();
+          setStatus("shareStatus", t("phaseChanged", { phase: t(select.value.toLowerCase()) }), "success");
+        }).catch(reportError);
       });
     }
   }
@@ -2123,7 +2148,7 @@
       ? localStorage.getItem(LANGUAGE_KEY)
       : "en";
     state.db = await openDatabase();
-    const workspaceId = textValue(localStorage.getItem(LAST_WORKSPACE_KEY), 80) || DEFAULT_WORKSPACE_ID;
+    const workspaceId = activeWorkspaceId();
     const stored = await dbGet(WORKSPACE_STORE, workspaceId);
     try {
       state.workspace = stored ? sanitizeWorkspace(stored, false) : defaultWorkspace(workspaceId);
