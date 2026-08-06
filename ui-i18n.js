@@ -8,6 +8,23 @@
   let observer = null;
 
   const ES = {
+    "Funding details": "Detalles del financiamiento",
+    "Grant": "Subvenci\u00f3n",
+    "Loan or financing": "Pr\u00e9stamo o financiamiento",
+    "Match or cost share required": "Se requiere aporte local o costo compartido",
+    "Award amount listed": "Monto de la ayuda indicado",
+    "Case study phase": "Etapa del caso pr\u00e1ctico",
+    "All results": "Todos los resultados",
+    "30 results": "30 resultados",
+    "60 results": "60 resultados",
+    "120 results": "120 resultados",
+    "Saved funding timing": "Fechas de financiamiento guardadas",
+    "Clear saved history": "Borrar historial guardado",
+    "Help improve the explorer": "Ayude a mejorar el explorador",
+    "Tell us what needs work or what belongs here.": "D\u00edganos qu\u00e9 necesita mejorar o qu\u00e9 debe incluirse.",
+    "Use the first form for site feedback. Use the second form to suggest a funding opportunity, resource, or community case study. Suggestions are reviewed before they are added.": "Use el primer formulario para enviar comentarios sobre el sitio. Use el segundo para sugerir una oportunidad de financiamiento, recurso o caso pr\u00e1ctico comunitario. Las sugerencias se revisan antes de agregarse.",
+    "Submit feedback": "Enviar comentarios",
+    "Suggest an item": "Sugerir un elemento",
     "Start with your state": "Empiece con su estado",
     "Start": "Inicio",
     "Choose a state or territory. We will show programs that cover it. Then choose your priorities to rank the list. A match is not an eligibility decision.": "Elija un estado o territorio. Mostraremos los programas que lo cubren. Luego elija sus prioridades para ordenar la lista. Una coincidencia no determina la elegibilidad.",
