@@ -220,12 +220,15 @@ def main() -> int:
     assert "source-backed examples from Protos" not in index and "community profile" not in index.lower()
     assert "why it fits" not in index.lower()
     assert all(value not in index for value in ("fundingViewSwitch", "showFundingCalendar", "calendarGrid", "calendarAgenda", "exportCalendar"))
-    assert all(value in index for value in ("fundingTypeOptions", "caseStudyPhaseOptions", "Clear saved history", "contribute"))
+    assert all(value in index for value in ("fundingTypeOptions", "caseStudyPhaseOptions", "Reset roadmap", "contribute"))
     assert 'src="deadline-utils.js?v=20260805-2"' in index
     deadline_utils = (ROOT / "deadline-utils.js").read_text(encoding="utf-8")
     assert all(value in deadline_utils for value in ("parseDeadline", "fundingTiming", "RERCDeadlineUtils"))
     assert all(value in app_js for value in ("fundingFilterLabels", "caseStudyPhase", "fundingTiming", "fundingTimingCounts", "wordPageBreakXml"))
-    assert "deadline-status" in planner and "stateChanged" in planner and "docxPageBreak" in planner
+    assert all(value in planner for value in (
+        "deadline-status", "stateChanged", "docxPageBreak", "rerc.activeWorkspaceId.v2",
+        "WORKSPACE_ID_PREFIX", "createWorkspaceId", "phaseChanged"
+    ))
     assert "renderCardActions" not in app_js and "planner-card-actions" in planner
     assert "window.RERC_CASE_STUDIES" in app_js and "Read the example" in app_js
     assert "topicCorpus(item)" in app_js and "broadFundingStage" in app_js
@@ -239,7 +242,7 @@ def main() -> int:
         "Program Website", "Coverage note:",
     ))
     assert "Why it fits" not in ui_i18n and "Community profile" not in ui_i18n
-    assert all(value in ui_i18n for value in ("Funding details", "Case study phase", "Clear saved history", "Submit feedback", "Suggest an item"))
+    assert all(value in ui_i18n for value in ("Funding details", "Case study phase", "Reset roadmap", "Submit feedback", "Suggest an item"))
     assert (ROOT / ".github" / "ISSUE_TEMPLATE" / "feedback.yml").is_file()
     assert (ROOT / ".github" / "ISSUE_TEMPLATE" / "catalog-submission.yml").is_file()
 
