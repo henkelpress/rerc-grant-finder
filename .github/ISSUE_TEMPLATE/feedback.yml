@@ -1,0 +1,21 @@
+name: Explorer feedback
+description: Report a problem or suggest an improvement to the RERC Community Explorer.
+title: "[Feedback]: "
+labels: ["public-feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: "Thank you for helping improve the RERC Community Explorer. Do not include sensitive personal information."
+  - type: textarea
+    id: feedback
+    attributes:
+      label: What would you like us to improve?
+      description: Tell us what happened, what you expected, and what would make it better.
+      placeholder: The results page...
+    validations:
+      required: true
+  - type: input
+    id: page
+    attributes:
+      label: Page or link
+      description: Optional. Paste the page address or name the part of the explorer.
