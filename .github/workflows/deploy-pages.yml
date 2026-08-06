@@ -1,4 +1,4 @@
-name: Deploy GitHub Pages
+name: RERC Explorer QA
 
 on:
   push:
@@ -44,14 +44,3 @@ jobs:
           rm -rf node_modules browser-qa
           find . -type d -name __pycache__ -prune -exec rm -rf {} +
           find . -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
-      - name: Upload site artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: .
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
