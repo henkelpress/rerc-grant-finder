@@ -19,7 +19,7 @@
     "60 results": "60 resultados",
     "120 results": "120 resultados",
     "Saved funding timing": "Fechas de financiamiento guardadas",
-    "Clear saved history": "Borrar historial guardado",
+    "Reset roadmap": "Reiniciar ruta",
     "Help improve the explorer": "Ayude a mejorar el explorador",
     "Tell us what needs work or what belongs here.": "D\u00edganos qu\u00e9 necesita mejorar o qu\u00e9 debe incluirse.",
     "Use the first form for site feedback. Use the second form to suggest a funding opportunity, resource, or community case study. Suggestions are reviewed before they are added.": "Use el primer formulario para enviar comentarios sobre el sitio. Use el segundo para sugerir una oportunidad de financiamiento, recurso o caso pr\u00e1ctico comunitario. Las sugerencias se revisan antes de agregarse.",
