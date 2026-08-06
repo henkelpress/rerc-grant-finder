@@ -33,12 +33,12 @@
   "docx": {
     "file": "RERC_Community_Explorer_Appendix_2026-08-06.docx",
     "bytes": 386301,
-    "sha256": "17b42cafc63598c377a45c092202bde3b6c49982d4c8b265973d80550fdbdba5"
+    "sha256": "392192f90fe5631408cf7cad255a84ec8ceb33ef6ab2ffd5fac02c80298f1941"
   },
   "xlsx": {
     "file": "RERC_Community_Explorer_Master_2026-08-06.xlsx",
     "bytes": 378647,
-    "sha256": "df718318e34c4b87bdd1ddb7d34cd43e4fad70f2b6ea2addfbdc36269d699b68"
+    "sha256": "812a456f357ba851d6af194007d6167009b93c5fd146420ba3b53364afc6fc47"
   },
   "csv": {
     "file": "RERC_Community_Explorer_Master_2026-08-06.csv",
