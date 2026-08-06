@@ -219,12 +219,13 @@ def main() -> int:
     assert "Regional programs appear only in the states and territories they serve." in index
     assert "source-backed examples from Protos" not in index and "community profile" not in index.lower()
     assert "why it fits" not in index.lower()
-    assert all(value in index for value in ("fundingViewSwitch", "showFundingCalendar", "calendarGrid", "calendarAgenda"))
+    assert all(value not in index for value in ("fundingViewSwitch", "showFundingCalendar", "calendarGrid", "calendarAgenda", "exportCalendar"))
+    assert all(value in index for value in ("fundingTypeOptions", "caseStudyPhaseOptions", "Clear saved history", "contribute"))
     assert 'src="deadline-utils.js?v=20260805-2"' in index
     deadline_utils = (ROOT / "deadline-utils.js").read_text(encoding="utf-8")
     assert all(value in deadline_utils for value in ("parseDeadline", "fundingTiming", "RERCDeadlineUtils"))
-    assert all(value in app_js for value in ("renderFundingCalendar", "chooseFundingView", "fundingDeadlineEntries", "fundingTiming", "fundingTimingCounts"))
-    assert "calendarTimingSummary" in index and "deadline-status" in planner
+    assert all(value in app_js for value in ("fundingFilterLabels", "caseStudyPhase", "fundingTiming", "fundingTimingCounts", "wordPageBreakXml"))
+    assert "deadline-status" in planner and "stateChanged" in planner and "docxPageBreak" in planner
     assert "renderCardActions" not in app_js and "planner-card-actions" in planner
     assert "window.RERC_CASE_STUDIES" in app_js and "Read the example" in app_js
     assert "topicCorpus(item)" in app_js and "broadFundingStage" in app_js
@@ -238,6 +239,9 @@ def main() -> int:
         "Program Website", "Coverage note:",
     ))
     assert "Why it fits" not in ui_i18n and "Community profile" not in ui_i18n
+    assert all(value in ui_i18n for value in ("Funding details", "Case study phase", "Clear saved history", "Submit feedback", "Suggest an item"))
+    assert (ROOT / ".github" / "ISSUE_TEMPLATE" / "feedback.yml").is_file()
+    assert (ROOT / ".github" / "ISSUE_TEMPLATE" / "catalog-submission.yml").is_file()
 
     manifest = json.loads((ROOT / "maintenance" / "multistate_coverage.json").read_text(encoding="utf-8"))
     regional = [item for item in items if item.get("geography", "").strip().lower() == "multi-state"]
@@ -275,9 +279,12 @@ def main() -> int:
     assert case_by_id["RERC-CASE-BROWNFIELDS-SUCCESS-STORIES-WELLSBURG-WV-A-LOCAL-MANUFACTURING-EXPANSION-TAKES-FLIGHT-WV-2017"]["summary"].startswith("Wellsburg and regional partners")
 
     downloads = ROOT / "downloads"
-    static_docx = downloads / f"RERC_Community_Explorer_Appendix_{DATE_TAG}.docx"
-    static_xlsx = downloads / f"RERC_Community_Explorer_Master_{DATE_TAG}.xlsx"
-    static_csv = downloads / f"RERC_Community_Explorer_Master_{DATE_TAG}.csv"
+    public_downloads = re.findall(r'href="downloads/([^\"]+)"', index)
+    assert len(public_downloads) == 3
+    static_docx = downloads / next(name for name in public_downloads if name.endswith(".docx"))
+    static_xlsx = downloads / next(name for name in public_downloads if name.endswith(".xlsx"))
+    static_csv = downloads / next(name for name in public_downloads if name.endswith(".csv"))
+    package_date = re.search(r"_(\d{4}-\d{2}-\d{2})\.docx$", static_docx.name).group(1)
     assert static_docx.stat().st_size > 100_000
     assert static_xlsx.stat().st_size > 100_000
     assert static_csv.stat().st_size > 100_000
@@ -304,7 +311,7 @@ def main() -> int:
         core_xml = package.read("docProps/core.xml").decode("utf-8")
         assert "Microsoft Office Word" in app_xml and "Macintosh" not in app_xml
         assert "<ns0:Pages>" not in app_xml and "<Pages>" not in app_xml
-        assert f"{DATE_TAG}T00:00:00Z" in core_xml
+        assert f"{package_date}T00:00:00Z" in core_xml
         assert "Timberwing Systems, an EPR, P.C. initiative" in core_xml
         assert "not an EPA grant program" in document_xml
     with zipfile.ZipFile(static_xlsx) as package:
@@ -316,7 +323,7 @@ def main() -> int:
         core_xml = package.read("docProps/core.xml").decode("utf-8")
         assert "Timberwing Systems, an EPR, P.C. initiative" in core_xml
     sha256 = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
-    package_report = json.loads((downloads / f"RERC_Community_Explorer_QA_{DATE_TAG}.json").read_text(encoding="utf-8"))
+    package_report = json.loads((downloads / f"RERC_Community_Explorer_QA_{package_date}.json").read_text(encoding="utf-8"))
     assert csv_row_count == package_report["records"]
     head_commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, check=True, capture_output=True, text=True).stdout.strip()
     assert package_report["status"] == "PASS"
