@@ -1,0 +1,44 @@
+name: Catalog suggestion
+description: Suggest a funding opportunity, resource, or community case study for review.
+title: "[Catalog suggestion]: "
+labels: ["catalog-suggestion"]
+body:
+  - type: markdown
+    attributes:
+      value: "Suggestions are reviewed before publication. Use an official public link and do not include sensitive personal information."
+  - type: dropdown
+    id: record_type
+    attributes:
+      label: What are you suggesting?
+      options:
+        - Funding opportunity
+        - Resource or toolkit
+        - Community case study
+    validations:
+      required: true
+  - type: input
+    id: title
+    attributes:
+      label: Title
+    validations:
+      required: true
+  - type: input
+    id: organization
+    attributes:
+      label: Organization or publisher
+    validations:
+      required: true
+  - type: input
+    id: official_url
+    attributes:
+      label: Official public link
+      description: Use the direct program, resource, or case-study page.
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Who can use it and why it belongs here
+      description: Include geography, timing, type of support, and any other useful context.
+    validations:
+      required: true
