@@ -76,3 +76,9 @@ The package report binds files to the current Git source commit. Commit reviewed
 ## Daily monitoring
 
 GitHub Actions checks source health and discovers federal opportunities each day. Those jobs create review evidence only. A person must verify and approve any public catalog change.
+
+## Public suggestions
+
+The site links to two GitHub issue forms: one for explorer feedback and one for catalog suggestions. Both are review queues, not publication mechanisms. Review every suggested item against an official source, verify its geography and current timing, update the CSV and regional coverage manifest as needed, and run the checks above before it appears on the public site.
+
+The public site intentionally does not show a deadline calendar or calendar export. Individual records may show reviewed timing and a `last_checked` date, but a date must be verified before it is added or renewed in the catalog.
