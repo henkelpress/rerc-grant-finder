@@ -83,13 +83,21 @@ async function main() {
     checks.unlocked = await page.locator('#workflowSteps [data-wizard-step="2"], #workflowSteps [data-wizard-step="3"], #workflowSteps [data-wizard-step="4"]').evaluateAll((nodes) => nodes.every((node) => !node.disabled));
     await page.locator('#workflowSteps [data-wizard-step="2"]').click();
     checks.phase2 = await page.locator('[data-wizard-panel="2"]').isVisible();
+    const applicantChoices = page.locator("#applicantOptions > label");
+    checks.priorityPager = {
+      firstPage: await applicantChoices.evaluateAll((nodes) => nodes.filter((node) => !node.hidden).map((node) => node.textContent.trim())),
+      nextEnabled: await page.locator('[data-choice-next="applicantOptions"]').isEnabled()
+    };
+    await page.locator('[data-choice-next="applicantOptions"]').click();
+    checks.priorityPager.secondPage = await applicantChoices.evaluateAll((nodes) => nodes.filter((node) => !node.hidden).map((node) => node.textContent.trim()));
     await page.locator('#workflowSteps [data-wizard-step="3"]').click();
     await page.waitForSelector(".result-card");
     checks.phase3 = await page.locator("#matchesWorkspace").isVisible();
     check("state_gate", checks.initial.formVisible && checks.initial.stateRequired && checks.initial.stateEnabled
       && checks.initial.stateOptions === 57 && checks.initial.obsoleteLocalityControls.length === 0
       && checks.initial.futureLocked && checks.initial.resultsHidden && checks.blankBlocked && checks.unlocked
-      && checks.phase2 && checks.phase3);
+      && checks.phase2 && checks.phase3 && checks.priorityPager.firstPage.length <= 6
+      && checks.priorityPager.nextEnabled && checks.priorityPager.secondPage.join("|") !== checks.priorityPager.firstPage.join("|"));
 
     checks.counts = await page.evaluate(() => ["fundingCount", "resourceCount", "caseStudyCount"].map((id) => Number(document.getElementById(id).textContent)));
     check("catalog_counts", checks.counts.join(",") === "659,167,476" && checks.counts.reduce((sum, value) => sum + value, 0) === 1302);
@@ -108,13 +116,13 @@ async function main() {
       psegExcluded: !oregonIds.includes("RERC-FND-0269")
     };
     await selectStateFromAnyPhase(page, "New Jersey");
-    await page.evaluate(() => { const control = document.getElementById("includeClosed"); control.checked = true; control.dispatchEvent(new Event("change", { bubbles: true })); });
-    const newJerseyIds = await resultIds(page);
-    checks.newJerseyRegional = {
-      pseg: newJerseyIds.includes("RERC-FND-0269"),
-      craft3Excluded: !newJerseyIds.includes("RERC-FND-0255")
-    };
-    await page.evaluate(() => { const control = document.getElementById("includeClosed"); control.checked = false; control.dispatchEvent(new Event("change", { bubbles: true })); });
+    checks.newJerseyRegional = await page.evaluate(() => {
+      const byId = new Map(window.RERCExplorer.catalog.map((item) => [item.item_id, item]));
+      return {
+        pseg: window.RERCExplorer.matchesGeography(byId.get("RERC-FND-0269"), "New Jersey"),
+        craft3Excluded: !window.RERCExplorer.matchesGeography(byId.get("RERC-FND-0255"), "New Jersey")
+      };
+    });
     await selectStateFromAnyPhase(page, "Puerto Rico");
     const puertoRicoIds = await resultIds(page);
     checks.territoryRegional = {
@@ -206,30 +214,33 @@ async function main() {
     }
     check("mode_buttons", Object.values(checks.modes).every(Boolean));
     await page.locator("#showFunding").click();
+    checks.allResultsDefault = await page.locator("#limitSelect").inputValue() === "all";
+    await page.locator('#workflowSteps [data-wizard-step="2"]').click();
+    await page.locator('#funding-filter-0').check();
+    await page.locator('#workflowSteps [data-wizard-step="3"]').click();
+    checks.fundingFilter = await page.evaluate(() => window.RERCExplorer.getMatches().every((item) => item.item_type !== "Funding" || /\bgrant\b/i.test(`${item.title} ${item.support_type} ${item.amount_or_cost} ${item.match_or_cost}`)));
+    await page.locator('#workflowSteps [data-wizard-step="2"]').click();
+    await page.locator('#funding-filter-0').uncheck();
+    await page.locator('#showCases').click();
+    await page.locator('#case-study-phase-1').check();
+    await page.locator('#workflowSteps [data-wizard-step="3"]').click();
+    checks.caseStudyFilter = await page.evaluate(() => window.RERCExplorer.getMatches().every((item) => item.item_type !== "Case Study" || /design|engineer|predevelopment/i.test(`${item.project_stage} ${item.topic_tags}`)));
+    await page.locator('#workflowSteps [data-wizard-step="2"]').click();
+    await page.locator('#case-study-phase-1').uncheck();
+    await page.locator('#workflowSteps [data-wizard-step="3"]').click();
+    await page.locator('#showFunding').click();
+    check("result_filters", checks.allResultsDefault && checks.fundingFilter && checks.caseStudyFilter);
     checks.cardActions = await page.locator(".result-card").first().evaluate((card) => ({
       planner: card.querySelectorAll(".planner-card-actions [data-action]").length,
       duplicateBase: card.querySelectorAll(".card-actions [data-action]").length
     }));
     check("single_card_actions", checks.cardActions.planner === 2 && checks.cardActions.duplicateBase === 0);
 
-    await page.locator("#showFundingCalendar").click();
-    await page.locator("#fundingCalendar").waitFor({ state: "visible" });
-    const monthBefore = await page.locator("#calendarMonthTitle").innerText();
-    await page.locator("#nextCalendarMonth").click();
-    const monthAfter = await page.locator("#calendarMonthTitle").innerText();
-    checks.calendar = {
-      timingSummary: await page.locator("#calendarTimingSummary").innerText(),
-      weekdayHeaders: await page.locator("#calendarGrid .calendar-weekday").count(),
-      dayCells: await page.locator("#calendarGrid .calendar-day").count(),
-      agendaItems: await page.locator("#calendarAgenda .calendar-agenda-item").count(),
-      navigated: monthBefore !== monthAfter,
-      cardsHidden: await page.locator("#results").isHidden()
-    };
-    check("funding_calendar", /upcoming dates/i.test(checks.calendar.timingSummary)
-      && /rolling or ongoing/i.test(checks.calendar.timingSummary) && checks.calendar.weekdayHeaders === 7
-      && checks.calendar.dayCells >= 28 && checks.calendar.agendaItems > 0 && checks.calendar.navigated && checks.calendar.cardsHidden);
-    await page.screenshot({ path: path.join(outDir, "calendar-desktop.png"), fullPage: true });
-    await page.locator("#showFundingList").click();
+    checks.calendarRemoved = await page.evaluate(() => !document.getElementById("showFundingCalendar")
+      && !document.getElementById("fundingCalendar") && !document.getElementById("exportCalendar"));
+    checks.intakeLinks = await page.evaluate(() => ["feedback.yml", "catalog-submission.yml"].every((template) =>
+      [...document.querySelectorAll("#contribute a")].some((link) => link.href.includes(template))));
+    check("public_intake_and_deadline_boundary", checks.calendarRemoved && checks.intakeLinks);
 
     const save = page.locator('[data-action="planner-save"]').first();
     await save.click(); await page.waitForTimeout(300);
@@ -237,6 +248,12 @@ async function main() {
     await page.reload({ waitUntil: "networkidle" }); await page.waitForSelector("html.rerc-planner-ready");
     checks.savedAfterReload = Number(await page.evaluate(() => document.querySelector("#savedCountBadge, #savedTrayCount, #mobileSavedCount")?.textContent || 0));
     check("saved_persists", checks.savedBeforeReload === 1 && checks.savedAfterReload === 1);
+    await selectStateFromAnyPhase(page, "New York");
+    checks.stateSwitchClearsSaved = Number(await page.evaluate(() => document.querySelector("#savedCountBadge, #savedTrayCount, #mobileSavedCount")?.textContent || 0)) === 0;
+    check("state_switch_clears_saved", checks.stateSwitchClearsSaved);
+    await selectStateFromAnyPhase(page, "Virginia");
+    await page.evaluate(() => window.RERCExplorer.chooseMode("Funding"));
+    await page.locator('[data-action="planner-save"]').first().click();
 
     await page.locator("#openLanguage").click(); await page.locator("#languageDialog").waitFor({ state: "visible" });
     const spanishOption = page.locator('#languageDialog input[value="es"]');
