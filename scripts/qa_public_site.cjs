@@ -248,6 +248,32 @@ async function main() {
     await page.reload({ waitUntil: "networkidle" }); await page.waitForSelector("html.rerc-planner-ready");
     checks.savedAfterReload = Number(await page.evaluate(() => document.querySelector("#savedCountBadge, #savedTrayCount, #mobileSavedCount")?.textContent || 0));
     check("saved_persists", checks.savedBeforeReload === 1 && checks.savedAfterReload === 1);
+
+    checks.workspace = await page.evaluate(() => ({
+      id: localStorage.getItem("rerc.activeWorkspaceId.v2"),
+      legacyId: localStorage.getItem("rerc.lastWorkspaceId")
+    }));
+    check("private_browser_workspace", /^browser-/.test(checks.workspace.id || ""));
+
+    const roadmapPhase = page.locator("#roadmap select").first();
+    await roadmapPhase.selectOption("Design"); await page.waitForTimeout(300);
+    checks.roadmapPhaseChange = {
+      selected: await page.locator("#roadmap select").first().inputValue(),
+      message: await page.locator("#shareStatus").innerText()
+    };
+    check("roadmap_phase_editable", checks.roadmapPhaseChange.selected === "Design" && /Moved to Design/.test(checks.roadmapPhaseChange.message));
+
+    const previousWorkspaceId = checks.workspace.id;
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.locator("#deleteLocalData").click(); await page.waitForTimeout(300);
+    checks.resetRoadmap = await page.evaluate(() => ({
+      count: Number(document.querySelector("#savedCountBadge, #savedTrayCount, #mobileSavedCount")?.textContent || 0),
+      id: localStorage.getItem("rerc.activeWorkspaceId.v2")
+    }));
+    check("roadmap_reset", checks.resetRoadmap.count === 0 && checks.resetRoadmap.id !== previousWorkspaceId && /^browser-/.test(checks.resetRoadmap.id || ""));
+
+    await page.evaluate(() => window.RERCExplorer.chooseMode("Funding"));
+    await page.locator('[data-action="planner-save"]').first().click(); await page.waitForTimeout(300);
     await selectStateFromAnyPhase(page, "New York");
     checks.stateSwitchClearsSaved = Number(await page.evaluate(() => document.querySelector("#savedCountBadge, #savedTrayCount, #mobileSavedCount")?.textContent || 0)) === 0;
     check("state_switch_clears_saved", checks.stateSwitchClearsSaved);
