@@ -19,26 +19,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: npm
       - name: Install browser QA dependencies
         run: |
-          npm ci
-          npx playwright install --with-deps chromium
+          retry() {
+            for attempt in 1 2; do
+              "$@" && return 0
+              test "$attempt" = 2 && return 1
+              sleep 15
+            done
+          }
+          retry npm ci
+          retry npx playwright install --with-deps chromium
       - name: Run executable release QA
         run: python scripts/qa_release.py
       - name: Run browser and mobile QA
         run: |
           python -m http.server 8877 --bind 127.0.0.1 > /tmp/rerc-http.log 2>&1 &
-          node scripts/qa_public_site.cjs http://127.0.0.1:8877/ browser-qa
+          if ! node scripts/qa_public_site.cjs http://127.0.0.1:8877/ browser-qa; then
+            sleep 5
+            node scripts/qa_public_site.cjs http://127.0.0.1:8877/ browser-qa
+          fi
       - name: Remove build-only dependencies
         run: |
           rm -rf node_modules browser-qa

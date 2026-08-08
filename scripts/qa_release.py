@@ -269,7 +269,7 @@ def main() -> int:
     assert "__pycache__" in workflow and "*.pyc" in workflow
     source_health = (ROOT / ".github" / "workflows" / "source-health.yml").read_text(encoding="utf-8")
     discovery = (ROOT / ".github" / "workflows" / "discover-federal-opportunities.yml").read_text(encoding="utf-8")
-    assert "17 10 * * *" in source_health and "actions/cache/restore@v4" in source_health
+    assert "17 10 * * *" in source_health and "actions/cache/restore@v5" in source_health
     assert "23 11 * * *" in discovery
     assert ".source-monitor/" in (ROOT / ".gitignore").read_text(encoding="utf-8")
     assert 'id="nextDeadlinePanel"' in index and "renderNextDeadline" in app_js
