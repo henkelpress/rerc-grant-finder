@@ -265,8 +265,7 @@ def main() -> int:
     assert not (ROOT / "scripts" / "qa_public_site_final.cjs").exists()
     qa_workflow = (ROOT / ".github" / "workflows" / "qa.yml").read_text(encoding="utf-8")
     assert "qa_public_site.cjs" in qa_workflow and "qa_geography_coverage.py" in qa_workflow
-    workflow = (ROOT / ".github" / "workflows" / "deploy-pages.yml").read_text(encoding="utf-8")
-    assert "__pycache__" in workflow and "*.pyc" in workflow
+    assert not (ROOT / ".github" / "workflows" / "deploy-pages.yml").exists()
     source_health = (ROOT / ".github" / "workflows" / "source-health.yml").read_text(encoding="utf-8")
     discovery = (ROOT / ".github" / "workflows" / "discover-federal-opportunities.yml").read_text(encoding="utf-8")
     assert "17 10 * * *" in source_health and "actions/cache/restore@v5" in source_health
