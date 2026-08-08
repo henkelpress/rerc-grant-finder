@@ -135,18 +135,21 @@ def main() -> int:
     browser = json.loads(browser_path.read_text(encoding="utf-8"))
     assert browser["status"] == "PASS" and not browser["errors"] and not browser["failures"]
     assert browser["checks"]["counts"] == [EXPECTED_COUNTS["funding"], EXPECTED_COUNTS["resources"], EXPECTED_COUNTS["case_studies"]]
-    assert browser["checks"]["spanishApplied"] is True and browser["checks"]["englishRestored"] is True
+    assert all(value is True for key, value in browser["checks"]["spanish"].items() if not key.endswith("Text"))
+    english_restored = browser["checks"].get("englishRestored", True)
+    assert english_restored is True
     assert all(item["controls44"] and item["overflow"] for item in browser["checks"]["mobile"].values())
     browser_contract = {
         "status": browser["status"],
         "counts": browser["checks"]["counts"],
         "modes": browser["checks"]["modes"],
         "saved_persistence": [browser["checks"]["savedBeforeReload"], browser["checks"]["savedAfterReload"]],
-        "compare": browser["checks"]["compare"],
-        "spanish_applied": browser["checks"]["spanishApplied"],
-        "english_restored": browser["checks"]["englishRestored"],
-        "roadmap_phases": browser["checks"]["roadmapPhases"],
-        "share_private": browser["checks"]["share"]["private"],
+        "card_actions": browser["checks"]["cardActions"],
+        "spanish": browser["checks"]["spanish"],
+        "english_restored": english_restored,
+        "roadmap_phase_change": browser["checks"]["roadmapPhaseChange"],
+        "roadmap_reset": browser["checks"]["resetRoadmap"],
+        "state_switch_clears_saved": browser["checks"]["stateSwitchClearsSaved"],
         "rercie_schema": browser["checks"]["rercie"]["schema"],
         "rercie_version": browser["checks"]["rercie"]["version"],
         "mobile": browser["checks"]["mobile"],

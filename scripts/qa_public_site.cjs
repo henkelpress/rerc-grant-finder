@@ -315,7 +315,8 @@ async function main() {
     check("spanish_applied", Object.entries(checks.spanish).filter(([key]) => !key.endsWith("Text")).every(([, value]) => Boolean(value)));
     await page.locator("#openLanguage").click(); await page.locator('#languageDialog input[value="en"]').click();
     await page.locator("#languageDialog").waitFor({ state: "hidden" });
-    check("english_restored", await page.locator("html").getAttribute("lang") === "en");
+    checks.englishRestored = await page.locator("html").getAttribute("lang") === "en";
+    check("english_restored", checks.englishRestored);
 
     downloads.csv = await download(page, "#exportPlanCsv", "plan.csv");
     downloads.docx = await download(page, "#exportPlanWord", "plan.docx");
