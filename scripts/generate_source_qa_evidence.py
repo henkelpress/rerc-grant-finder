@@ -148,7 +148,10 @@ def main() -> int:
         "spanish": browser["checks"]["spanish"],
         "english_restored": english_restored,
         "roadmap_phase_change": browser["checks"]["roadmapPhaseChange"],
-        "roadmap_reset": browser["checks"]["resetRoadmap"],
+        "roadmap_reset": {
+            "count": browser["checks"]["resetRoadmap"]["count"],
+            "private_workspace": str(browser["checks"]["resetRoadmap"]["id"]).startswith("browser-"),
+        },
         "state_switch_clears_saved": browser["checks"]["stateSwitchClearsSaved"],
         "rercie_schema": browser["checks"]["rercie"]["schema"],
         "rercie_version": browser["checks"]["rercie"]["version"],
