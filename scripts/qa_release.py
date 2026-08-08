@@ -242,7 +242,10 @@ def main() -> int:
         "Program Website", "Coverage note:",
     ))
     assert "Why it fits" not in ui_i18n and "Community profile" not in ui_i18n
-    assert all(value in ui_i18n for value in ("Funding details", "Case study phase", "Reset roadmap", "Submit feedback", "Suggest an item"))
+    assert all(value in ui_i18n for value in (
+        "Funding details", "Case study phase", "Reset roadmap", "Report an issue",
+        "Submit a grant, resource, or case study",
+    ))
     assert (ROOT / ".github" / "ISSUE_TEMPLATE" / "feedback.yml").is_file()
     assert (ROOT / ".github" / "ISSUE_TEMPLATE" / "catalog-submission.yml").is_file()
 
