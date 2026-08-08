@@ -238,8 +238,12 @@ async function main() {
 
     checks.calendarRemoved = await page.evaluate(() => !document.getElementById("showFundingCalendar")
       && !document.getElementById("fundingCalendar") && !document.getElementById("exportCalendar"));
-    checks.intakeLinks = await page.evaluate(() => ["feedback.yml", "catalog-submission.yml"].every((template) =>
-      [...document.querySelectorAll("#contribute a")].some((link) => link.href.includes(template))));
+    checks.intakeLinks = await page.evaluate(() => {
+      const links = [...document.querySelectorAll("#contribute a")];
+      return links.some((link) => link.href.includes("feedback.yml") && link.textContent.trim() === "Report an issue")
+        && links.some((link) => link.href.includes("catalog-submission.yml")
+          && link.textContent.trim() === "Submit a grant, resource, or case study");
+    });
     check("public_intake_and_deadline_boundary", checks.calendarRemoved && checks.intakeLinks);
 
     const save = page.locator('[data-action="planner-save"]').first();
