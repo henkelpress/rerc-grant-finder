@@ -8,19 +8,21 @@ import os
 import re
 import secrets
 import sys
+import threading
 import time
 import unicodedata
 import urllib.parse
 import urllib.request
 import zipfile
 import xml.etree.ElementTree as ET
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from xml.sax.saxutils import escape
 
 
-APP_VERSION = "0.5.1"
+APP_VERSION = "0.5.2"
 APP_DIR = Path(os.environ.get("RERCIE_APP_ROOT") or (Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent))
 ASSET_DIR = APP_DIR / "assets"
 if not ASSET_DIR.is_dir() and not getattr(sys, "frozen", False):
@@ -29,16 +31,43 @@ LOCAL_KNOWLEDGE_DIR = APP_DIR / "local_knowledge"
 PUBLIC_CATALOG_URL = "https://henkelpress.github.io/rerc-grant-finder/data.js"
 PUBLIC_COMMUNITY_PROFILE_URL = "https://henkelpress.github.io/rerc-grant-finder/community_profiles.js"
 COMMUNITY_PROFILE_PREFIX = "window.RERC_COMMUNITY_PROFILES="
-MAX_COMMUNITY_PROFILE_BYTES = 8 * 1024 * 1024
+MAX_COMMUNITY_PROFILE_BYTES = 16 * 1024 * 1024
 MAX_COMMUNITY_PROFILE_RECORDS = 50000
 CATALOG_PREFIXES = ("window.RERC_CATALOG = ", "window.GRANT_EXPLORER_DATA = ")
-DEFAULT_MODEL = "gemma-3-1b-it-Q4_K_M.gguf"
+DEFAULT_MODEL = "gemma-3-4b-it-Q4_K_M.gguf"
 LOCAL_CHAT_URL = os.environ.get("RERCIE_LOCAL_CHAT_URL", "http://127.0.0.1:8788/v1/chat/completions")
 LOCAL_HEALTH_URL = os.environ.get("RERCIE_LOCAL_HEALTH_URL", "http://127.0.0.1:8788/health")
 LOCAL_MODELS_URL = os.environ.get("RERCIE_LOCAL_MODELS_URL", "http://127.0.0.1:8788/v1/models")
 SESSION_TOKEN = os.environ.get("RERCIE_SESSION_TOKEN", "")
 EXPECTED_HOST = os.environ.get("RERCIE_EXPECTED_HOST", "127.0.0.1:8789").lower()
 EXPECTED_ORIGIN = f"http://{EXPECTED_HOST}"
+APP_WINDOW_COOKIE = "RERCeSession"
+APP_WINDOW_CODE_TTL_SECONDS = 60
+APP_WINDOW_CODES: dict[str, float] = {}
+APP_WINDOW_CODE_LOCK = threading.Lock()
+
+
+def create_app_window_code() -> str:
+    now = time.monotonic()
+    code = secrets.token_urlsafe(32)
+    with APP_WINDOW_CODE_LOCK:
+        expired = [value for value, deadline in APP_WINDOW_CODES.items() if deadline <= now]
+        for value in expired:
+            APP_WINDOW_CODES.pop(value, None)
+        APP_WINDOW_CODES[code] = now + APP_WINDOW_CODE_TTL_SECONDS
+    return code
+
+
+def consume_app_window_code(code: str) -> bool:
+    if not code:
+        return False
+    now = time.monotonic()
+    with APP_WINDOW_CODE_LOCK:
+        deadline = APP_WINDOW_CODES.pop(code, None)
+        expired = [value for value, value_deadline in APP_WINDOW_CODES.items() if value_deadline <= now]
+        for value in expired:
+            APP_WINDOW_CODES.pop(value, None)
+    return deadline is not None and deadline > now
 
 
 def _require_loopback_runtime_url(name: str, value: str) -> str:
@@ -57,7 +86,8 @@ for _runtime_name, _runtime_url in (
 CENSUS_YEAR = "2024"
 CENSUS_ISLAND_YEAR = "2020"
 MAX_REQUEST_BYTES = 6 * 1024 * 1024
-HANDOFF_SCHEMA = "rercie-handoff"
+HANDOFF_SCHEMA = "rerc-e-handoff"
+LEGACY_HANDOFF_SCHEMA = "rercie-handoff"
 HANDOFF_VERSION = 1
 MAX_HANDOFF_BYTES = 256 * 1024
 MAX_HANDOFF_RECORDS = 100
@@ -144,13 +174,37 @@ HANDOFF_RECORD_FIELD_LIMITS = {
 }
 HTML_MARKUP_PATTERN = re.compile(r"<\s*/?\s*[A-Za-z!][^>]*>")
 
-SYSTEM_PROMPT = """You are an evidence-extraction assistant. Return JSON only.
+EXCERPT_SYSTEM_PROMPT = """You are an evidence-extraction assistant. Return JSON only.
 
 Select up to six useful excerpts copied exactly from the supplied evidence. Do not
 paraphrase, summarize, correct, combine, or add text. Each excerpt must be a
 complete sentence or a short self-contained phrase. Return this shape:
 {"excerpts":[{"text":"exact copied text"}]}
 If there is no useful evidence, return {"excerpts":[]}."""
+
+WRITER_SYSTEM_PROMPT = """You are RERC-e's source-bound grant editor.
+
+Edit the supplied statements into one concise professional grant paragraph. Every
+statement is verified evidence. Use each statement once unless it duplicates
+another statement. Use no outside facts or assumptions.
+
+A protected statement contains a digit, dollar amount, percentage, date, target,
+baseline, request, match, deadline, funding status, the word "typical," or a
+condition such as "if," "unless," or "subject to." Copy every protected statement
+word for word as its own sentence. Do not shorten, combine, paraphrase, or change
+its punctuation. For other statements, you may reorder them, remove repetition,
+join closely related ideas, and make small grammatical changes.
+
+Do not add, infer, explain, characterize, or predict any fact, benefit, condition,
+task, cost, requirement, commitment, or missing detail. Preserve each actor,
+action, amount role, funding status, uncertainty, future condition, baseline, and
+target. A target must remain a target. Typical guidance must not become a
+requirement. Delete any sentence you cannot support from the supplied statements.
+Output only the paragraph, with no heading, greeting, bullets, note, or offer to
+help."""
+
+# Compatibility alias for the exact-excerpt QA helpers retained below.
+SYSTEM_PROMPT = EXCERPT_SYSTEM_PROMPT
 
 
 def _plain_object(value: Any, label: str) -> dict[str, Any]:
@@ -198,7 +252,7 @@ def validate_handoff_package(package: Any) -> dict[str, Any]:
         if unexpected:
             details.append("unexpected " + ", ".join(unexpected))
         raise ValueError("The plan fields are not valid" + (": " + "; ".join(details) if details else "."))
-    if handoff.get("schema") != HANDOFF_SCHEMA or type(handoff.get("schema")) is not str:
+    if type(handoff.get("schema")) is not str or handoff.get("schema") not in {HANDOFF_SCHEMA, LEGACY_HANDOFF_SCHEMA}:
         raise ValueError(f"The plan schema must be {HANDOFF_SCHEMA}.")
     if type(handoff.get("version")) is not int or handoff.get("version") != HANDOFF_VERSION:
         raise ValueError(f"The plan version must be {HANDOFF_VERSION}.")
@@ -538,10 +592,23 @@ def fetch_public_community_profile(community: str, state: str) -> dict[str, str]
     )
     target_name = _normalize_lookup_name((community or "").split(",", 1)[0])
     target_state = _normalize_lookup_name(state or "")
+    exact_matches: list[dict[str, Any]] = []
+    alias_matches: list[dict[str, Any]] = []
     for record in records:
-        candidate_name = _normalize_lookup_name(str(record.get("community", "")) or str(record.get("name", "")))
+        candidate_name = _normalize_lookup_name(
+            (str(record.get("community", "")) or str(record.get("name", ""))).split(",", 1)[0]
+        )
         candidate_state = _normalize_lookup_name(str(record.get("state", "")))
-        if candidate_name == target_name and candidate_state == target_state:
+        if candidate_state != target_state:
+            continue
+        if candidate_name == target_name:
+            exact_matches.append(record)
+        elif re.sub(r"\s+(?:town|city|village)$", "", candidate_name) == target_name:
+            alias_matches.append(record)
+    matching_records = exact_matches or alias_matches
+    if len(matching_records) == 1:
+        record = matching_records[0]
+        if record:
             source = str(record.get("source") or "RERC Community Explorer profile bundle").strip()
             profile: dict[str, str] = {
                 "source": source,
@@ -829,16 +896,26 @@ Writing requirements:
 """.strip()
 
 
-def call_local_writer(prompt: str, model: str, system_prompt: str = SYSTEM_PROMPT) -> str:
+def call_local_writer(
+    prompt: str,
+    model: str,
+    system_prompt: str = WRITER_SYSTEM_PROMPT,
+    max_tokens: int = 900,
+    response_format: dict[str, Any] | None = None,
+) -> str:
     payload = {
         "model": model or DEFAULT_MODEL,
         "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
         "temperature": 0.0,
+        "top_k": 40,
         "top_p": 0.9,
         "repeat_penalty": 1.08,
-        "max_tokens": 900,
+        "chat_template_kwargs": {"enable_thinking": False},
+        "max_tokens": max(80, min(int(max_tokens), 2600)),
         "stream": False,
     }
+    if response_format:
+        payload["response_format"] = response_format
     data = request_json(LOCAL_CHAT_URL, payload=payload, timeout=300)
     choices = data.get("choices") or []
     return choices[0].get("message", {}).get("content", "").strip() if choices else ""
@@ -905,7 +982,7 @@ def select_evidence_excerpts(
         "Select the most useful evidence for a grant-writing outline. "
         "Copy every excerpt exactly. Return JSON only.\n\nEVIDENCE:\n" + evidence
     )
-    raw = call_local_writer(prompt, model, SYSTEM_PROMPT)
+    raw = call_local_writer(prompt, model, EXCERPT_SYSTEM_PROMPT)
     return parse_verified_excerpts(raw, evidence)
 
 
@@ -942,89 +1019,616 @@ def _as_sentence(value: str) -> str:
     return text if text.endswith((".", "!", "?")) else text + "."
 
 
-def deterministic_scaffold(payload: dict[str, Any], public_profile: dict[str, str], excerpts: list[str] | None = None) -> str:
+def _funding_record_data(value: Any) -> dict[str, Any]:
+    raw = str(value or "").strip()
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _fact_sentences(value: Any, limit: int = 80) -> list[str]:
+    text = unicodedata.normalize("NFKC", str(value or "")).replace("\r\n", "\n").replace("\r", "\n")
+    facts: list[str] = []
+    seen: set[str] = set()
+    for block in text.split("\n"):
+        block = re.sub(r"^\s*(?:[-*]|\d+[.)])\s+", "", block).strip()
+        if not block or block.startswith("--- File:"):
+            continue
+        for part in re.split(r"(?<=[.!?])\s+(?=[A-Z0-9\[])", block):
+            fact = re.sub(r"\s+", " ", part).strip()
+            normalized = _normalized_text(fact).lower()
+            if len(fact) < 3 or normalized in seen:
+                continue
+            seen.add(normalized)
+            facts.append(fact[:1200])
+            if len(facts) >= limit:
+                return facts
+    return facts
+
+
+def _unique_facts(*groups: list[str], limit: int = 8) -> list[str]:
+    output: list[str] = []
+    seen: set[str] = set()
+    for group in groups:
+        for fact in group:
+            key = _normalized_text(fact).lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            output.append(fact)
+            if len(output) >= limit:
+                return output
+    return output
+
+
+def _facts_matching(facts: list[str], pattern: str, limit: int = 6) -> list[str]:
+    regex = re.compile(pattern, re.IGNORECASE)
+    return [fact for fact in facts if regex.search(fact)][:limit]
+
+
+_FIELD_MATCH_STOP_WORDS = {"a", "an", "and", "as", "no", "of", "or", "the", "to", "yes"}
+
+
+def _field_match_tokens(value: str) -> set[str]:
+    normalized = unicodedata.normalize("NFKC", str(value or "")).lower().replace("%", " percent ")
+    tokens: set[str] = set()
+    for token in re.findall(r"\d[\d,]*(?:\.\d+)?|[a-z]+", normalized):
+        token = token.replace(",", "")
+        token = {"typically": "typical", "cycles": "cycle"}.get(token, token)
+        if token not in _FIELD_MATCH_STOP_WORDS:
+            tokens.add(token)
+    return tokens
+
+
+def _field_represented(value: str, supplied_text: str) -> bool:
+    required = _field_match_tokens(value)
+    supplied = _field_match_tokens(supplied_text)
+    if not required:
+        return False
+    required_numbers = {token for token in required if token.replace(".", "", 1).isdigit()}
+    if not required_numbers.issubset(supplied):
+        return False
+    return required.issubset(supplied) or len(required & supplied) / len(required) >= 0.8
+
+
+_NEED_PATTERN = r"\b(?:need|problem|unsafe|lack|barrier|confus\w*|congest\w*|crash\w*|risk\w*|existing|current|recorded|average|observed|traffic counts?|no accessible|limited|shortage|condition|deteriorat\w*|flood\w*|erosion|unmet)\b"
+_ACTION_PATTERN = r"\b(?:plans? to|propos\w*|add\w*|construct(?:s|ed|ing)?|install\w*|replace\w*|reconstruct\w*|develop\w*|create\w*|repair\w*|renovat\w*|acquir\w*)\b"
+_WORK_PATTERN = r"\b(?:if funding|by (?:january|february|march|april|may|june|july|august|september|october|november|december)|proposed for (?:january|february|march|april|may|june|july|august|september|october|november|december)|will manage|will oversee|responsib\w*|procurement|grant administration|advertis\w*|open\w* by|design drawings|cost estimate|repeat\w*|one year after|timeline|schedule)\b"
+_BENEFIT_PATTERN = r"\b(?:benefit\w*|target|goal|intended|aim\w*|reduce\w*|increase\w*|eliminate\w*|provide\w*|protect\w*|improv\w*|accessib\w*|people served|visitor\w*|resident\w*|result\w*)\b"
+_UNAVAILABLE_EVIDENCE_PATTERN = re.compile(
+    r"\bno\b[^.]{0,80}\b(?:data|estimate|evidence|information)\b[^.]{0,80}\b(?:available|confirmed|documented|verified)\b",
+    re.IGNORECASE,
+)
+
+
+def section_evidence(
+    payload: dict[str, Any],
+    public_profile: dict[str, str],
+    local_knowledge: str = "",
+) -> dict[str, list[str]]:
+    summary = _fact_sentences(payload.get("projectSummary"), 8)
+    notes = _fact_sentences(payload.get("projectNotes"), 100)
+    local = _fact_sentences(local_knowledge, 30)
+    combined_notes = notes + local
+    match = _fact_sentences(payload.get("matchCapacity"), 20)
+    source = _fact_sentences(payload.get("sourceNotes"), 20)
+    record = _funding_record_data(payload.get("selectedGrant"))
+    supplied_budget_text = "\n".join([str(payload.get("matchCapacity") or ""), str(payload.get("sourceNotes") or "")]).lower()
+    record_budget: list[str] = []
+    status = str(record.get("status") or "").strip()
+    amount = str(record.get("amount_or_cost") or "").strip()
+    record_match = str(record.get("match_or_cost") or "").strip()
+    deadline = str(record.get("deadline_or_availability") or "").strip()
+    if status and not _field_represented(status, supplied_budget_text):
+        record_budget.append(f"The supplied funding record lists the program status as {status}.")
+    if amount and amount.lower() not in {"varies", "variable", "n/a", "unknown"} and not _field_represented(amount, supplied_budget_text):
+        record_budget.append(f"The supplied funding record lists the award amount or support as {amount}.")
+    if record_match and not _field_represented(record_match, supplied_budget_text):
+        record_budget.append(f"The supplied funding record lists the match or cost share as {record_match}.")
+    if deadline and not _field_represented(deadline, supplied_budget_text):
+        record_budget.append(f"The supplied funding record lists the deadline or availability as {deadline}.")
+
+    need = _unique_facts(
+        [fact for fact in _facts_matching(combined_notes, _NEED_PATTERN, 8) if not _UNAVAILABLE_EVIDENCE_PATTERN.search(fact)],
+        limit=6,
+    )
+    if len(need) < 2:
+        need = _unique_facts(need, _facts_matching(summary, _NEED_PATTERN, 2), limit=6)
+    proposed = _unique_facts(
+        _facts_matching(summary, _ACTION_PATTERN, 3),
+        _facts_matching(combined_notes, _ACTION_PATTERN, 4),
+        _facts_matching(combined_notes, r"\b(?:owns? the (?:site|property)|design drawings|preliminary cost estimate)\b", 2),
+        limit=6,
+    )
+    benefit = _unique_facts(
+        _facts_matching(combined_notes, r"\b(?:existing|average|baseline)\b", 2),
+        _facts_matching(summary, _BENEFIT_PATTERN, 2),
+        _facts_matching(combined_notes, r"\b(?:target|goal|benefit\w*|people served|one year after|reduce\w*|increase\w*)\b", 4),
+        limit=5,
+    )
+    work = _unique_facts(
+        _facts_matching(match, r"\b(?:manage\w*|oversee\w*|responsib\w*|staff|director|officer|partner)\b", 4),
+        _facts_matching(combined_notes, _WORK_PATTERN, 7),
+        limit=8,
+    )
+    budget = _unique_facts(
+        _facts_matching(match, r"(?:\$|\b(?:budget|cost|request|match|local share|capital funds?|award)\b)", 6),
+        record_budget,
+        _facts_matching(source, r"\b(?:budget|match|cost|award|request|fund\w*|cycle|deadline)\b", 3),
+        limit=8,
+    )
+    # Keep the model away from irrelevant catalog metadata when no financial facts were supplied.
+    if not match and not record_budget:
+        budget = []
+    return {
+        "Project Need": need,
+        "Proposed Work": proposed,
+        "Community Benefit": benefit,
+        "Work Plan": work,
+        "Budget and Match Notes": budget,
+    }
+
+
+_MODEL_SECTION_INSTRUCTIONS = {
+    "Project Need": "Explain the documented problem and its scale. Do not present proposed construction as an existing condition.",
+    "Proposed Work": "Describe the supplied activities and scope. Preserve every condition tied to funding or timing.",
+    "Community Benefit": "Describe only explicitly supplied intended benefits and the supplied baseline and target. Keep the words baseline or target when the evidence uses them; do not present a target as an achieved result.",
+    "Work Plan": "Organize the supplied implementation tasks, dates, and responsible parties. Do not add application-preparation steps.",
+    "Budget and Match Notes": "State the supplied budget, request, local share, capacity, and funding caveats without changing the role of any amount.",
+}
+_MODEL_DRAFT_HEADINGS = {"Project Need", "Proposed Work", "Community Benefit"}
+
+
+_GROUNDING_STOP_WORDS = set("""
+a an and are as at be because been before being both but by can could did do does during each for from had has have
+having he her hers him his how i if in into is it its itself may more most no nor not of on once only or other our
+ours out over own same she should so some such than that the their theirs them themselves then there these they this
+those through to too under until up very was we were what when where which while who whom why will with would you your
+""".split())
+_GROUNDING_GLUE_WORDS = set("""
+according after also based combined describes documented following includes including lists notes proposed respectively
+states supplied together project program community county town city applicant work grant funding plan paragraph
+aiming baseline baseline-to-target change completion enhance accessibility offering
+maximum contains giving measured
+""".split())
+
+
+def _content_words(value: str) -> set[str]:
+    return {word.lower().strip("'-") for word in re.findall(r"[A-Za-z][A-Za-z'-]{2,}", value or "")}
+
+
+_PROTECTED_FACT_PATTERN = re.compile(
+    r"(?:\d|[$%]|\b(?:target|baseline|request|match|deadline|closed|open|typical|average|recorded|"
+    r"if|unless|subject to|no more than|at least|at most)\b)",
+    re.IGNORECASE,
+)
+
+
+def _normalized_fact_span(value: str) -> str:
+    return _normalized_text(value).replace("’", "'").replace("“", '"').replace("”", '"').lower()
+
+
+def _protected_facts(facts: list[str]) -> list[str]:
+    return [fact for fact in facts if _PROTECTED_FACT_PATTERN.search(fact)]
+
+
+def _word_is_grounded(word: str, evidence_words: set[str]) -> bool:
+    if word in _GROUNDING_STOP_WORDS or word in _GROUNDING_GLUE_WORDS or word in evidence_words:
+        return True
+    if len(word) < 5:
+        return False
+    prefix = word[:6] if len(word) >= 7 else word[:5]
+    return any(len(candidate) >= 5 and (candidate.startswith(prefix) or word.startswith(candidate[: len(prefix)])) for candidate in evidence_words)
+
+
+def _money_relation_issues(draft: str, evidence: str) -> list[str]:
+    issues: list[str] = []
+    evidence_lower = evidence.lower()
+    draft_lower = draft.lower()
+    local_amounts: set[str] = set()
+    for pattern in (
+        r"\$([0-9][0-9,]*(?:\.\d+)?)\b[^.]{0,100}\b(?:local share|local match|match funds?)\b",
+        r"\b(?:local share|local match|match funds?)\b[^.]{0,100}\$([0-9][0-9,]*(?:\.\d+)?)",
+    ):
+        local_amounts.update(match.replace(",", "") for match in re.findall(pattern, evidence_lower))
+    if local_amounts:
+        for match in re.finditer(r"\b(?:local share|local match|match funds?)\b", draft_lower):
+            window = draft_lower[max(0, match.start() - 70): match.end() + 70]
+            nearby = {item.replace(",", "") for item in re.findall(r"\$([0-9][0-9,]*(?:\.\d+)?)", window)}
+            wrong = nearby - local_amounts
+            if wrong:
+                issues.append("amount assigned to the wrong local-share role: " + ", ".join(sorted(wrong)))
+    if "plans to request" in evidence_lower:
+        requested = re.findall(r"plans? to request[^$]{0,50}\$([0-9][0-9,]*(?:\.\d+)?)", evidence_lower)
+        for amount in requested:
+            normalized = amount.replace(",", "")
+            if normalized in _number_tokens(draft) and not re.search(
+                rf"(?:plans? to request|request(?:ing)?|seek(?:ing)?)\b[^$]{{0,60}}\${re.escape(amount)}",
+                draft_lower,
+            ):
+                issues.append(f"requested amount lost its request status: {normalized}")
+    return issues
+
+
+def model_section_issues(draft: str, facts: list[str], metadata: list[str] | None = None) -> list[str]:
+    text = (draft or "").strip()
+    evidence = "\n".join([*(metadata or []), *facts])
+    evidence_lower = evidence.lower()
+    issues: list[str] = []
+    if len(text) < 25:
+        issues.append("section is empty or too short")
+    if len(text) > 1800:
+        issues.append("section is too long")
+    if re.search(r"(?m)^\s*(?:#|[-*]\s|\d+[.)]\s)", text):
+        issues.append("section contains headings or list formatting")
+    if re.search(r"\b(?:here(?:'s| is)|let me know|i can|happy to)\b", text, re.IGNORECASE):
+        issues.append("section contains conversational framing")
+    if re.search(r"\[(?:add local fact|check official source)\]", text, re.IGNORECASE):
+        issues.append("section contains an unapproved placeholder")
+    normalized_draft = _normalized_fact_span(text)
+    for fact in _protected_facts(facts):
+        if _normalized_fact_span(_as_sentence(fact)) not in normalized_draft:
+            issues.append("protected statement changed or omitted: " + _normalized_text(fact)[:180])
+    draft_words = _content_words(text)
+    for fact in facts:
+        if _PROTECTED_FACT_PATTERN.search(fact):
+            continue
+        required_words = {
+            word for word in _content_words(fact)
+            if word not in _GROUNDING_STOP_WORDS and word not in _GROUNDING_GLUE_WORDS
+        }
+        if not required_words:
+            continue
+        matched = sum(1 for word in required_words if _word_is_grounded(word, draft_words))
+        minimum_ratio = 0.67 if len(required_words) <= 3 else 0.55
+        if matched / len(required_words) < minimum_ratio:
+            issues.append("supplied statement changed or omitted: " + _normalized_text(fact)[:180])
+    if metadata and metadata[0]:
+        community = re.escape(metadata[0])
+        for match in re.finditer(rf"\b{community}\s+(?:County|Town|City|Village)\b", text, re.IGNORECASE):
+            if match.group(0).lower() not in evidence_lower:
+                issues.append("unsupported jurisdiction name: " + match.group(0))
+        for match in re.finditer(rf"\b{community}\s+(?:will|has|plans? to)\b", text, re.IGNORECASE):
+            if match.group(0).lower() not in evidence_lower:
+                issues.append("unsupported project actor: " + match.group(0))
+    for match in re.finditer(r"\bthe project will\s+[A-Za-z'-]+", text, re.IGNORECASE):
+        if match.group(0).lower() not in evidence_lower:
+            issues.append("unsupported project actor or action: " + match.group(0))
+    unexpected_numbers = sorted(_number_tokens(text) - _number_tokens(evidence))
+    issues.extend(f"unsupported number: {number}" for number in unexpected_numbers)
+    high_risk_patterns = (
+        r"\b(?:is|was|has been|will be)\s+(?:eligible|funded|awarded|approved)\b",
+        r"\b(?:popular|critical|significant|outdated|comprehensive)\b",
+        r"\b(?:boost|generate|increase)\w*\s+(?:tourism|revenue|economy|jobs?)\b",
+        r"\b(?:hikers?|bikers?|equestrians?)\b",
+        r"\b(?:ada|americans with disabilities act)\b",
+        r"\b(?:guarantee|ensure)\w*\b",
+    )
+    for pattern in high_risk_patterns:
+        for match in re.finditer(pattern, text, re.IGNORECASE):
+            phrase = match.group(0).lower()
+            if phrase not in evidence_lower:
+                issues.append(f"unsupported claim: {phrase}")
+    if "if funding" in evidence_lower and not re.search(r"\b(?:if|contingent|subject to)\b[^.]{0,80}\bfund\w*", text, re.IGNORECASE):
+        issues.append("funding condition was removed")
+    if "typical" in evidence_lower and re.search(r"\b(?:require|required|requires)\b", text, re.IGNORECASE) and "require" not in evidence_lower:
+        issues.append("a typical rule was changed into a requirement")
+    if re.search(r"\btarget\b", evidence_lower) and not re.search(r"\b(?:target|aim\w*|goal)\b", text, re.IGNORECASE):
+        issues.append("a target was changed into an achieved result")
+    if "cycle closed" in evidence_lower and re.search(r"\b(?:current|open|available)\s+(?:cycle|funding|opportunity)\b", text, re.IGNORECASE):
+        issues.append("closed funding was described as open or current")
+    evidence_words = _content_words(evidence)
+    novel = sorted(word for word in _content_words(text) if not _word_is_grounded(word, evidence_words))
+    if novel:
+        issues.append("unsupported wording: " + ", ".join(novel[:12]))
+    issues.extend(_money_relation_issues(text, evidence))
+    return sorted(set(issues))
+
+
+def _clean_model_paragraph(value: str) -> str:
+    text = (value or "").strip()
+    text = re.sub(r"^```(?:markdown|text)?\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*```$", "", text)
+    text = re.sub(r"^#{1,6}\s+[^\n]+\n+", "", text)
+    return text.strip().strip('"')
+
+
+def _model_section_prompt(heading: str, facts: list[str], payload: dict[str, Any], repair: str = "") -> str:
+    metadata = (
+        f"Community: {payload.get('community') or '[not supplied]'}\n"
+        f"State or territory: {payload.get('state') or '[not supplied]'}\n"
+        f"Project title: {payload.get('projectTitle') or '[not supplied]'}"
+    )
+    repair_block = ""
+    if repair:
+        repair_block = (
+            "\n\nThe previous paragraph failed validation. Remove every unsupported word or claim named below; "
+            "delete any unsupported sentence, and copy the supplied wording when needed. One accurate sentence is "
+            "better than several unsupported sentences.\n" + repair
+        )
+    return (
+        f"Write the {heading} section. {_MODEL_SECTION_INSTRUCTIONS[heading]}\n\n"
+        + metadata
+        + "\n\nSUPPLIED STATEMENTS:\n"
+        + "\n".join(f"- {fact}" for fact in facts)
+        + repair_block
+    )
+
+
+def draft_model_section(
+    heading: str,
+    facts: list[str],
+    payload: dict[str, Any],
+    model: str,
+) -> tuple[str, list[str], bool]:
+    if not facts:
+        return "", ["no supporting facts were supplied"], False
+    metadata = [str(payload.get(key) or "") for key in ("community", "state", "projectTitle")]
+    last_issues: list[str] = []
+    repair = ""
+    for _attempt in range(2):
+        raw = call_local_writer(
+            _model_section_prompt(heading, facts, payload, repair),
+            model,
+            WRITER_SYSTEM_PROMPT,
+            max_tokens=420,
+        )
+        paragraph = _clean_model_paragraph(raw)
+        last_issues = model_section_issues(paragraph, facts, metadata)
+        if not last_issues:
+            return paragraph, [], True
+        repair = "Validation findings: " + "; ".join(last_issues[:6]) + "\nPrevious paragraph: " + paragraph[:1800]
+    return "", last_issues, False
+
+
+def draft_model_sections(
+    sections: dict[str, list[str]],
+    payload: dict[str, Any],
+    model: str,
+) -> tuple[dict[str, str], dict[str, list[str]]]:
+    if not sections:
+        return {}, {}
+    properties = {heading: {"type": "string"} for heading in sections}
+    schema = {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "rerc_e_grant_sections",
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "properties": properties,
+                "required": list(sections),
+                "additionalProperties": False,
+            },
+        },
+    }
+    section_blocks = []
+    for heading, facts in sections.items():
+        section_blocks.append(
+            f"SECTION: {heading}\nPURPOSE: {_MODEL_SECTION_INSTRUCTIONS[heading]}\nSUPPLIED STATEMENTS:\n"
+            + "\n".join(f"- {fact}" for fact in facts)
+        )
+    prompt = (
+        "Edit each section independently. Return one JSON string value for each named section. "
+        "Each value must be one paragraph and must follow all source-bound rules.\n\n"
+        f"Community: {payload.get('community') or '[not supplied]'}\n"
+        f"State or territory: {payload.get('state') or '[not supplied]'}\n"
+        f"Project title: {payload.get('projectTitle') or '[not supplied]'}\n\n"
+        + "\n\n".join(section_blocks)
+    )
+    batch_system_prompt = WRITER_SYSTEM_PROMPT.replace(
+        "Output only the paragraph, with no heading, greeting, bullets, note, or offer to\nhelp.",
+        "Return only the JSON object required by the response schema. Each value must contain only the paragraph, with no heading, greeting, bullets, note, or offer to help.",
+    )
+    raw = call_local_writer(
+        prompt,
+        model,
+        batch_system_prompt,
+        max_tokens=1400,
+        response_format=schema,
+    )
+    candidate = raw.strip()
+    if candidate.startswith("```"):
+        candidate = re.sub(r"^```(?:json)?\s*", "", candidate, flags=re.IGNORECASE)
+        candidate = re.sub(r"\s*```$", "", candidate)
+    parsed = json.loads(candidate)
+    if not isinstance(parsed, dict):
+        raise ValueError("The local model did not return a section object.")
+    metadata = [str(payload.get(key) or "") for key in ("community", "state", "projectTitle")]
+    accepted: dict[str, str] = {}
+    validation: dict[str, list[str]] = {}
+    for heading, facts in sections.items():
+        paragraph = _clean_model_paragraph(str(parsed.get(heading) or ""))
+        issues = model_section_issues(paragraph, facts, metadata)
+        validation[heading] = issues
+        if not issues:
+            accepted[heading] = paragraph
+    return accepted, validation
+
+
+def _fallback_section(heading: str, facts: list[str]) -> str:
+    if facts:
+        return " ".join(_as_sentence(fact) for fact in facts)
+    prompts = {
+        "Project Need": "[add local fact] Add checked evidence that defines the problem, its scale, and the people affected.",
+        "Proposed Work": "[add local fact] Add the confirmed location, tasks, deliverables, approvals, and responsible parties.",
+        "Community Benefit": "[add local fact] Add the intended beneficiaries, measurable outcomes, baseline, and target.",
+        "Work Plan": "[add local fact] Add implementation tasks, responsible parties, milestone dates, and an evaluation schedule.",
+        "Budget and Match Notes": "[add local fact] Add the task-level budget, request, committed match, and basis for each cost.",
+    }
+    return prompts[heading]
+
+
+def _project_label(title: str) -> str:
+    return title if re.search(r"\bproject\s*$", title, re.IGNORECASE) else f"{title} project"
+
+
+def _explicit_fit_conflict(payload: dict[str, Any]) -> bool:
+    notes = str(payload.get("sourceNotes") or "")
+    return bool(re.search(
+        r"\b(?:mismatch|does not (?:fit|match)|not (?:a fit|eligible)|project (?:contains|includes|has) no .{0,80}(?:activity|work)|no .{0,80}(?:activity|work) is proposed)\b",
+        notes,
+        re.IGNORECASE,
+    ))
+
+
+def _fit_summary(payload: dict[str, Any]) -> tuple[str, str]:
     community = str(payload.get("community") or "[add community]").strip()
     state = str(payload.get("state") or "[add state or territory]").strip()
     title = str(payload.get("projectTitle") or "[add project title]").strip()
     summary = _as_sentence(str(payload.get("projectSummary") or "[add project summary]"))
-    project_notes = str(payload.get("projectNotes") or "").strip()[:1800]
-    grant = _funding_record_text(payload.get("selectedGrant"))
-    match = str(payload.get("matchCapacity") or "[add match, staff, and partner capacity facts]").strip()
-    source = str(payload.get("sourceNotes") or "[add the official source link and current funding details]").strip()
-    profile = format_public_profile(public_profile)
-    verified_excerpts = [item for item in (excerpts or []) if item]
-    evidence_block = ""
-    if verified_excerpts:
-        evidence_block = (
-            "\n\nExact excerpts selected from the supplied material (the underlying claims still require human review):\n\n"
-            + "\n".join(f"- \"{item}\"" for item in verified_excerpts)
-        )
-    notes_block = (
-        f"\n\nProject notes supplied by the community:\n\n{project_notes}"
-        if project_notes
-        else "\n\n[add local fact] Add confirmed project tasks, locations, partners, and expected results."
+    record = _funding_record_data(payload.get("selectedGrant"))
+    paragraphs = [f"{community}, {state}, is developing the {_project_label(title)}. {summary}"]
+    status = str(record.get("status") or "").strip()
+    if record:
+        program = str(record.get("title") or record.get("program") or "the selected funding program").strip()
+        organization = str(record.get("organization") or record.get("agency") or "").strip()
+        description = _as_sentence(str(record.get("summary") or record.get("description") or record.get("why_it_matters") or ""))
+        sentence = f"The supplied funding record identifies {program}"
+        if organization:
+            sentence += f", administered by {organization}"
+        if status:
+            sentence += f", with the status listed as {status}"
+        sentence += "."
+        if description:
+            sentence += f' The supplied catalog description reads: "{description}"'
+        paragraphs.append(sentence)
+    fit_status = "conflict" if _explicit_fit_conflict(payload) else ("closed" if "closed" in status.lower() else "screening")
+    source_notes = str(payload.get("sourceNotes") or "").strip()
+    if fit_status == "conflict":
+        paragraphs.append("The supplied source notes identify a potential funding mismatch that must be resolved before application drafting: " + source_notes)
+    elif fit_status == "closed":
+        paragraphs.append("The selected record is closed as supplied. Use this narrative only for planning unless the official program source confirms a new application cycle.")
+    return "\n\n".join(paragraphs), fit_status
+
+
+def _community_context(public_profile: dict[str, str]) -> str:
+    if not public_profile:
+        return "[add local fact] Add a verified community profile and explain which facts are relevant to the proposed project."
+    place = public_profile.get("place") or "The verified geography"
+    pieces = [f"The supplied public profile identifies {place}"]
+    geography_type = str(public_profile.get("geography_type") or "").strip()
+    if geography_type:
+        pieces[0] += f" as a {geography_type}"
+    pieces[0] += "."
+    facts = []
+    population = str(public_profile.get("population") or "").strip()
+    median_age = str(public_profile.get("median_age") or "").strip()
+    income = str(public_profile.get("median_household_income") or "").strip()
+    poverty = str(public_profile.get("poverty_rate_percent") or "").strip()
+    if population.lstrip("-").isdigit():
+        facts.append(f"a population of {int(population):,}")
+    if median_age:
+        facts.append(f"a median age of {median_age} years")
+    if income.lstrip("-").isdigit():
+        facts.append(f"a median household income of ${int(income):,}")
+    if poverty:
+        facts.append(f"{poverty}% of people below the poverty line")
+    if facts:
+        pieces.append("The profile reports " + ", ".join(facts[:-1]) + ((", and " if len(facts) > 1 else "") + facts[-1]) + ".")
+    source = str(public_profile.get("source") or "U.S. Census Bureau").strip()
+    pieces.append(f"The listed source is {source}.")
+    if public_profile.get("coverage_note"):
+        pieces.append(_as_sentence(str(public_profile["coverage_note"])))
+    return " ".join(pieces)
+
+
+def _source_checks(payload: dict[str, Any]) -> str:
+    record = _funding_record_data(payload.get("selectedGrant"))
+    notes = str(payload.get("sourceNotes") or "").strip()
+    lines = []
+    if notes:
+        lines.append("Supplied source notes:\n\n" + notes)
+    if record.get("source_url") or record.get("url"):
+        lines.append(f"- Official page supplied in the record: {record.get('source_url') or record.get('url')}")
+    lines.extend((
+        "- [check official source] Confirm the current cycle, deadline, eligible applicant, geography, activities, costs, and scoring criteria.",
+        "- [check official source] Confirm the award range, match calculation, attachments, environmental review, and procurement requirements that apply.",
+    ))
+    return "\n\n".join(lines[:1]) + ("\n\n" if lines[:1] else "") + "\n".join(lines[1:] if lines[:1] else lines)
+
+
+def _missing_details(payload: dict[str, Any], sections: dict[str, list[str]]) -> str:
+    combined = "\n".join(
+        str(payload.get(key) or "") for key in ("projectSummary", "projectNotes", "matchCapacity", "sourceNotes")
     )
+    missing = ["- [add local fact] Applicant legal name and the confirmed project location or limits."]
+    if not sections["Project Need"] or not _number_tokens(" ".join(sections["Project Need"])):
+        missing.append("- [add local fact] Checked evidence showing the scale of the need and the people affected.")
+    if not sections["Proposed Work"]:
+        missing.append("- [add local fact] Confirmed scope, tasks, approvals, and deliverables.")
+    if not re.search(r"\b(?:january|february|march|april|may|june|july|august|september|october|november|december|20\d{2}|timeline|schedule)\b", combined, re.IGNORECASE):
+        missing.append("- [add local fact] Implementation start, finish, and milestone dates.")
+    if not re.search(r"\b(?:manage|oversee|responsib|staff|director|officer|partner)\w*\b", combined, re.IGNORECASE):
+        missing.append("- [add local fact] Responsible staff, partner roles, and relevant delivery capacity.")
+    if not re.search(r"\b(?:target|baseline|measure|track|repeat|evaluate|evaluation|outcome)\w*\b", combined, re.IGNORECASE):
+        missing.append("- [add local fact] Measurable outcomes, baseline, target, collection method, timing, and owner.")
+    if not re.search(r"(?:\$\s*\d|\bbudget\b|\bmatch\b|\blocal share\b)", combined, re.IGNORECASE):
+        missing.append("- [add local fact] Total budget, grant request, committed match, and task-level cost basis.")
+    if not re.search(r"\b(?:maintain|maintenance|sustain|ongoing cost|operations?)\w*\b", combined, re.IGNORECASE):
+        missing.append("- [add local fact] Operations, maintenance, and financial sustainability after the grant period.")
+    missing.append("- [check official source] Current notice, scoring criteria, funding rules, and application instructions.")
+    return "\n".join(missing)
+
+
+def _render_draft(
+    payload: dict[str, Any],
+    public_profile: dict[str, str],
+    section_text: dict[str, str],
+    sections: dict[str, list[str]],
+) -> tuple[str, str]:
+    title = str(payload.get("projectTitle") or "[add project title]").strip()
+    fit, fit_status = _fit_summary(payload)
     return f"""# {title}
 
 ## Fit Summary
 
-{community}, {state}, is considering the {title} project. The community describes the project as follows: {summary}
-
-The funding record supplied below may be worth screening for this project. [check official source] Confirm that the applicant, location, proposed work, costs, schedule, and attachments meet the current rules.
-
-{grant}
+{fit}
 
 ## Project Need
 
-The community has identified the following need: {summary}
-
-Use the final application to explain the size and effect of this need with checked local evidence. [add local fact]
+{section_text['Project Need']}
 
 ## Community Context
 
-{profile}
+{_community_context(public_profile)}
 
 ## Proposed Work
 
-The current concept is based on the project summary and the community-supplied notes below.{notes_block}{evidence_block}
-
-Before submission, turn this concept into a confirmed scope with clear tasks, locations, responsible parties, approvals, deliverables, and measures of success.
+{section_text['Proposed Work']}
 
 ## Community Benefit
 
-If completed as described, {title} is intended to help {community} advance the purpose stated in the project summary. The final application should identify who would benefit, explain how they would benefit, and support those statements with local plans, records, or partner documentation. [add local fact]
+{section_text['Community Benefit']}
 
 ## Work Plan
 
-1. Confirm the project scope, location, applicant, and responsible staff.
-2. Check the funding program's current eligibility and application requirements.
-3. Define the tasks, approvals, partners, deliverables, and measures that apply to this project.
-4. Build a supported budget, schedule, and match plan.
-5. Complete the application and establish a practical method for tracking results.
+{section_text['Work Plan']}
 
 ## Budget and Match Notes
 
-{match}
-
-[check official source] Confirm allowed costs, award limits, match rules, and required budget documentation before finalizing the budget.
+{section_text['Budget and Match Notes']}
 
 ## Source and Eligibility Checks
 
-Community notes about the official source:
-
-{source}
-
-- [check official source] Confirm eligible applicants, locations, activities, and costs.
-- [check official source] Confirm the current deadline, award range, match, and required attachments.
+{_source_checks(payload)}
 
 ## Missing Details
 
-- [add local fact] Applicant legal name and confirmed project location.
-- [add local fact] Checked evidence showing the need and people served.
-- [add local fact] Confirmed scope, schedule, staff, partners, and expected results.
-- [add local fact] Total budget and committed match.
-- [check official source] Current funding rules and application instructions.
-"""
+{_missing_details(payload, sections)}
+""", fit_status
+
+
+def deterministic_scaffold(payload: dict[str, Any], public_profile: dict[str, str], excerpts: list[str] | None = None) -> str:
+    del excerpts
+    sections = section_evidence(payload, public_profile)
+    section_text = {heading: _fallback_section(heading, facts) for heading, facts in sections.items()}
+    draft, _fit_status = _render_draft(payload, public_profile, section_text, sections)
+    return draft
 
 
 _NUMBER_WORDS = {
@@ -1056,11 +1660,36 @@ def grounding_issues(
     payload: dict[str, Any],
     public_profile: dict[str, str],
     excerpts: list[str] | None = None,
+    local_knowledge: str = "",
 ) -> list[str]:
-    expected = deterministic_scaffold(payload, public_profile, excerpts)
-    if _normalized_text(draft) == _normalized_text(expected):
-        return []
-    return ["draft differs from the deterministic evidence scaffold"]
+    del excerpts
+    evidence = evidence_text(payload, public_profile, local_knowledge)
+    evidence_lower = evidence.lower()
+    reviewable = "\n".join(
+        line for line in (draft or "").splitlines()
+        if "[add local fact]" not in line.lower() and "[check official source]" not in line.lower()
+    )
+    draft_without_list_numbers = re.sub(r"(?m)^\s*\d+[.)]\s+", "", reviewable)
+    issues = [
+        f"unsupported number: {number}"
+        for number in sorted(_number_tokens(draft_without_list_numbers) - _number_tokens(evidence))
+    ]
+    suspicious_patterns = (
+        r"\b(?:is|was|has been|will be)\s+(?:eligible|funded|awarded|approved)\b",
+        r"\b(?:study|survey|poll)\b",
+        r"\b(?:recent growth|has experienced|have experienced)\b",
+        r"\b(?:boost|generate|increase)\w*\s+(?:tourism|revenue|economy|jobs?)\b",
+        r"\b(?:popular|critical|significant|outdated)\b",
+        r"\b(?:acquir\w*|purchas\w*|consult\w*|hir\w*|contract\w*|approval\w*|permit\w*)\b",
+        r"\b(?:community|resident|public) support\b",
+        r"\b(?:has|have|will) (?:secured|committed|approved|funded)\b",
+    )
+    for pattern in suspicious_patterns:
+        for match in re.finditer(pattern, reviewable, re.IGNORECASE):
+            phrase = match.group(0).lower()
+            if phrase not in evidence_lower:
+                issues.append(f"unsupported detail: {phrase}")
+    return sorted(set(issues))
 
 
 DRAFT_FIELD_LIMITS = {
@@ -1132,27 +1761,86 @@ def build_draft(payload: dict[str, Any]) -> dict[str, Any]:
     local_knowledge = load_local_knowledge()
     model = DEFAULT_MODEL
     warnings: list[str] = []
-    excerpts: list[str] = []
-    if provider == "local":
-        try:
-            excerpts = select_evidence_excerpts(payload, public_profile, local_knowledge, model)
-        except Exception:
-            warnings.append(
-                "The local Gemma evidence review could not finish. "
-                "RERC-e still made a structured outline from the supplied facts."
-            )
-    draft = deterministic_scaffold(payload, public_profile, excerpts)
-    issues = grounding_issues(draft, payload, public_profile, excerpts)
-    if issues:
-        excerpts = []
-        draft = deterministic_scaffold(payload, public_profile)
-        warnings.append("RERC-e removed an unverified evidence selection.")
-    safety_notice = (
-        f"Gemma selected {len(excerpts)} exact supplied excerpt"
-        f"{'s' if len(excerpts) != 1 else ''}; RERC-e checked that they were copied exactly and placed them in a fixed outline. Review the underlying claims."
-        if excerpts
-        else "RERC-e used a fixed evidence-based outline. Add and verify the marked details before submission."
-    )
+    sections = section_evidence(payload, public_profile, local_knowledge)
+    section_text = {heading: _fallback_section(heading, facts) for heading, facts in sections.items()}
+    section_validation: dict[str, list[str]] = {}
+    model_written: list[str] = []
+    attempted_sections: list[str] = []
+    fit_conflict = _explicit_fit_conflict(payload)
+    thresholds = {
+        "Project Need": 1,
+        "Proposed Work": 2,
+        "Community Benefit": 2,
+        "Work Plan": 2,
+        "Budget and Match Notes": 1,
+    }
+    if provider == "local" and not fit_conflict:
+        candidates: dict[str, list[str]] = {}
+        for heading, facts in sections.items():
+            if heading not in _MODEL_DRAFT_HEADINGS:
+                continue
+            if len(facts) < thresholds[heading]:
+                section_validation[heading] = ["insufficient section-specific evidence"]
+                section_text[heading] = _fallback_section(heading, [])
+                continue
+            candidates[heading] = facts
+        attempted_sections = list(candidates)
+        if candidates:
+            try:
+                accepted, batch_validation = draft_model_sections(candidates, payload, model)
+            except Exception as exc:
+                accepted = {}
+                batch_validation = {heading: [f"local model error: {type(exc).__name__}"] for heading in candidates}
+            section_validation.update(batch_validation)
+            for heading, paragraph in accepted.items():
+                section_text[heading] = paragraph
+                model_written.append(heading)
+    elif fit_conflict:
+        section_validation = {heading: ["drafting stopped for explicit funding-fit conflict"] for heading in sections}
+
+    if fit_conflict:
+        fit_text, fit_status = _fit_summary(payload)
+        title = str(payload.get("projectTitle") or "[add project title]").strip()
+        draft = f"""# {title}
+
+## Funding Fit Decision
+
+{fit_text}
+
+RERC-e stopped narrative generation because the supplied project and funding notes identify a conflict. Select a better-matched opportunity or revise the project facts before creating a proposal narrative.
+
+## Source and Eligibility Checks
+
+{_source_checks(payload)}
+"""
+    else:
+        draft, fit_status = _render_draft(payload, public_profile, section_text, sections)
+
+    issues = grounding_issues(draft, payload, public_profile, local_knowledge=local_knowledge)
+    if issues and model_written:
+        model_written = []
+        section_text = {heading: _fallback_section(heading, facts) for heading, facts in sections.items()}
+        draft, fit_status = _render_draft(payload, public_profile, section_text, sections)
+        warnings.append("RERC-e removed model-written text that did not pass the final evidence check.")
+    fallback_sections = [heading for heading in sections if heading not in model_written]
+    rejected = [heading for heading in attempted_sections if heading not in model_written]
+    if provider == "local" and rejected and not fit_conflict:
+        warnings.append(
+            "RERC-e used source-bound text for " + ", ".join(rejected) + " because Gemma's wording did not pass every evidence check."
+        )
+    if fit_conflict:
+        safety_notice = "RERC-e stopped narrative generation because the supplied source notes identify a funding mismatch."
+    elif model_written:
+        safety_notice = (
+            f"Gemma wrote {len(model_written)} source-bound section{'s' if len(model_written) != 1 else ''}. "
+            "RERC-e checked the wording, numbers, funding status, conditions, and amount roles against the supplied evidence; review every claim before submission."
+        )
+    elif provider == "local" and attempted_sections:
+        safety_notice = "Gemma did not produce a section that passed the evidence checks, so RERC-e used source-bound text instead."
+    elif provider == "local":
+        safety_notice = "RERC-e used source-bound text because the supplied facts were not sufficient for model editing."
+    else:
+        safety_notice = "RERC-e used a fixed source-bound outline. Add and verify the marked details before submission."
     return {
         "draft": draft,
         "provider": provider,
@@ -1163,8 +1851,12 @@ def build_draft(payload: dict[str, Any]) -> dict[str, Any]:
         "localKnowledgeChars": len(local_knowledge),
         "warnings": warnings,
         "safetyNotice": safety_notice,
-        "evidenceExcerpts": excerpts,
-        "rawModelProseExposed": False,
+        "evidenceExcerpts": [],
+        "modelWrittenSections": model_written,
+        "fallbackSections": fallback_sections,
+        "sectionValidation": section_validation,
+        "fitStatus": fit_status,
+        "rawModelProseExposed": bool(model_written),
         "generatedAt": int(time.time()),
     }
 
@@ -1225,21 +1917,21 @@ HTML_PAGE = r'''<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>RERC-e Local Grant-Writing Guide</title>
   <link rel="icon" type="image/jpeg" href="/assets/rerc-e-eagle.jpg">
+  <script>if(location.pathname==="/native"){document.documentElement.classList.add("native-host");}</script>
   <style>
     :root { --green:#00573f; --forest:#173f35; --leaf:#3e7c59; --river:#1b6a8f; --sky:#dceef5; --sun:#f2c14e; --ink:#20312b; --muted:#5d6b66; --line:#d8e0dc; --paper:#fff; --mist:#f3f7f4; --danger:#8b1e1e; }
     * { box-sizing:border-box; }
     body { margin:0; color:var(--ink); background:var(--mist); font-family:Arial,Helvetica,sans-serif; line-height:1.5; letter-spacing:0; }
     a { color:var(--river); }
+    .skip-link { position:fixed; z-index:9999; top:8px; left:8px; min-height:44px; padding:10px 14px; color:var(--green); background:#fff; border:2px solid var(--green); border-radius:5px; transform:translateY(-150%); }
+    .skip-link:focus { transform:translateY(0); }
     header { padding:24px max(20px,calc((100vw - 1280px)/2)); color:#fff; background:var(--green); border-bottom:5px solid var(--sun); }
     header .brand { display:flex; justify-content:space-between; gap:20px; align-items:center; }
     header .welcome { display:grid; grid-template-columns:minmax(0,1fr) 120px; gap:24px; align-items:center; }
     header .mascot-stage { position:relative; width:120px; height:168px; justify-self:end; transform-origin:50% 90%; animation:rercie-bob 4s ease-in-out infinite; }
+    html.native-host header .mascot-stage { animation:none; }
     header .mascot { display:block; width:100%; height:100%; object-fit:contain; border:4px solid rgba(255,255,255,.82); border-radius:6px; background:#fff; }
-    header .mascot-wing { position:absolute; z-index:2; top:39px; right:-9px; width:42px; height:58px; transform-origin:20% 82%; animation:rercie-wave 2.4s ease-in-out infinite; border:2px solid #4e3927; border-radius:75% 20% 70% 30%; background:#7a5738; box-shadow:inset -8px -6px 0 rgba(48,31,20,.18); }
-    header .mascot-wing::before,header .mascot-wing::after { content:""; position:absolute; right:3px; width:28px; height:11px; border-radius:70% 30% 70% 30%; background:#9a7049; transform:rotate(16deg); }
-    header .mascot-wing::before { top:12px; } header .mascot-wing::after { top:29px; right:1px; }
     @keyframes rercie-bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
-    @keyframes rercie-wave { 0%,100%{transform:rotate(7deg)} 18%{transform:rotate(-24deg)} 34%{transform:rotate(12deg)} 50%{transform:rotate(-18deg)} 68%{transform:rotate(7deg)} }
     header h1 { margin:12px 0 6px; font-size:2.25rem; line-height:1.05; }
     header p { max-width:760px; margin:0; color:#e4f1eb; }
     header a { color:#fff; font-weight:700; }
@@ -1270,6 +1962,14 @@ HTML_PAGE = r'''<!doctype html>
     .status.warning { color:var(--danger); }
     .lookup-help { margin-top:10px; padding:10px 12px; border:1px solid var(--line); background:#fafcfb; }
     .lookup-help summary { color:var(--forest); font-weight:800; cursor:pointer; }
+    .funding-summary { margin:8px 0; padding:10px 12px; border-left:4px solid var(--leaf); background:var(--mist); color:var(--ink); font-size:.9rem; overflow-wrap:anywhere; }
+    .funding-summary strong { display:block; margin-bottom:3px; }
+    .funding-summary span { display:block; }
+    .funding-summary a { display:inline-block; margin-top:5px; color:var(--green); font-weight:700; }
+    .funding-details { margin-top:10px; padding:10px 12px; border:1px solid var(--line); background:#fafcfb; }
+    .funding-details summary { color:var(--forest); font-weight:800; cursor:pointer; }
+    .funding-details label { margin-top:9px; }
+    #grantSearchStatus { margin:5px 0; font-size:.85rem; }
     .community-profile { margin-top:10px; padding:12px; border-left:5px solid var(--river); background:var(--sky); }
     .community-profile strong { display:block; margin-bottom:4px; }
     .community-profile ul { margin:6px 0; padding-left:20px; }
@@ -1281,35 +1981,100 @@ HTML_PAGE = r'''<!doctype html>
     .working progress { display:block; width:100%; height:14px; margin-top:8px; accent-color:var(--green); }
     .output { min-height:570px; padding:18px; border:1px solid var(--line); white-space:pre-wrap; background:#fff; font-family:Consolas,"Courier New",monospace; font-size:1rem; overflow-wrap:anywhere; }
     @media (max-width:900px) { main { grid-template-columns:1fr; } .output { min-height:420px; } }
-    @media (prefers-reduced-motion:reduce) { header .mascot-stage,header .mascot-wing { animation:none !important; } }
+    @media (prefers-reduced-motion:reduce) { header .mascot-stage { animation:none !important; } }
     @media (max-width:560px) { header .brand,.engine { grid-template-columns:1fr; display:grid; } header .welcome { grid-template-columns:minmax(0,1fr) 88px; gap:12px; } header .mascot-stage { width:88px; height:124px; } main { padding:10px; } .panel { padding:14px; } .actions button { flex:1 1 145px; } }
+    /* RERC site's forest, river and gold palette, with one task in view. */
+    body { background:#edf3ef; font-family:"Segoe UI",Arial,sans-serif; }
+    header { padding:22px max(20px,calc((100vw - 1080px)/2)) 28px; background:linear-gradient(130deg,#173f35,#00573f 70%); border-bottom:4px solid var(--sun); }
+    header .brand { font-size:.88rem; letter-spacing:.02em; }
+    header .brand a { display:inline-flex; min-height:44px; align-items:center; font-size:.88rem; }
+    header .welcome { grid-template-columns:minmax(0,1fr) 240px; }
+    header h1 { margin-top:22px; font-size:clamp(2rem,4vw,3rem); letter-spacing:-.035em; }
+    header p { max-width:620px; font-size:1.08rem; }
+    header .mascot-stage { width:240px; height:135px; }
+    header .mascot { object-fit:cover; border:3px solid rgba(255,255,255,.85); border-radius:12px; }
+    .assurance { width:min(1080px,calc(100% - 32px)); margin:14px auto 0; padding:9px 14px; border:1px solid #d3e2d8; border-radius:10px; background:#fff; font-size:.88rem; }
+    .assurance summary { display:flex; min-height:44px; align-items:center; color:var(--forest); font-weight:800; cursor:pointer; }
+    .assurance .privacy,.assurance .notice { margin-top:10px; padding:8px 10px; border-radius:8px; font-size:.88rem; }
+    .journey { display:flex; gap:10px; width:min(1080px,100%); margin:20px auto 0; padding:0 16px; }
+    .journey button { flex:1; min-height:62px; padding:9px 15px; border:1px solid #cbd9d0; border-radius:12px; color:var(--forest); background:#fff; font-size:.95rem; font-weight:700; text-align:left; box-shadow:0 3px 12px rgba(23,63,53,.05); }
+    .journey button[aria-current="step"] { color:#fff; background:var(--forest); border-color:var(--forest); }
+    .journey .step-number { display:inline-grid; place-items:center; width:28px; height:28px; margin-right:8px; border-radius:50%; color:var(--forest); background:var(--sun); }
+    .global-status { width:min(1048px,calc(100% - 32px)); margin:10px auto 0; padding:8px 12px; border-radius:8px; background:#e1eee5; font-size:.88rem; }
+    .global-status.warning { background:#fdeaea; }
+    main { display:block; width:min(1080px,100%); padding:16px 16px 48px; }
+    .step-panel[hidden] { display:none !important; }
+    .panel { padding:clamp(18px,3vw,34px); border:1px solid #d7e3da; border-radius:18px; box-shadow:0 12px 34px rgba(23,63,53,.07); }
+    h2 { font-size:clamp(1.4rem,2.5vw,1.85rem); letter-spacing:-.025em; }
+    .step-eyebrow { margin:0 0 6px; color:var(--river); font-size:.78rem; font-weight:800; letter-spacing:.11em; text-transform:uppercase; }
+    .step-intro { max-width:720px; margin:0 0 20px; color:var(--muted); }
+    .field-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); column-gap:18px; }
+    .field-grid .full { grid-column:1/-1; }
+    label { font-size:.94rem; }
+    input,select,textarea { min-height:46px; padding:11px 12px; border-radius:9px; }
+    textarea { min-height:105px; }
+    input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible,summary:focus-visible { outline:3px solid var(--sun); outline-offset:2px; }
+    .plan-import { padding:16px 18px; border:1px solid #ead590; border-radius:12px; background:#fffaf0; }
+    .plan-import h2 { font-size:1.05rem; }
+    .plan-import input { max-width:600px; }
+    .actions { margin-top:20px; }
+    button { min-height:48px; padding:8px 18px; border-radius:10px; }
+    .actions .next { margin-left:auto; }
+    .funding-summary,.community-profile,.engine,.working,.funding-details,.lookup-help { border-radius:10px; }
+    .funding-summary { padding:15px; }
+    .output { min-height:360px; margin-top:18px; padding:24px; border-radius:12px; line-height:1.6; font-family:"Segoe UI",Arial,sans-serif; }
+    .draft-exports { margin-top:10px; }
+    .draft-exports button:disabled { cursor:not-allowed; opacity:.45; }
+    @media (max-width:600px) { header { padding-bottom:18px; } header h1 { margin-top:12px; } header p { font-size:.94rem; } .journey { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; } .journey button { min-height:69px; padding:7px 8px; font-size:.78rem; text-align:center; line-height:1.2; } .journey .step-number { display:grid; width:23px; height:23px; margin:0 auto 3px; } .field-grid { grid-template-columns:1fr; } .actions .next { margin-left:0; } .panel { padding:18px; } header .welcome { grid-template-columns:minmax(0,1fr) 116px; } header .mascot-stage { width:116px; height:72px; } }
   </style>
 </head>
 <body>
+  <a class="skip-link" href="#mainContent">Skip to the RERC-e project</a>
   <header>
     <div class="brand"><strong>Recreation Economy <em>for</em> Rural Communities</strong><a href="https://henkelpress.github.io/rerc-grant-finder/" target="_blank" rel="noopener">Open the public explorer</a></div>
-    <div class="welcome"><div><h1>Meet RERC-e</h1><p>RERC-e helps you turn a grant match and your project notes into a first draft. Check every fact before you apply.</p></div><div class="mascot-stage"><img class="mascot" src="/assets/rerc-e-eagle.jpg" alt="RERC-e, a bald eagle field guide holding a notebook"><span class="mascot-wing" aria-hidden="true"></span></div></div>
+    <div class="welcome"><div><h1>Meet RERC-e</h1><p>Use a funding match and your project notes to create a first draft. Check every fact before you apply.</p></div><div class="mascot-stage"><img class="mascot" src="/assets/rerc-e-eagle.jpg" alt="RERC-e, a bald eagle field guide holding a notebook"></div></div>
 
   </header>
-  <div class="privacy"><strong>Private by default:</strong> Gemma writing and local reference files stay on this computer. Census and catalog lookups use public websites.</div>
-  <div class="notice"><strong>Keep in mind:</strong> RERC-e is a community-built grant-writing guide. It is not an EPA grant program. It does not decide who can apply or submit an application for you.</div>
-  <main>
-    <section class="panel">
+  <details class="assurance"><summary>Privacy and limits</summary>
+    <div class="privacy"><strong>Private by default:</strong> Gemma writing and local reference files stay on this computer. Census and catalog lookups use public websites.</div>
+    <div class="notice"><strong>Keep in mind:</strong> RERC-e is a community-built grant-writing guide. It is not an EPA grant program. It does not decide who can apply or submit an application for you.</div>
+  </details>
+  <nav class="journey" aria-label="RERC-e steps">
+    <button type="button" data-step="project" aria-current="step"><span class="step-number">1</span> Project</button>
+    <button type="button" data-step="funding"><span class="step-number">2</span> Funding and notes</button>
+    <button type="button" data-step="draft"><span class="step-number">3</span> Draft and export</button>
+  </nav>
+  <p id="status" class="status global-status" aria-live="polite">Ready.</p>
+  <main id="mainContent" tabindex="-1">
+    <section class="panel step-panel" id="projectStep" data-panel="project" aria-labelledby="projectStepTitle">
+      <p class="step-eyebrow">Step 1 of 3</p>
+      <h2 id="projectStepTitle">Tell RERC-e about your project</h2>
+      <p class="step-intro">Open a plan from the Community Explorer or enter the basic facts here. You can change them at any time.</p>
       <div class="plan-import">
-        <h2>Start from a Community Explorer plan</h2>
+        <h2>Have a Community Explorer plan?</h2>
         <label for="planInput">Open Community Explorer plan</label>
-        <input id="planInput" type="file" accept=".rercie,.json,application/json">
-        <p id="planImportStatus" class="status" aria-live="polite">Choose a `.rercie` plan exported by the public explorer.</p>
+        <input id="planInput" type="file" accept=".rerc-e,.rercie,.json,application/json">
+        <p id="planImportStatus" class="status" aria-live="polite">Choose a RERC-e plan file exported by the public explorer.</p>
       </div>
-      <h2>Tell us about the project</h2>
       <p class="section-note">Start with the facts you know. The draft will mark anything that is missing.</p>
-      <label for="community">Community</label><input id="community" required aria-required="true" maxlength="200" placeholder="Example: Taos">
-      <label for="state">State or territory</label><select id="state" required aria-required="true"></select>
-      <label for="projectTitle">Project title</label><input id="projectTitle" required aria-required="true" maxlength="300" placeholder="Example: Downtown trail connection">
+      <div class="field-grid">
+        <div><label for="community">Community</label><input id="community" required aria-required="true" maxlength="200" placeholder="Example: Taos"></div>
+        <div><label for="state">State or territory</label><select id="state" required aria-required="true"></select></div>
+        <div class="full"><label for="projectTitle">Project title</label><input id="projectTitle" required aria-required="true" maxlength="300" placeholder="Example: Downtown trail connection"></div>
+      </div>
       <label for="projectSummary">What do you want to do?</label><textarea id="projectSummary" class="small" maxlength="5000"></textarea>
+      <div class="actions"><button id="nextFunding" class="next" type="button">Continue to funding and notes</button></div>
+    </section>
+    <section class="panel step-panel" id="fundingStep" data-panel="funding" aria-labelledby="fundingStepTitle" hidden>
+      <p class="step-eyebrow">Step 2 of 3</p>
+      <h2 id="fundingStepTitle">Review funding and add context</h2>
+      <p class="step-intro">Choose a match, then add what your community can contribute and what you still need to verify.</p>
+      <label for="grantSearch">Search funding list</label><input id="grantSearch" type="search" maxlength="100" placeholder="Program or organization">
       <label for="grantSelect">Funding match</label><select id="grantSelect"><option value="">Load the public list</option></select>
+      <p id="grantSearchStatus" class="section-note" aria-live="polite">Search after loading the public funding list.</p>
+      <div id="fundingSummary" class="funding-summary" aria-live="polite">Choose a funding match or paste checked details.</div>
       <div class="actions"><button id="loadGrants" class="quiet" type="button">Load funding list</button></div>
-      <label for="selectedGrant">Funding details</label><textarea id="selectedGrant" placeholder="Choose a funding match above, or paste the current details here."></textarea>
+      <details id="fundingDetailsPanel" class="funding-details"><summary>Review or paste funding details</summary><label for="selectedGrant">Funding details</label><textarea id="selectedGrant" placeholder="Choose a funding match above, or paste the current details here."></textarea></details>
       <label for="matchCapacity">Match, staff, and partners</label><textarea id="matchCapacity" class="small"></textarea>
       <label for="sourceNotes">Facts to check on the official page</label><textarea id="sourceNotes" class="small" placeholder="Deadline, eligibility, match, award size, and source link"></textarea>
       <label for="fileInput">Add text files</label><input id="fileInput" type="file" multiple accept=".txt,.md,.csv,.json">
@@ -1318,14 +2083,20 @@ HTML_PAGE = r'''<!doctype html>
       <div class="actions"><button id="lookupCommunity" class="quiet" type="button">Look up community facts</button></div>
       <details class="lookup-help"><summary>Community lookup help</summary><p class="section-note">RERC-e first checks the public prebuilt <code>community_profiles.js</code> dataset for an exact community + state/territory match. Use a free Census API key only when that match is not found.</p><label for="censusApiKey">Census API key</label><input id="censusApiKey" type="password" autocomplete="off" placeholder="Optional Census API key for fallback lookup"><p class="section-note"><a href="https://api.census.gov/data/key_signup.html" target="_blank" rel="noopener">Get a free Census API key</a></p></details>
       <div id="communityProfile" class="community-profile" hidden aria-live="polite"></div>
+      <div class="actions"><button class="quiet" type="button" data-go="project">Back to project</button><button class="next" type="button" data-go="draft">Continue to draft</button></div>
     </section>
-    <section class="panel">
+    <section class="panel step-panel" id="draftStep" data-panel="draft" aria-labelledby="draftStepTitle" hidden>
+      <p class="step-eyebrow">Step 3 of 3</p>
+      <h2 id="draftStepTitle">Create and review your first draft</h2>
+      <p class="step-intro">RERC-e writes a starting point. Review every statement and check current rules on official funding pages before using it.</p>
       <div class="engine">
         <div><label for="provider">Writing method</label><select id="provider"><option value="local">Local Gemma writer</option><option value="fallback">Structured outline only</option></select></div>
         <span id="runtime" class="runtime">Checking local writer...</span>
       </div>
       <div class="actions">
         <button id="draftButton" class="secondary" type="button">Create first draft</button>
+      </div>
+      <div class="actions draft-exports" role="group" aria-label="Draft exports">
         <button id="downloadDocx" class="quiet" type="button">Export Word</button>
         <button id="downloadMd" class="quiet" type="button">Export Markdown</button>
         <button id="copyDraft" class="quiet" type="button">Copy</button>
@@ -1334,8 +2105,9 @@ HTML_PAGE = r'''<!doctype html>
         <div class="working-row"><span id="workingLabel">RERC-e is working...</span><span id="workingTime" aria-hidden="true">0 seconds</span></div>
         <progress aria-label="RERC-e is generating the draft"></progress>
       </div>
-      <p id="status" class="status" aria-live="polite">Ready.</p>
+      <p id="saveStatus" class="section-note" aria-live="polite">Work in this tab is saved locally for refresh recovery.</p>
       <div id="output" class="output" role="region" aria-label="Draft output" tabindex="0">Your first draft will appear here.</div>
+      <div class="actions"><button class="quiet" type="button" data-go="funding">Back to funding and notes</button></div>
     </section>
   </main>
   <script>
@@ -1345,42 +2117,112 @@ HTML_PAGE = r'''<!doctype html>
     const MAX_PLAN_BYTES=256*1024;
     let lastDraft=""; let activePublicProfile={};
     const status=document.getElementById("status"); const output=document.getElementById("output");
-    const sessionToken=new URLSearchParams(location.hash.slice(1)).get("token")||""; history.replaceState(null,"",location.pathname+location.search);
-    function apiFetch(url,options={}){ const headers=new Headers(options.headers||{}); headers.set("X-RERCie-Token",sessionToken); return fetch(url,{...options,headers}); }
-    function setStatus(message,warning=false){ status.textContent=message; status.className=warning?"status warning":"status"; }
+    let currentStep="project";
+    function showStep(step,focusHeading=false){
+      if(!["project","funding","draft"].includes(step))return;
+      currentStep=step;
+      document.querySelectorAll(".step-panel").forEach((panel)=>{panel.hidden=panel.dataset.panel!==step;});
+      document.querySelectorAll(".journey button").forEach((button)=>{
+        if(button.dataset.step===step)button.setAttribute("aria-current","step");
+        else button.removeAttribute("aria-current");
+      });
+      if(step==="funding"&&grantCatalog.length&&status.textContent==="Ready.")setStatus(`${grantCatalog.length} funding options available. Choose a match or add checked details.`);
+      if(focusHeading){const heading=document.querySelector(`[data-panel="${step}"] h2`);heading.tabIndex=-1;heading.focus();window.scrollTo(0,0);}
+      scheduleProjectSave();
+    }
+    document.querySelectorAll(".journey button").forEach((button)=>button.addEventListener("click",()=>showStep(button.dataset.step,true)));
+    document.querySelectorAll("[data-go]").forEach((button)=>button.addEventListener("click",()=>showStep(button.dataset.go,true)));
+    document.getElementById("nextFunding").addEventListener("click",()=>showStep("funding",true));
+    const TOKEN_STORAGE_KEY="rercie.tabSessionToken.v1";
+    const launchToken=new URLSearchParams(location.hash.slice(1)).get("token")||"";
+    let sessionToken=launchToken;
+    const nativeCookieAuth=location.pathname==="/native";
+    const hasLocalSession=()=>Boolean(sessionToken||nativeCookieAuth);
+    try{ if(launchToken)sessionStorage.setItem(TOKEN_STORAGE_KEY,launchToken); else if(nativeCookieAuth){sessionToken="";sessionStorage.removeItem(TOKEN_STORAGE_KEY);} else sessionToken=sessionStorage.getItem(TOKEN_STORAGE_KEY)||""; }catch{}
+    if(location.hash)history.replaceState(null,"",location.pathname+location.search);
+    async function apiFetch(url,options={}){ if(!hasLocalSession())throw new Error("Open RERC-e from its Start Menu shortcut to connect this tab."); const headers=new Headers(options.headers||{}); if(sessionToken)headers.set("X-RERC-e-Token",sessionToken); const response=await fetch(url,{...options,headers,credentials:"same-origin"}); if(response.status===403){sessionToken=""; try{sessionStorage.removeItem(TOKEN_STORAGE_KEY);}catch{} throw new Error("The local session expired. Reopen RERC-e from its Start Menu shortcut. Your work in this tab is still saved.");} return response; }
+    function setStatus(message,warning=false){ status.textContent=message; status.className=warning?"status global-status warning":"status global-status"; }
+    const PROJECT_STORAGE_KEY="rercie.tabProject.v1";
+    const PROJECT_FIELDS=["community","state","projectTitle","projectSummary","selectedGrant","matchCapacity","sourceNotes","projectNotes","provider","usePublicData"];
+    let inputVersion=0, draftInputVersion=-1, saveTimer=0;
+    function draftIsStale(){return Boolean(lastDraft)&&inputVersion!==draftInputVersion;}
+    function updateSaveStatus(){const note=document.getElementById("saveStatus"); note.textContent=draftIsStale()?"Inputs changed since this draft. Create a new draft before exporting or copying.":"Work in this tab is saved locally for refresh recovery."; note.className=draftIsStale()?"status warning":"section-note";}
+    function saveProjectState(){if(saveTimer){clearTimeout(saveTimer);saveTimer=0;} const fields={}; PROJECT_FIELDS.forEach((id)=>{const control=document.getElementById(id);fields[id]=control.type==="checkbox"?control.checked:control.value;}); try{sessionStorage.setItem(PROJECT_STORAGE_KEY,JSON.stringify({schema:1,fields,lastDraft,publicProfile:activePublicProfile,inputVersion,draftInputVersion,step:currentStep}));updateSaveStatus();}catch{const note=document.getElementById("saveStatus");note.textContent="This app could not save the project for refresh recovery. Export your draft before closing.";note.className="status warning";} }
+    function scheduleProjectSave(){if(saveTimer)clearTimeout(saveTimer);saveTimer=setTimeout(saveProjectState,250);}
+    function markInputsChanged(){inputVersion++;if(status.classList.contains("warning")&&/^Add (the |a project)/.test(status.textContent))setStatus("Project details updated. Continue when you are ready.");updateSaveStatus();scheduleProjectSave();}
+    function restoreProjectState(){try{const saved=JSON.parse(sessionStorage.getItem(PROJECT_STORAGE_KEY)||"null");if(!saved||saved.schema!==1||!saved.fields||typeof saved.fields!=="object")return;PROJECT_FIELDS.forEach((id)=>{const control=document.getElementById(id);const value=saved.fields[id];if(control.type==="checkbox")control.checked=Boolean(value);else if(typeof value==="string")control.value=value.slice(0,Number(control.maxLength)>0?control.maxLength:100000);});lastDraft=typeof saved.lastDraft==="string"?saved.lastDraft.slice(0,150000):"";activePublicProfile=saved.publicProfile&&typeof saved.publicProfile==="object"&&!Array.isArray(saved.publicProfile)?saved.publicProfile:{};inputVersion=Number.isSafeInteger(saved.inputVersion)?saved.inputVersion:0;draftInputVersion=Number.isSafeInteger(saved.draftInputVersion)?saved.draftInputVersion:-1;if(lastDraft)output.textContent=lastDraft;if(Object.keys(activePublicProfile).length)renderProfile(activePublicProfile,"Community facts restored from this app.","found");renderFundingSummary();showStep(saved.step||"project");updateSaveStatus();}catch{} }
+    function canUseDraft(){if(!lastDraft){setStatus("Create a draft first.",true);return false;}if(draftIsStale()){setStatus("Inputs changed since this draft. Create a new draft before exporting or copying.",true);return false;}return true;}
     let workingTimer=0;
     function startWorking(){ const box=document.getElementById("working"); const label=document.getElementById("workingLabel"); const clock=document.getElementById("workingTime"); const provider=document.getElementById("provider").value; const started=Date.now(); box.hidden=false; label.textContent=provider==="local"?"RERC-e is reviewing your notes with local Gemma...":"RERC-e is building a structured outline..."; const tick=()=>{ const elapsed=Math.floor((Date.now()-started)/1000); clock.textContent=elapsed+" seconds"; }; tick(); workingTimer=window.setInterval(tick,1000); }
     function stopWorking(){ document.getElementById("working").hidden=true; if(workingTimer){window.clearInterval(workingTimer);workingTimer=0;} }
     function formatProfileValue(key,value){ if((key==="population"||key==="median_household_income")&&/^\d+$/.test(String(value))){ const number=Number(value).toLocaleString(); return key==="median_household_income"?"$"+number:number; } return String(value); }
     function renderProfile(profile,message,lookupStatus){ activePublicProfile=profile&&typeof profile==="object"?profile:{}; const box=document.getElementById("communityProfile"); box.replaceChildren(); box.hidden=false; const heading=document.createElement("strong"); heading.textContent=profile&&profile.place?profile.place:"Community facts"; box.appendChild(heading); if(!profile||!Object.keys(profile).length){ const note=document.createElement("span"); note.textContent=message||"No community facts were found."; box.appendChild(note); if(lookupStatus==="key_required"){document.querySelector(".lookup-help").open=true;} return; } const labels={population:"Population",median_age:"Median age",median_household_income:"Median household income",poverty_rate_percent:"People below the poverty line",geography_type:"Geography used"}; const list=document.createElement("ul"); Object.keys(labels).forEach((key)=>{ if(profile[key]===undefined||profile[key]===null||String(profile[key]).trim()==="")return; const item=document.createElement("li"); let value=formatProfileValue(key,profile[key]); if(key==="median_age")value+=" years"; if(key==="poverty_rate_percent")value+="%"; item.textContent=labels[key]+": "+value; list.appendChild(item); }); box.appendChild(list); const source=document.createElement(profile.source_url?"a":"span"); source.textContent=profile.source||"U.S. Census Bureau"; if(profile.source_url){source.href=profile.source_url;source.target="_blank";source.rel="noopener";} box.appendChild(source); if(profile.coverage_note){ const coverage=document.createElement("p"); coverage.textContent=profile.coverage_note; box.appendChild(coverage); } }
-    function applyImportedPlan(data){ document.getElementById("community").value=data.community||""; stateSelect.value=data.state||""; document.getElementById("projectTitle").value=data.projectTitle||""; document.getElementById("projectNotes").value=data.projectNotes||""; document.getElementById("selectedGrant").value=data.selectedFundingDetails||""; if(data.profile&&Object.keys(data.profile).length){renderProfile(data.profile,"Community facts imported from the plan.","found");}else{document.getElementById("communityProfile").hidden=true;} const message=(data.message||"Community Explorer plan opened.")+" Review the imported facts and official funding pages before drafting."; const importStatus=document.getElementById("planImportStatus"); importStatus.textContent=message; importStatus.className="status"; setStatus(message); }
+    function applyImportedPlan(data){ document.getElementById("community").value=data.community||""; stateSelect.value=data.state||""; document.getElementById("projectTitle").value=data.projectTitle||""; document.getElementById("projectNotes").value=data.projectNotes||""; document.getElementById("selectedGrant").value=data.selectedFundingDetails||""; lastDraft="";draftInputVersion=-1;output.textContent="Create a first draft from the imported plan."; if(data.profile&&Object.keys(data.profile).length){renderProfile(data.profile,"Community facts imported from the plan.","found");}else{activePublicProfile={};document.getElementById("communityProfile").hidden=true;} renderFundingSummary();markInputsChanged();saveProjectState(); const message=(data.message||"Community Explorer plan opened.")+" Review the imported facts and official funding pages before drafting."; const importStatus=document.getElementById("planImportStatus"); importStatus.textContent=message; importStatus.className="status"; setStatus(message); }
     async function importPlanText(text){ const response=await apiFetch("/api/import-plan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({packageText:text})}); const data=await response.json(); if(!response.ok)throw new Error(data.error||"The plan could not be opened."); applyImportedPlan(data); }
-    async function openPlanFile(file){ if(!file)return; const importStatus=document.getElementById("planImportStatus"); if(!/\.(rercie|json)$/i.test(file.name)){throw new Error("Choose a .rercie or .json Community Explorer plan.");} if(file.size<=0||file.size>MAX_PLAN_BYTES){throw new Error("The plan must be a non-empty file no larger than 256 KB.");} importStatus.textContent="Checking the Community Explorer plan..."; const text=await file.text(); if(new TextEncoder().encode(text).length>MAX_PLAN_BYTES)throw new Error("The plan must be no larger than 256 KB."); let parsed; try{parsed=JSON.parse(text);}catch{throw new Error("The plan is not valid JSON.");} if(!parsed||Array.isArray(parsed)||typeof parsed!=="object"||parsed.schema!=="rercie-handoff"||parsed.version!==1){throw new Error("This is not a supported RERC-e Community Explorer plan.");} await importPlanText(text); }
-    async function checkStartupPlan(){ try{ const response=await apiFetch("/api/startup-plan"); const data=await response.json(); if(data.status==="none")return; if(!response.ok)throw new Error(data.error||"The plan could not be opened."); applyImportedPlan(data); }catch(error){ const importStatus=document.getElementById("planImportStatus"); importStatus.textContent="The plan passed from Windows could not be opened: "+error.message; importStatus.className="status warning"; setStatus(importStatus.textContent,true); } }
-    async function lookupCommunityFacts(){ const button=document.getElementById("lookupCommunity"); button.disabled=true; setStatus("Looking up community facts..."); try{ const body={community:document.getElementById("community").value,state:stateSelect.value,censusApiKey:document.getElementById("censusApiKey").value}; const response=await apiFetch("/api/community-profile",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); const data=await response.json(); if(!response.ok)throw new Error(data.error||"Lookup failed."); renderProfile(data.profile,data.message,data.status); setStatus(data.message,data.status!=="found"); }catch(error){renderProfile({},"Community facts could not be reached right now.","unavailable");setStatus("Community lookup failed: "+error.message,true);}finally{button.disabled=false;} }
-    function collectPayload(){ return {community:document.getElementById("community").value,state:stateSelect.value,projectTitle:document.getElementById("projectTitle").value,projectSummary:document.getElementById("projectSummary").value,selectedGrant:document.getElementById("selectedGrant").value,matchCapacity:document.getElementById("matchCapacity").value,sourceNotes:document.getElementById("sourceNotes").value,projectNotes:document.getElementById("projectNotes").value,publicProfile:activePublicProfile,usePublicData:document.getElementById("usePublicData").checked,provider:document.getElementById("provider").value,model:"gemma-3-1b-it-Q4_K_M.gguf",censusApiKey:document.getElementById("censusApiKey").value}; }
-    function validateDraftInputs(){ const required=[["community","community"],["state","state or territory"],["projectTitle","project title"]]; for(const [id,label] of required){ const control=document.getElementById(id); if(!control.value.trim()){ setStatus(`Add the ${label} before creating a draft.`,true); control.focus(); return false; } } const hasContext=["projectSummary","projectNotes","selectedGrant"].some((id)=>document.getElementById(id).value.trim()); if(!hasContext){ setStatus("Add a project summary, imported project notes, or funding details before creating a draft.",true); document.getElementById("projectSummary").focus(); return false; } return true; }
+    async function openPlanFile(file){ if(!file)return; const importStatus=document.getElementById("planImportStatus"); if(!/\.(rerc-e|rercie|json)$/i.test(file.name)){throw new Error("Choose a RERC-e Community Explorer plan file.");} if(file.size<=0||file.size>MAX_PLAN_BYTES){throw new Error("The plan must be a non-empty file no larger than 256 KB.");} importStatus.textContent="Checking the Community Explorer plan..."; const text=await file.text(); if(new TextEncoder().encode(text).length>MAX_PLAN_BYTES)throw new Error("The plan must be no larger than 256 KB."); let parsed; try{parsed=JSON.parse(text);}catch{throw new Error("The plan is not valid JSON.");} if(!parsed||Array.isArray(parsed)||typeof parsed!=="object"||!(["rerc-e-handoff","rercie-handoff"].includes(parsed.schema))||parsed.version!==1){throw new Error("This is not a supported RERC-e Community Explorer plan.");} await importPlanText(text); }
+    async function checkStartupPlan(){ if(!hasLocalSession()){setStatus("Open RERC-e from its Start Menu shortcut to connect this tab.",true);return;} try{ const response=await apiFetch("/api/startup-plan"); const data=await response.json(); if(data.status==="none")return; if(!response.ok)throw new Error(data.error||"The plan could not be opened."); applyImportedPlan(data); }catch(error){ const importStatus=document.getElementById("planImportStatus"); importStatus.textContent=error.message.includes("session")?error.message:"The plan passed from Windows could not be opened: "+error.message; importStatus.className="status warning"; setStatus(importStatus.textContent,true); } }
+    async function lookupCommunityFacts(){ const button=document.getElementById("lookupCommunity"); button.disabled=true; setStatus("Looking up community facts..."); try{ const body={community:document.getElementById("community").value,state:stateSelect.value,censusApiKey:document.getElementById("censusApiKey").value}; const response=await apiFetch("/api/community-profile",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); const data=await response.json(); if(!response.ok)throw new Error(data.error||"Lookup failed."); renderProfile(data.profile,data.message,data.status); markInputsChanged();setStatus(data.message,data.status!=="found"); }catch(error){renderProfile({},"Community facts could not be reached right now.","unavailable");markInputsChanged();setStatus("Community lookup failed: "+error.message,true);}finally{button.disabled=false;} }
+    function collectPayload(){ return {community:document.getElementById("community").value,state:stateSelect.value,projectTitle:document.getElementById("projectTitle").value,projectSummary:document.getElementById("projectSummary").value,selectedGrant:document.getElementById("selectedGrant").value,matchCapacity:document.getElementById("matchCapacity").value,sourceNotes:document.getElementById("sourceNotes").value,projectNotes:document.getElementById("projectNotes").value,publicProfile:activePublicProfile,usePublicData:document.getElementById("usePublicData").checked,provider:document.getElementById("provider").value,model:"gemma-3-4b-it-Q4_K_M.gguf",censusApiKey:document.getElementById("censusApiKey").value}; }
+    function validateDraftInputs(){ const required=[["community","community"],["state","state or territory"],["projectTitle","project title"]]; for(const [id,label] of required){ const control=document.getElementById(id); if(!control.value.trim()){ setStatus(`Add the ${label} before creating a draft.`,true); showStep("project"); control.focus(); return false; } } const hasContext=["projectSummary","projectNotes","selectedGrant"].some((id)=>document.getElementById(id).value.trim()); if(!hasContext){ setStatus("Add a project summary, imported project notes, or funding details before creating a draft.",true); showStep("project"); document.getElementById("projectSummary").focus(); return false; } return true; }
     let runtimePoll=0;
     async function checkRuntime(){ const badge=document.getElementById("runtime"); try{ const response=await apiFetch("/api/runtime"); const data=await response.json(); badge.textContent=data.ready?"Local model ready":"Local model is starting"; badge.className=data.ready?"runtime":"runtime offline"; if(data.ready&&runtimePoll){clearInterval(runtimePoll);runtimePoll=0;} }catch{ badge.textContent="Could not check local writer"; badge.className="runtime offline"; } }
-    async function loadGrants(){ const button=document.getElementById("loadGrants"); button.disabled=true; setStatus("Loading the public funding list..."); try{ const response=await apiFetch("/api/grants"); const data=await response.json(); if(!response.ok) throw new Error(data.error||"The list could not be loaded."); const select=document.getElementById("grantSelect"); select.replaceChildren(); const placeholder=document.createElement("option"); placeholder.value=""; placeholder.textContent="Choose a funding match"; select.appendChild(placeholder); data.grants.forEach((grant,index)=>{ const option=document.createElement("option"); option.value=String(index); option.textContent=`${grant.title||grant.program||"Untitled"} - ${grant.organization||grant.agency||"Organization not listed"}`; option.dataset.grant=JSON.stringify(grant,null,2); select.appendChild(option); }); setStatus(`Loaded ${data.grants.length} funding options. Updated ${data.updated||"date not listed"}.`); }finally{ button.disabled=false; } }
+    let grantCatalog=[];
+    function fundingDetailRecord(){const details=document.getElementById("selectedGrant").value.trim();try{return JSON.parse(details);}catch{return null;}}
+    function renderFundingSummary(){
+      const box=document.getElementById("fundingSummary");box.replaceChildren();
+      const details=document.getElementById("selectedGrant").value.trim();
+      if(!details){box.textContent="Choose a funding match or paste checked details.";return;}
+      const record=fundingDetailRecord();
+      const field=(label)=>details.match(new RegExp(`^(?:- )?${label}:\\s*(.+)$`,"m"))?.[1]||"";
+      const heading=document.createElement("strong");heading.textContent=record?.title||record?.program||field("Program")||"Using pasted funding details";box.appendChild(heading);
+      const organization=record?.organization||record?.agency||field("Organization");
+      if(organization){const note=document.createElement("span");note.textContent=organization;box.appendChild(note);}
+      const source=record?.url||record?.source_url||field("Official page");
+      try{const url=new URL(source);if(["http:","https:"].includes(url.protocol)&&!url.username&&!url.password){const link=document.createElement("a");link.href=url.href;link.target="_blank";link.rel="noopener";link.textContent="Check official program page";box.appendChild(link);}}catch{}
+    }
+    function renderGrantOptions(){
+      const select=document.getElementById("grantSelect");
+      const query=document.getElementById("grantSearch").value.trim().toLowerCase();
+      const previous=document.getElementById("selectedGrant").value.trim();
+      const previousId=fundingDetailRecord()?.item_id||"";
+      const matches=grantCatalog.filter((grant)=>[grant.title,grant.program,grant.organization,grant.agency,grant.geography].some((value)=>String(value||"").toLowerCase().includes(query)));
+      select.replaceChildren();
+      const placeholder=document.createElement("option");placeholder.value="";placeholder.textContent="Choose a funding match";select.appendChild(placeholder);
+      const previousRecord=previousId?grantCatalog.find((grant)=>grant.item_id===previousId):null;
+      const shown=matches.slice(0,60);
+      if(previousRecord&&!shown.includes(previousRecord))shown.unshift(previousRecord);
+      let selected="";
+      shown.forEach((grant)=>{const option=document.createElement("option");option.value=String(grantCatalog.indexOf(grant));option.textContent=`${grant.title||grant.program||"Untitled"} - ${grant.organization||grant.agency||"Organization not listed"}`;option.dataset.grant=JSON.stringify(grant);select.appendChild(option);if(previousId&&grant.item_id===previousId)selected=option.value;});
+      if(selected)select.value=selected;
+      else if(previous){const manual=document.createElement("option");manual.value="manual";manual.textContent="Using pasted funding details";select.appendChild(manual);select.value="manual";}
+      document.getElementById("grantSearchStatus").textContent=`${matches.length} of ${grantCatalog.length} funding options match. ${Math.min(matches.length,60)} shown; search by program or organization to narrow the list${previousRecord&&!matches.includes(previousRecord)?". Current selection kept above":""}.`;
+      renderFundingSummary();
+    }
+    async function loadGrants(){ const button=document.getElementById("loadGrants"); button.disabled=true; if(currentStep==="funding")setStatus("Loading the public funding list..."); try{ const response=await apiFetch("/api/grants"); const data=await response.json(); if(!response.ok) throw new Error(data.error||"The list could not be loaded."); grantCatalog=Array.isArray(data.grants)?data.grants:[];renderGrantOptions();if(currentStep==="funding")setStatus(`Loaded ${grantCatalog.length} funding options. Updated ${data.updated||"date not listed"}.`); }finally{ button.disabled=false; } }
     document.getElementById("loadGrants").addEventListener("click",()=>loadGrants().catch((error)=>setStatus(`Could not load funding: ${error.message}`,true)));
-    document.getElementById("grantSelect").addEventListener("change",(event)=>{ document.getElementById("selectedGrant").value=event.target.selectedOptions[0]?.dataset?.grant||""; });
-    document.getElementById("fileInput").addEventListener("change",async(event)=>{ const files=[...event.target.files]; const parts=[]; let total=0; if(files.length>10){setStatus("Add no more than 10 text files at a time.",true);event.target.value="";return;} for(const file of files){ if(file.size>512*1024){ setStatus(`${file.name} is too large. Use a text file under 512 KB.`,true); continue; } total+=file.size; if(total>2*1024*1024){setStatus("The selected files exceed the 2 MB combined limit.",true);break;} parts.push(`\n--- File: ${file.name} ---\n${await file.text()}`); } const notes=document.getElementById("projectNotes"); const combined=`${notes.value}\n${parts.join("\n")}`.trim(); if(combined.length>100000){setStatus("The notes and file text exceed the 100,000-character drafting limit. Use shorter excerpts.",true);return;} notes.value=combined; if(parts.length) setStatus(`Read ${parts.length} file(s).`); });
+    document.getElementById("grantSearch").addEventListener("input",renderGrantOptions);
+    document.getElementById("grantSelect").addEventListener("change",(event)=>{ if(event.target.value!=="manual")document.getElementById("selectedGrant").value=event.target.selectedOptions[0]?.dataset?.grant||"";renderFundingSummary();markInputsChanged(); });
+    document.getElementById("fileInput").addEventListener("change",async(event)=>{ const files=[...event.target.files]; const parts=[]; let total=0; if(files.length>10){setStatus("Add no more than 10 text files at a time.",true);event.target.value="";return;} for(const file of files){ if(file.size>512*1024){ setStatus(`${file.name} is too large. Use a text file under 512 KB.`,true); continue; } total+=file.size; if(total>2*1024*1024){setStatus("The selected files exceed the 2 MB combined limit.",true);break;} parts.push(`\n--- File: ${file.name} ---\n${await file.text()}`); } const notes=document.getElementById("projectNotes"); const combined=`${notes.value}\n${parts.join("\n")}`.trim(); if(combined.length>100000){setStatus("The notes and file text exceed the 100,000-character drafting limit. Use shorter excerpts.",true);return;} notes.value=combined; if(parts.length){markInputsChanged();setStatus(`Read ${parts.length} file(s).`);} });
     document.getElementById("planInput").addEventListener("change",(event)=>{ openPlanFile(event.target.files[0]).catch((error)=>{ const importStatus=document.getElementById("planImportStatus"); importStatus.textContent="Could not open the plan: "+error.message; importStatus.className="status warning"; setStatus(importStatus.textContent,true); }).finally(()=>{event.target.value="";}); });
     document.getElementById("lookupCommunity").addEventListener("click",lookupCommunityFacts);
-    document.getElementById("draftButton").addEventListener("click",async()=>{ if(!validateDraftInputs())return; const button=document.getElementById("draftButton"); button.disabled=true; startWorking(); setStatus("RERC-e is preparing the draft..."); try{ const response=await apiFetch("/api/draft",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(collectPayload())}); const data=await response.json(); if(!response.ok) throw new Error(data.error||"Draft failed."); lastDraft=data.draft; output.textContent=data.draft; renderProfile(data.publicProfile,data.profileMessage,data.profileStatus); const readyMessage=data.localKnowledgeChars?"Draft ready. Local reference files were used.":"Draft ready."; setStatus(data.warnings?.length?data.warnings.join(" "):readyMessage+" "+(data.safetyNotice||"")+" "+(data.profileMessage||""),Boolean(data.warnings?.length)); }catch(error){ setStatus("Draft failed: "+error.message,true); }finally{ stopWorking(); button.disabled=false; } });
+    document.getElementById("draftButton").addEventListener("click",async()=>{ if(!validateDraftInputs())return; const button=document.getElementById("draftButton"); const versionAtStart=inputVersion; button.disabled=true; startWorking(); setStatus("RERC-e is preparing the draft..."); try{ const response=await apiFetch("/api/draft",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(collectPayload())}); const data=await response.json(); if(!response.ok) throw new Error(data.error||"Draft failed."); lastDraft=data.draft; draftInputVersion=versionAtStart; output.textContent=data.draft; renderProfile(data.publicProfile,data.profileMessage,data.profileStatus); saveProjectState(); const readyMessage=data.localKnowledgeChars?"Draft ready. Local reference files were used.":"Draft ready."; setStatus(data.warnings?.length?data.warnings.join(" "):readyMessage+" "+(data.safetyNotice||"")+" "+(data.profileMessage||""),Boolean(data.warnings?.length)); }catch(error){ setStatus("Draft failed: "+error.message,true); }finally{ stopWorking(); button.disabled=false; } });
     function downloadBlob(blob,filename){ const link=document.createElement("a"); link.href=URL.createObjectURL(blob); link.download=filename; link.click(); setTimeout(()=>URL.revokeObjectURL(link.href),1000); }
     function draftFilename(extension){ const raw=document.getElementById("projectTitle").value||"Project"; const safe=raw.normalize("NFKD").replace(/[^\w -]/g,"").trim().replace(/\s+/g,"_").slice(0,60)||"Project"; const now=new Date(); const date=[now.getFullYear(),String(now.getMonth()+1).padStart(2,"0"),String(now.getDate()).padStart(2,"0")].join("-"); return `RERC-e_${safe}_Draft_${date}.${extension}`; }
-    document.getElementById("downloadMd").addEventListener("click",()=>{ if(!lastDraft){setStatus("Create a draft first.",true);return;} downloadBlob(new Blob([lastDraft],{type:"text/markdown"}),draftFilename("md")); });
-    document.getElementById("downloadDocx").addEventListener("click",async()=>{ if(!lastDraft){setStatus("Create a draft first.",true);return;} const button=document.getElementById("downloadDocx"); button.disabled=true; setStatus("Building the Word file..."); try{ const response=await apiFetch("/api/export-docx",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({draft:lastDraft,title:document.getElementById("projectTitle").value||"RERC-e Draft"})}); if(!response.ok){ const data=await response.json().catch(()=>({})); throw new Error(data.error||"The Word file could not be created."); } downloadBlob(await response.blob(),draftFilename("docx")); setStatus("Word file ready."); }catch(error){setStatus("Word export failed: "+error.message,true);}finally{button.disabled=false;} });
-    document.getElementById("copyDraft").addEventListener("click",async()=>{ if(!lastDraft){setStatus("Create a draft first.",true);return;} try{ if(!navigator.clipboard||!navigator.clipboard.writeText)throw new Error("Clipboard access is unavailable"); await navigator.clipboard.writeText(lastDraft); setStatus("Draft copied."); }catch{ setStatus("Copy is unavailable in this browser. Select the draft text and copy it manually.",true); output.focus(); const selection=window.getSelection(); const range=document.createRange(); range.selectNodeContents(output); selection.removeAllRanges(); selection.addRange(range); } });
-    checkRuntime(); runtimePoll=window.setInterval(checkRuntime,5000); checkStartupPlan(); loadGrants().catch(()=>setStatus("The public funding list is not available right now. You can paste funding details instead.",true));
+    document.getElementById("downloadMd").addEventListener("click",()=>{ if(!canUseDraft())return; downloadBlob(new Blob([lastDraft],{type:"text/markdown"}),draftFilename("md")); });
+    document.getElementById("downloadDocx").addEventListener("click",async()=>{ if(!canUseDraft())return; const button=document.getElementById("downloadDocx"); button.disabled=true; setStatus("Building the Word file..."); try{ const response=await apiFetch("/api/export-docx",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({draft:lastDraft,title:document.getElementById("projectTitle").value||"RERC-e Draft"})}); if(!response.ok){ const data=await response.json().catch(()=>({})); throw new Error(data.error||"The Word file could not be created."); } downloadBlob(await response.blob(),draftFilename("docx")); setStatus("Word file ready."); }catch(error){setStatus("Word export failed: "+error.message,true);}finally{button.disabled=false;} });
+    document.getElementById("copyDraft").addEventListener("click",async()=>{ if(!canUseDraft())return; try{ if(!navigator.clipboard||!navigator.clipboard.writeText)throw new Error("Clipboard access is unavailable"); await navigator.clipboard.writeText(lastDraft); setStatus("Draft copied."); }catch{ setStatus("Copy is unavailable in this browser. Select the draft text and copy it manually.",true); output.focus(); const selection=window.getSelection(); const range=document.createRange(); range.selectNodeContents(output); selection.removeAllRanges(); selection.addRange(range); } });
+    PROJECT_FIELDS.filter((id)=>id!=="selectedGrant").forEach((id)=>{const control=document.getElementById(id);control.addEventListener(control.tagName==="SELECT"||control.type==="checkbox"?"change":"input",markInputsChanged);});
+    document.getElementById("selectedGrant").addEventListener("input",()=>{const select=document.getElementById("grantSelect");if(select.value!=="manual"){let manual=[...select.options].find((option)=>option.value==="manual");if(!manual){manual=document.createElement("option");manual.value="manual";manual.textContent="Using pasted funding details";select.appendChild(manual);}select.value="manual";}renderFundingSummary();markInputsChanged();});
+    window.addEventListener("pagehide",saveProjectState);
+    restoreProjectState();
+    if(hasLocalSession()){checkRuntime(); runtimePoll=window.setInterval(checkRuntime,5000); checkStartupPlan(); loadGrants().catch((error)=>setStatus(error.message.includes("session")?error.message:"The public funding list is not available right now. You can paste funding details instead.",true));}
+    else setStatus("Open RERC-e from its Start Menu shortcut to connect this tab. Your saved work in this tab is available below.",true);
   </script>
 </body>
 </html>'''.replace("__STATE_OPTIONS__", json.dumps([""] + list(STATE_FIPS.keys())))
 
 
-class RERCieHandler(BaseHTTPRequestHandler):
+class RERCeHandler(BaseHTTPRequestHandler):
     server_version = f"RERC-e/{APP_VERSION}"
 
     def log_message(self, format: str, *args: Any) -> None:
@@ -1400,13 +2242,20 @@ class RERCieHandler(BaseHTTPRequestHandler):
             if origin and origin.lower() != EXPECTED_ORIGIN:
                 self.send_json({"error": "Local request rejected."}, status=403)
                 return False
-            provided = self.headers.get("X-RERCie-Token", "")
-            if not SESSION_TOKEN or not secrets.compare_digest(provided, SESSION_TOKEN):
+            provided_header = self.headers.get("X-RERC-e-Token", "")
+            try:
+                cookies = SimpleCookie(self.headers.get("Cookie", ""))
+                provided_cookie = cookies[APP_WINDOW_COOKIE].value if APP_WINDOW_COOKIE in cookies else ""
+            except Exception:
+                provided_cookie = ""
+            header_valid = bool(SESSION_TOKEN and provided_header and secrets.compare_digest(provided_header, SESSION_TOKEN))
+            cookie_valid = bool(SESSION_TOKEN and provided_cookie and secrets.compare_digest(provided_cookie, SESSION_TOKEN))
+            if not header_valid and not cookie_valid:
                 self.send_json({"error": "Local session not authorized."}, status=403)
                 return False
         return True
 
-    def _headers(self, status: int, content_type: str, length: int, disposition: str | None = None) -> None:
+    def _headers(self, status: int, content_type: str, length: int, disposition: str | None = None, extra_headers: dict[str, str] | None = None) -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(length))
@@ -1415,6 +2264,8 @@ class RERCieHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
         if disposition:
             self.send_header("Content-Disposition", disposition)
+        for name, value in (extra_headers or {}).items():
+            self.send_header(name, value)
         self.end_headers()
 
     def send_json(self, payload: dict[str, Any], status: int = 200) -> None:
@@ -1441,12 +2292,23 @@ class RERCieHandler(BaseHTTPRequestHandler):
         return payload
 
     def do_GET(self) -> None:
-        require_token = self.path == "/health" or self.path.startswith("/api/")
+        parsed = urllib.parse.urlsplit(self.path)
+        path = parsed.path
+        require_token = path == "/health" or path.startswith("/api/")
         if not self._authorize(require_token=require_token):
             return
-        if self.path in {"/", "/index.html"}:
+        if path == "/app-window":
+            code = urllib.parse.parse_qs(parsed.query, keep_blank_values=True).get("code", [""])[0]
+            if not consume_app_window_code(code):
+                self.send_json({"error": "This RERC-e app-window link has expired or was already used."}, status=403)
+                return
+            self._headers(303, "text/plain; charset=utf-8", 0, extra_headers={
+                "Location": "/native",
+                "Set-Cookie": f"{APP_WINDOW_COOKIE}={SESSION_TOKEN}; Path=/; HttpOnly; SameSite=Strict",
+            })
+        elif path in {"/", "/index.html", "/native"}:
             self.send_text(HTML_PAGE)
-        elif self.path == "/assets/rerc-e-eagle.jpg":
+        elif path == "/assets/rerc-e-eagle.jpg":
             asset_path = ASSET_DIR / "rerc-e-eagle.jpg"
             if not asset_path.is_file():
                 self.send_json({"error": "Not found"}, status=404)
@@ -1454,9 +2316,9 @@ class RERCieHandler(BaseHTTPRequestHandler):
             body = asset_path.read_bytes()
             self._headers(200, "image/jpeg", len(body))
             self.wfile.write(body)
-        elif self.path == "/health":
+        elif path == "/health":
             self.send_json({"status": "ok", "app": "RERC-e", "version": APP_VERSION})
-        elif self.path == "/api/runtime":
+        elif path == "/api/runtime":
             try:
                 health = request_json(LOCAL_HEALTH_URL, timeout=3)
                 models = request_json(LOCAL_MODELS_URL, timeout=3)
@@ -1465,12 +2327,12 @@ class RERCieHandler(BaseHTTPRequestHandler):
                 self.send_json({"ready": ready})
             except Exception:
                 self.send_json({"ready": False})
-        elif self.path == "/api/grants":
+        elif path == "/api/grants":
             try:
                 self.send_json(fetch_public_catalog())
             except Exception as exc:
                 self.send_json({"error": html.escape(str(exc))}, status=502)
-        elif self.path == "/api/startup-plan":
+        elif path == "/api/startup-plan":
             try:
                 imported = consume_startup_handoff()
                 self.send_json(imported or {"status": "none"})
@@ -1487,7 +2349,9 @@ class RERCieHandler(BaseHTTPRequestHandler):
             return
         try:
             payload = self.read_payload()
-            if self.path == "/api/community-profile":
+            if self.path == "/api/app-window-code":
+                self.send_json({"code": create_app_window_code(), "expiresInSeconds": APP_WINDOW_CODE_TTL_SECONDS})
+            elif self.path == "/api/community-profile":
                 self.send_json(lookup_community_profile(
                     str(payload.get("community") or ""),
                     str(payload.get("state") or ""),
@@ -1518,7 +2382,7 @@ def serve(host: str, port: int) -> int:
     EXPECTED_ORIGIN = f"http://{EXPECTED_HOST}"
     if not SESSION_TOKEN:
         raise RuntimeError("RERC-e needs a local session token.")
-    server = ThreadingHTTPServer((host, port), RERCieHandler)
+    server = ThreadingHTTPServer((host, port), RERCeHandler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -1529,6 +2393,9 @@ def serve(host: str, port: int) -> int:
 
 
 def smoke() -> int:
+    launch_code = create_app_window_code()
+    assert consume_app_window_code(launch_code) is True
+    assert consume_app_window_code(launch_code) is False
     current = parse_public_catalog('window.RERC_CATALOG = {"items":[{"item_type":"Funding","title":"One"},{"item_type":"Resource","title":"Two"}]};')
     assert len(current["grants"]) == 1 and len(current["resources"]) == 1
     legacy = parse_public_catalog('window.GRANT_EXPLORER_DATA = {"grants":[{"title":"Legacy"}]};')
@@ -1543,7 +2410,7 @@ def smoke() -> int:
     profile_text = format_public_profile(sample_profile)
     assert "Population: 1,046" in profile_text and "Median household income: $29,554" in profile_text
     assert "CENSUS_KEY_SENTINEL" not in compose_prompt({"projectTitle": "Test"}, sample_profile, "")
-    assert DEFAULT_MODEL == "gemma-3-1b-it-Q4_K_M.gguf"
+    assert DEFAULT_MODEL == "gemma-3-4b-it-Q4_K_M.gguf"
     valid_handoff = {
         "schema": HANDOFF_SCHEMA,
         "version": HANDOFF_VERSION,
@@ -1575,6 +2442,7 @@ def smoke() -> int:
     assert imported["community"] == "St. Paul"
     assert "Sample Trail Grant" in imported["selectedFundingDetails"]
     assert "Community Explorer roadmap" in imported["projectNotes"]
+    assert validate_handoff_text(json.dumps(dict(valid_handoff, schema=LEGACY_HANDOFF_SCHEMA)))["schema"] == HANDOFF_SCHEMA
     invalid_handoff = dict(valid_handoff, schema="wrong-schema")
     try:
         validate_handoff_text(json.dumps(invalid_handoff))
@@ -1678,7 +2546,7 @@ def smoke() -> int:
     }
     imported_profile_result = build_draft(imported_profile_payload)
     assert imported_profile_result["profileStatus"] == "imported"
-    assert "Population: 1,046" in imported_profile_result["draft"]
+    assert "a population of 1,046" in imported_profile_result["draft"]
     try:
         _require_loopback_runtime_url("test", "https://example.com/v1/chat")
         raise AssertionError("A non-loopback writer URL was accepted.")

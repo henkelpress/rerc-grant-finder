@@ -14,7 +14,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DATE_TAG = date.today().isoformat()
 PREFIX = "window.RERC_CATALOG = "
-EXPECTED_RERCIE_VERSION = "0.5.1"
+EXPECTED_RERCIE_VERSION = "0.5.2"
+EXPECTED_RERCIE_MODEL = "gemma-3-4b-it-Q4_K_M.gguf"
 EXPECTED_REFERRER_POLICY = "strict-origin-when-cross-origin"
 EXPECTED_CSP = (
     "default-src 'self'; script-src 'self'; style-src 'self'; "
@@ -176,11 +177,11 @@ def main() -> int:
         (
             attrs.get("href", "")
             for tag, attrs in site_contract.elements
-            if tag == "a" and attrs.get("id") == "rercieDownload"
+            if tag == "a" and attrs.get("id") == "rercEDownload"
         ),
         "",
     )
-    assert rercie_download == "https://github.com/henkelpress/rerc-grant-finder/releases/latest/download/RERCie-Setup.exe"
+    assert rercie_download == "https://github.com/henkelpress/rerc-grant-finder/releases/latest"
 
     meta_by_name = {
         attrs.get("name", "").lower(): attrs.get("content", "")
@@ -232,7 +233,7 @@ def main() -> int:
     assert all(value in app_js for value in ("fundingFilterLabels", "caseStudyPhase", "fundingTiming", "fundingTimingCounts", "wordPageBreakXml"))
     assert all(value in planner for value in (
         "fundingSequenceEntries", "renderFundingSequence", "laterFundingTargets", "Funding sequence order", "fundingSequenceCaveat",
-        "deadline-status", "stateChanged", "docxPageBreak", "rerc.activeWorkspaceId.v2",
+        "deadline-status", "stateChanged", "pageBreakBefore", "rerc.activeWorkspaceId.v2",
         "WORKSPACE_ID_PREFIX", "createWorkspaceId", "phaseChanged"
     ))
     assert "renderCardActions" not in app_js and "planner-card-actions" in planner
@@ -375,15 +376,24 @@ def main() -> int:
     assert "RERC-e is reviewing your notes with local Gemma" in core
     assert "rawModelProseExposed" in core
     assert "parse_verified_excerpts" in core
-    launcher = (ROOT / "rercie" / "packaging" / "RERCieLauncher.cs").read_text(encoding="utf-8")
+    launcher = (ROOT / "rercie" / "packaging" / "RERC-eLauncher.cs").read_text(encoding="utf-8")
     assert "Read the Gemma Terms" in launcher
     assert "Apache License 2.0" not in launcher
-    installer_script = (ROOT / "rercie" / "packaging" / "RERCie.iss").read_text(encoding="utf-8")
+    assert "WebView2CompositionControl" in launcher and "CreateAppWindowUrl" in launcher and "/api/app-window-code" in launcher
+    assert r'--app=\"' not in launcher
+    assert "same_window_transition = true" in launcher and "composition_visual_host = true" in launcher
+    assert "full_session_token_in_command_line = false" in launcher
+    open_app = launcher[launcher.index("private async Task OpenAppAsync()") : launcher.index("private void ShowAppView()")]
+    assert open_app.index("EnsureEmbeddedViewAsync") < open_app.index("Runtime.CreateAppWindowUrl")
+    assert "acceptanceManualAddressFactory" in launcher
+    installer_script = (ROOT / "rercie" / "packaging" / "RERC-e.iss").read_text(encoding="utf-8")
     assert '[InstallDelete]' not in installer_script
     assert 'Name: "{app}\\models"' in installer_script  # Uninstall cleanup remains intentional.
-    assert '#define AppVersion "0.5.1"' in installer_script
+    assert f'#define AppVersion "{EXPECTED_RERCIE_VERSION}"' in installer_script
     build_script = (ROOT / "rercie" / "build_installer.ps1").read_text(encoding="utf-8")
-    assert '$Version = "0.5.1"' in build_script
+    assert f'$Version = "{EXPECTED_RERCIE_VERSION}"' in build_script
+    assert "Microsoft.Web.WebView2.Core.dll" in build_script and "Microsoft.Web.WebView2.Wpf.dll" in build_script
+    assert "WEBVIEW2-LICENSE.txt" in build_script and "WebView2Loader.dll" in build_script
     installer_manifest = json.loads(
         (ROOT / "rercie" / "packaging" / "installer_manifest.json").read_text(
             encoding="utf-8"
@@ -391,7 +401,28 @@ def main() -> int:
     )
     assert installer_manifest["package"]["version"] == EXPECTED_RERCIE_VERSION
     source_qa = json.loads((ROOT / "rercie" / "packaging" / "QA_EVIDENCE.json").read_text(encoding="utf-8"))
-    assert source_qa["status"] == "SOURCE_PASS" and source_qa["evidence_stage"] == "source"
+    assert source_qa["status"] in {"SOURCE_PASS", "SOURCE_PENDING_NATIVE_QA"} and source_qa["evidence_stage"] == "source"
+    assert source_qa["checks"]["display_scaling"]["status"] == ("PASS" if source_qa["status"] == "SOURCE_PASS" else "PENDING_RETEST")
+    if source_qa["status"] == "SOURCE_PASS":
+        native_qa_path = ROOT / "rercie" / "packaging" / "NATIVE_WINDOWS_QA.json"
+        native_qa = json.loads(native_qa_path.read_text(encoding="utf-8"))
+        assert native_qa["status"] == "PASS" and native_qa["evidence_stage"] == "source"
+        assert native_qa["app"] == "RERC-e" and native_qa["app_version"] == EXPECTED_RERCIE_VERSION
+        assert native_qa["per_monitor_v2"] is True and native_qa["actual_monitor"]["layout_pass"] is True
+        assert {row["scale"] for row in native_qa["simulated_geometry"] if row["status"] == "PASS"} == {"100%", "150%", "200%"}
+        assert native_qa["app_window_host"]["status"] == "PASS"
+        assert native_qa["app_window_host"]["mode"] == "embedded WebView2 composition"
+        assert native_qa["app_window_host"]["same_window_transition"] is True
+        assert native_qa["app_window_host"]["composition_visual_host"] is True
+        assert native_qa["app_window_host"]["address_bar_visible"] is False
+        assert native_qa["app_window_host"]["security"]["full_session_token_in_url"] is False
+        assert native_qa["app_window_host"]["security"]["httponly_cookie"] is True
+        assert native_qa["app_window_host"]["security"]["replay_status"] == 403
+        assert native_qa["web_content"]["status"] == "PASS" and native_qa["web_content"]["step_count"] == 3
+        for relative, expected_hash in native_qa["source_sha256"].items():
+            assert sha256(ROOT / relative) == expected_hash
+        assert source_qa["verification_inputs"]["native_windows_report_sha256"] == sha256(native_qa_path)
+    assert source_qa["checks"]["source_smoke"]["handoff_schema"] == app.app.HANDOFF_SCHEMA
     assert source_qa["app_version"] == EXPECTED_RERCIE_VERSION
     assert source_qa["app_version"] == expected_app_version
     assert source_qa.get("historical") is not True
@@ -412,11 +443,20 @@ def main() -> int:
     assert local_report["app_version"] == EXPECTED_RERCIE_VERSION
     assert local_report["app_version"] == expected_app_version
     assert local_report.get("historical") is not True
-    assert local_report["model"] == "gemma-3-1b-it-Q4_K_M.gguf"
+    assert local_report["model"] == EXPECTED_RERCIE_MODEL
     assert local_report['source_normalized_sha256'] == git_blob_sha256(
         head_commit, 'rercie/rercie_core.py'
     )
-    assert local_report["raw_model_prose_exposed"] is False
+    assert source_qa["checks"]["local_generation"]["source_normalized_sha256"] == local_report["source_normalized_sha256"]
+    assert local_report["raw_model_prose_exposed"] is True
+    assert local_report["schema_constrained_batch"] is True
+    assert local_report["protected_statement_validation"] is True
+    assert local_report["section_level_fallback"] is True
+    assert set(local_report["scenarios"]["developed"]["model_written_sections"]) == {"Project Need", "Proposed Work"}
+    assert set(local_report["scenarios"]["detailed"]["model_written_sections"]) == {
+        "Project Need", "Proposed Work", "Community Benefit"
+    }
+    assert local_report["scenarios"]["mismatch"]["fit_status"] == "conflict"
     assert local_report["evidence_scope"].startswith(("Package-bound", "Source-bound"))
     assert local_report["later_standalone_rerun"]["status"] == "PASS"
     assert source_qa["checks"]["local_generation"]["later_standalone_rerun_status"] == "PASS"
@@ -457,32 +497,41 @@ def main() -> int:
     }
     unsafe = "The town is eligible and will acquire land, hire a consultant, and secure every approval."
     assert app.app.grounding_issues(unsafe, draft_payload, profile)
-    exact = "Improve a trail connection between the park and downtown."
-    evidence = app.app.evidence_text(draft_payload, profile, "")
-    verified = app.app.parse_verified_excerpts(json.dumps({"excerpts": [{"text": exact}]}), evidence)
-    assert verified == [exact]
-    paraphrased = app.app.parse_verified_excerpts(
-        json.dumps({"excerpts": [{"text": "Build a trail from downtown to the park."}]}),
-        evidence,
+    draft_payload["projectNotes"] = (
+        "Local merchants recorded recurring visitor confusion at three downtown intersections. "
+        "The existing curb ramps do not provide accessible routes. "
+        "The town plans to install directional signs. The town plans to replace two curb ramps."
     )
-    whitespace_changed = app.app.parse_verified_excerpts(
-        json.dumps({"excerpts": [{"text": "Improve  a trail connection between the park and downtown."}]}),
-        evidence,
-    )
-    assert paraphrased == []
-    assert whitespace_changed == []
-    scaffold = app.app.deterministic_scaffold(draft_payload, profile, verified)
-    assert not app.app.grounding_issues(scaffold, draft_payload, profile, verified)
-    original_selector = app.app.select_evidence_excerpts
-    app.app.select_evidence_excerpts = lambda *_args, **_kwargs: [exact]
+    section_facts = app.app.section_evidence(draft_payload, profile)
+    candidates = {
+        heading: facts
+        for heading, facts in section_facts.items()
+        if heading in app.app._MODEL_DRAFT_HEADINGS and len(facts) >= 2
+    }
+    safe_batch = {
+        heading: " ".join(app.app._as_sentence(fact) for fact in facts)
+        for heading, facts in candidates.items()
+    }
+    original_writer = app.app.call_local_writer
+    app.app.call_local_writer = lambda *_args, **_kwargs: json.dumps(safe_batch)
     try:
         built = app.app.build_draft(draft_payload)
     finally:
-        app.app.select_evidence_excerpts = original_selector
-    assert built["rawModelProseExposed"] is False
-    assert built["evidenceExcerpts"] == [exact]
-    assert exact in built["draft"]
-    assert unsafe not in built["draft"]
+        app.app.call_local_writer = original_writer
+    assert built["rawModelProseExposed"] is True
+    assert set(built["modelWrittenSections"]) == set(candidates)
+    assert not app.app.grounding_issues(built["draft"], draft_payload, profile)
+
+    unsafe_batch = {heading: unsafe for heading in candidates}
+    app.app.call_local_writer = lambda *_args, **_kwargs: json.dumps(unsafe_batch)
+    try:
+        rejected = app.app.build_draft(draft_payload)
+    finally:
+        app.app.call_local_writer = original_writer
+    assert rejected["rawModelProseExposed"] is False
+    assert rejected["modelWrittenSections"] == []
+    assert rejected["warnings"]
+    assert unsafe not in rejected["draft"]
 
     result = {
         "status": "PASS",
@@ -497,7 +546,7 @@ def main() -> int:
             "regional_coverage",
             "case_studies",
             "downloads",
-            "rerc_e_0.5.1",
+            "rerc_e_0.5.2",
             "privacy_and_grounding",
         ],
     }

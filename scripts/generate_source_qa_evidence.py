@@ -8,13 +8,18 @@ import re
 import subprocess
 import sys
 import time
+import http.cookiejar
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RERCIE = ROOT / "rercie"
 PACKAGING = RERCIE / "packaging"
+APP_VERSION = "0.5.2"
+MODEL_NAME = "gemma-3-4b-it-Q4_K_M.gguf"
+MODEL_LABEL = "Google Gemma 3 4B Instruct Q4_K_M"
 LAYOUT_SHA256 = "df70b1e32a489edfa0fa82309dccd30207a2ae1e1876ae11d4623766e3f7b697"
 TERRITORIES = {"Puerto Rico", "U.S. Virgin Islands", "Guam", "American Samoa", "Northern Mariana Islands"}
 
@@ -48,13 +53,67 @@ def current_expected_counts() -> dict[str, int]:
 
 
 def layout_sha256() -> str:
-    source = (PACKAGING / "RERCieLauncher.cs").read_text(encoding="utf-8")
+    source = (PACKAGING / "RERC-eLauncher.cs").read_text(encoding="utf-8")
     pattern = re.compile(
         r"^\s*(?:ClientSize|MinimumSize|AutoScaleMode|\w+\.(?:Location|Size|Font|AutoSize|MinimumSize|MaximumSize))\s*=.*$",
         re.MULTILINE,
     )
     normalized = "\n".join(line.strip() for line in pattern.findall(source))
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def current_native_windows_evidence() -> tuple[bool, dict]:
+    path = PACKAGING / "NATIVE_WINDOWS_QA.json"
+    if not path.is_file():
+        return False, {}
+    evidence = json.loads(path.read_text(encoding="utf-8"))
+    required_sources = {
+        "rercie/packaging/RERC-eLauncher.cs",
+        "rercie/packaging/RERC-e.exe.config",
+        "rercie/packaging/RERC-e.exe.manifest",
+        "rercie/packaging/NativeAcceptanceHarness.cs",
+        "rercie/rercie_core.py",
+    }
+    bound = evidence.get("source_sha256") or {}
+    hashes_current = required_sources == set(bound) and all(
+        (ROOT / relative).is_file() and sha256(ROOT / relative) == expected
+        for relative, expected in bound.items()
+    )
+    simulated = evidence.get("simulated_geometry") or []
+    scales_pass = {row.get("scale") for row in simulated if row.get("status") == "PASS"} == {"100%", "150%", "200%"}
+    actual = evidence.get("actual_monitor") or {}
+    app_window = evidence.get("app_window_host") or {}
+    app_window_security = app_window.get("security") or {}
+    web_content = evidence.get("web_content") or {}
+    current = all((
+        evidence.get("status") == "PASS",
+        evidence.get("evidence_stage") == "source",
+        evidence.get("app") == "RERC-e",
+        evidence.get("app_version") == APP_VERSION,
+        evidence.get("per_monitor_v2") is True,
+        actual.get("layout_pass") is True,
+        not actual.get("clipped_text"),
+        not actual.get("outside_parent"),
+        not actual.get("unnamed_interactive"),
+        scales_pass,
+        app_window.get("status") == "PASS",
+        app_window.get("mode") == "embedded WebView2 composition",
+        app_window.get("same_window_transition") is True,
+        app_window.get("composition_visual_host") is True,
+        app_window.get("address_bar_visible") is False,
+        app_window_security.get("launch_code_ttl_seconds") == 60,
+        app_window_security.get("full_session_token_in_url") is False,
+        app_window_security.get("httponly_cookie") is True,
+        app_window_security.get("replay_status") == 403,
+        web_content.get("status") == "PASS",
+        web_content.get("step_count") == 3,
+        web_content.get("token_stored") is False,
+        web_content.get("cookie_auth") is True,
+        web_content.get("local_session") is True,
+        web_content.get("page_overflow") is False,
+        hashes_current,
+    ))
+    return current, evidence
 
 
 def source_service_identity_check() -> dict[str, int | bool]:
@@ -86,7 +145,7 @@ def source_service_identity_check() -> dict[str, int | bool]:
         healthy = False
         while time.time() < deadline:
             try:
-                healthy = status("/health", {"Host": host, "X-RERCie-Token": token}) == 200
+                healthy = status("/health", {"Host": host, "X-RERC-e-Token": token}) == 200
                 if healthy:
                     break
             except (OSError, urllib.error.URLError):
@@ -94,14 +153,42 @@ def source_service_identity_check() -> dict[str, int | bool]:
             time.sleep(0.25)
         assert healthy, "RERC-e source service did not become healthy."
         missing_token = status("/health", {"Host": host})
-        wrong_host = status("/health", {"Host": "example.test", "X-RERCie-Token": token})
+        wrong_host = status("/health", {"Host": "example.test", "X-RERC-e-Token": token})
         wrong_origin = status(
             "/api/community-profile",
-            {"Host": host, "Origin": "https://example.test", "X-RERCie-Token": token, "Content-Type": "application/json"},
+            {"Host": host, "Origin": "https://example.test", "X-RERC-e-Token": token, "Content-Type": "application/json"},
             b"{}",
         )
         assert (missing_token, wrong_host, wrong_origin) == (403, 421, 403)
-        return {"loopback_only": True, "missing_token_status": missing_token, "wrong_host_status": wrong_host, "wrong_origin_status": wrong_origin}
+        code_request = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/app-window-code",
+            data=b"{}",
+            headers={"Host": host, "X-RERC-e-Token": token, "Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(code_request, timeout=3) as response:
+            code_payload = json.loads(response.read().decode("utf-8"))
+        assert code_payload["expiresInSeconds"] == 60 and code_payload["code"]
+        cookie_jar = http.cookiejar.CookieJar()
+        browser = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+        launch_path = "/app-window?code=" + urllib.parse.quote(code_payload["code"], safe="")
+        with browser.open(urllib.request.Request(f"http://127.0.0.1:{port}{launch_path}", headers={"Host": host}), timeout=3) as response:
+            assert response.status == 200 and response.geturl().endswith("/native")
+        session_cookie = next((cookie for cookie in cookie_jar if cookie.name == "RERCeSession"), None)
+        assert session_cookie is not None and session_cookie.has_nonstandard_attr("HttpOnly")
+        with browser.open(urllib.request.Request(f"http://127.0.0.1:{port}/health", headers={"Host": host}), timeout=3) as response:
+            assert response.status == 200
+        replay_status = status(launch_path, {"Host": host})
+        assert replay_status == 403
+        return {
+            "loopback_only": True,
+            "missing_token_status": missing_token,
+            "wrong_host_status": wrong_host,
+            "wrong_origin_status": wrong_origin,
+            "app_window_code_ttl_seconds": code_payload["expiresInSeconds"],
+            "app_window_cookie_httponly": True,
+            "app_window_cookie_health_status": 200,
+            "app_window_code_replay_status": replay_status,
+        }
     finally:
         process.terminate()
         try:
@@ -125,20 +212,28 @@ def main() -> int:
         text=True,
     )
     smoke = json.loads(smoke_process.stdout)
-    assert smoke["status"] == "PASS" and smoke["version"] == "0.5.1"
+    assert smoke["status"] == "PASS" and smoke["version"] == APP_VERSION
     assert smoke["docx_bytes"] >= 3000
     smoke_contract = {key: value for key, value in smoke.items() if key != "docx_bytes"}
 
     local_gemma = json.loads((PACKAGING / "LOCAL_GEMMA_QA.json").read_text(encoding="utf-8"))
-    assert local_gemma["status"] == "PASS" and local_gemma["app_version"] == "0.5.1"
-    assert local_gemma["model"] == "gemma-3-1b-it-Q4_K_M.gguf"
+    assert local_gemma["status"] == "PASS" and local_gemma["app_version"] == APP_VERSION
+    assert local_gemma["model"] == MODEL_NAME
     head_commit = subprocess.check_output(
         ['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True
     ).strip()
     assert local_gemma['source_normalized_sha256'] == git_blob_sha256(
         head_commit, 'rercie/rercie_core.py'
     )
-    assert local_gemma["raw_model_prose_exposed"] is False
+    assert local_gemma["raw_model_prose_exposed"] is True
+    assert local_gemma["schema_constrained_batch"] is True
+    assert local_gemma["protected_statement_validation"] is True
+    assert local_gemma["section_level_fallback"] is True
+    assert set(local_gemma["scenarios"]["developed"]["model_written_sections"]) == {"Project Need", "Proposed Work"}
+    assert set(local_gemma["scenarios"]["detailed"]["model_written_sections"]) == {
+        "Project Need", "Proposed Work", "Community Benefit"
+    }
+    assert local_gemma["scenarios"]["mismatch"]["fit_status"] == "conflict"
     assert local_gemma["unsupported_eligibility_claim_absent"] is True
     assert local_gemma["later_standalone_rerun"]["status"] == "PASS"
 
@@ -201,28 +296,41 @@ def main() -> int:
     historical = json.loads((PACKAGING / "QA_EVIDENCE_0.3.5_HISTORICAL.json").read_text(encoding="utf-8"))
     display = historical["checks"]["display_scaling"]
     assert display["status"] == "PASS" and display["tested_scales"] == ["100%", "150%", "200%"]
-    assert layout_sha256() == LAYOUT_SHA256
+    current_layout_sha256 = layout_sha256()
+    layout_review_current = current_layout_sha256 == LAYOUT_SHA256
+    native_current, native_evidence = current_native_windows_evidence()
 
     installer_manifest = json.loads((PACKAGING / "installer_manifest.json").read_text(encoding="utf-8"))
-    assert installer_manifest["package"]["version"] == "0.5.1"
+    assert installer_manifest["package"]["version"] == APP_VERSION
     build_script = (RERCIE / "build_installer.ps1").read_text(encoding="utf-8")
-    assert "gemma-3-1b-it-Q4_K_M.gguf" in build_script and "b9987" in build_script
+    assert MODEL_NAME in build_script and "b9987" in build_script
     assert (PACKAGING / "INSTALLER_NOTICE.txt").is_file()
     identity = source_service_identity_check()
 
     evidence = {
-        "app_version": "0.5.1",
-        "status": "SOURCE_PASS",
+        "app_version": APP_VERSION,
+        "status": "SOURCE_PASS" if native_current else "SOURCE_PENDING_NATIVE_QA",
         "tested_date": local_gemma["tested_date"],
         "evidence_stage": "source",
         "checks": {
             "source_smoke": {"status": "PASS", **smoke_contract, "docx_minimum_bytes": 3000},
-            "native_launcher": {"status": "PENDING_BUILD", "powershell_required": False, "plan_handoff_supported": True},
-            "display_scaling": {"status": "PASS", "tested_scales": display["tested_scales"], "layout_geometry_sha256": LAYOUT_SHA256, "layout_reviewed_for_version": "0.5.1", "dpi_autoscaling_and_scroll_enabled": True},
+            "native_launcher": {"status": "PASS" if native_current else "PENDING_BUILD", "powershell_required": False, "plan_handoff_supported": True, "per_monitor_v2": native_evidence.get("per_monitor_v2") if native_current else False, "app_window_host": (native_evidence.get("app_window_host") or {}).get("status") if native_current else "PENDING", "one_time_launch_code": ((native_evidence.get("app_window_host") or {}).get("security") or {}).get("replay_status") == 403 if native_current else False, "web_content_acceptance": (native_evidence.get("web_content") or {}).get("status") if native_current else "PENDING"},
+            "display_scaling": {"status": "PASS" if native_current else "PENDING_RETEST", "tested_scales": ([f"{(native_evidence.get('actual_monitor') or {}).get('scale_percent')}% actual", "100% simulated", "150% simulated", "200% simulated"] if native_current else []), "historical_tested_scales": display["tested_scales"], "layout_geometry_sha256": current_layout_sha256, "historical_reviewed_geometry_sha256": LAYOUT_SHA256, "historical_layout_hash_matches": layout_review_current, "dpi_autoscaling_and_scroll_enabled": True},
             "installer_wizard": {"status": "PENDING_RELEASE_TEST", "per_user_install": True, "uninstall_entry": True},
             "package_integrity": {"status": "PENDING_BUILD", "integrity_checked_binaries": 0},
             "live_catalog": {"status": "PASS", "total_items": counts["public_total"], "funding_items": counts["funding"], "resource_items": counts["resources"], "case_study_items": counts["case_studies"], "territory_filter_checked": True, "case_study_unique_urls_checked": source_health["unique_urls"], "case_study_hard_failed_urls": source_health["counts"]["hard_failure"], "case_study_reachable_urls": source_health["counts"]["reachable"], "case_study_restricted_urls": source_health["counts"]["restricted_but_present"], "case_study_manual_review_urls": source_health["counts"]["manual_review"]},
-            "local_generation": {"status": "PASS", "model": "Google Gemma 3 1B Instruct Q4_K_M", "source_sha256": local_gemma["source_sha256"], "source_normalized_sha256": local_gemma["source_normalized_sha256"], "verified_excerpt_count": local_gemma["verified_excerpt_count"], "raw_model_prose_exposed": False, "later_standalone_rerun_status": "PASS"},
+            "local_generation": {
+                "status": "PASS",
+                "model": MODEL_LABEL,
+                "source_sha256": local_gemma["source_sha256"],
+                "source_normalized_sha256": local_gemma["source_normalized_sha256"],
+                "raw_model_prose_exposed": True,
+                "schema_constrained_batch": True,
+                "protected_statement_validation": True,
+                "section_level_fallback": True,
+                "scenarios": local_gemma["scenarios"],
+                "later_standalone_rerun_status": "PASS",
+            },
             "docx_export": {"status": "PASS", "minimum_bytes": 3000, "office_open_xml": True},
             "api_privacy_regression": {"status": "PASS", "key_sent_to_gemma": False, "handoff_checks": smoke["handoff_checks"], "https_profile_check": "https_only_bounded" in smoke["profile_checks"]},
             "service_identity_checks": {"status": "PASS", **identity, "packaged_authenticated_health": "PENDING_BUILD"},
@@ -234,13 +342,14 @@ def main() -> int:
             "The public installer is not code-signed, so Windows may show a safety notice.",
             "The isolated installer test runs on the build computer rather than a clean Windows virtual machine.",
             "Users must review every generated draft and verify current funding rules at the official source.",
+            "The redesigned native setup and same-window WebView2 composition host need current native acceptance and signed-package testing." if not native_current else "The native setup passed at 150% actual display scaling; 100% and 200% were geometry simulations. The same-window composition host and one-time cookie handoff passed locally. Signed-package and clean-machine Windows 10/11 testing remain required.",
         ],
         "release_binding": {"source_commit": None, "integrity_manifest_sha256": None, "installer_sha256": None, "status": "PENDING_BUILD"},
-        "verification_inputs": {"browser_contract_sha256": hashlib.sha256(json.dumps(browser_contract, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest(), "local_gemma_report_sha256": git_blob_sha256(head_commit, "rercie/packaging/LOCAL_GEMMA_QA.json")},
+        "verification_inputs": {"browser_contract_sha256": hashlib.sha256(json.dumps(browser_contract, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest(), "local_gemma_report_sha256": git_blob_sha256(head_commit, "rercie/packaging/LOCAL_GEMMA_QA.json"), "native_windows_report_sha256": sha256(PACKAGING / "NATIVE_WINDOWS_QA.json") if native_current else None},
     }
     output = PACKAGING / "QA_EVIDENCE.json"
     output.write_text(json.dumps(evidence, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    print(json.dumps({"status": "PASS", "output": str(output), "app_version": "0.5.1", "counts": counts, "profile_count": len(profile_rows), "layout_geometry_sha256": LAYOUT_SHA256, "service_identity": identity}, indent=2))
+    print(json.dumps({"status": evidence["status"], "output": str(output), "app_version": APP_VERSION, "counts": counts, "profile_count": len(profile_rows), "layout_geometry_sha256": current_layout_sha256, "service_identity": identity}, indent=2))
     return 0
 
 

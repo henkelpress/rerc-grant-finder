@@ -15,25 +15,82 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
+using System.Windows.Forms.Integration;
+using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.Wpf;
 
-namespace RERCieDesktop
+namespace RERCeDesktop
 {
+    internal static class DpiAwareness
+    {
+        private static readonly IntPtr PerMonitorV2 = new IntPtr(-4);
+
+        [DllImport("user32.dll", EntryPoint = "SetProcessDpiAwarenessContext", SetLastError = true)]
+        private static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+
+        [DllImport("shcore.dll")]
+        private static extern int SetProcessDpiAwareness(int value);
+
+        [DllImport("user32.dll")]
+        private static extern bool SetProcessDPIAware();
+
+        [DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(IntPtr window);
+
+        internal static void Initialize()
+        {
+            try
+            {
+                if (SetProcessDpiAwarenessContext(PerMonitorV2)) return;
+            }
+            catch (EntryPointNotFoundException) { }
+            catch (DllNotFoundException) { }
+
+            try
+            {
+                if (SetProcessDpiAwareness(2) == 0) return;
+            }
+            catch (EntryPointNotFoundException) { }
+            catch (DllNotFoundException) { }
+
+            try { SetProcessDPIAware(); }
+            catch (EntryPointNotFoundException) { }
+            catch (DllNotFoundException) { }
+        }
+
+        internal static int WindowDpi(Control control)
+        {
+            try
+            {
+                if (control != null && control.IsHandleCreated)
+                {
+                    uint dpi = GetDpiForWindow(control.Handle);
+                    if (dpi >= 96) return (int)dpi;
+                }
+            }
+            catch (EntryPointNotFoundException) { }
+            catch (DllNotFoundException) { }
+            return 96;
+        }
+    }
+
     internal static class Config
     {
-        public const string Version = "0.5.1";
+        public const string Version = "0.5.2";
         public const string AppUrl = "http://127.0.0.1:8789";
         public const string AppHealthUrl = AppUrl + "/health";
         public const string ModelHealthUrl = "http://127.0.0.1:8788/health";
         public const string ModelListUrl = "http://127.0.0.1:8788/v1/models";
-        public const string ModelName = "gemma-3-1b-it-Q4_K_M.gguf";
-        public const string ModelUrl = "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q4_K_M.gguf?download=true";
-        public const long ModelBytes = 806058240L;
-        public const string ModelSha256 = "8ccc5cd1f1b3602548715ae25a66ed73fd5dc68a210412eea643eb20eb75a135";
+        public const string ModelName = "gemma-3-4b-it-Q4_K_M.gguf";
+        public const string ModelUrl = "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF/resolve/cd758c0fb3b2a759bb29acf4499f9e1dc460193a/gemma-3-4b-it-Q4_K_M.gguf?download=true";
+        public const long ModelBytes = 2489757856L;
+        public const string ModelSha256 = "882e8d2db44dc554fb0ea5077cb7e4bc49e7342a1f0da57901c0802ea21a0863";
         public const string VcRuntimeUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe";
-        public const string ModelPageUrl = "https://huggingface.co/ggml-org/gemma-3-1b-it-GGUF";
+        public const string ModelPageUrl = "https://huggingface.co/ggml-org/gemma-3-4b-it-GGUF";
         public const string ModelLicenseUrl = "https://ai.google.dev/gemma/terms";
         public const int MaxPlanBytes = 256 * 1024;
-        public const string PlanSchema = "rercie-handoff";
+        public const string PlanSchema = "rerc-e-handoff";
+        public const string LegacyPlanSchema = "rercie-handoff";
         public const int PlanVersion = 1;
     }
 
@@ -57,6 +114,12 @@ namespace RERCieDesktop
         public string session_token { get; set; }
     }
 
+    internal sealed class AppWindowCodeResponse
+    {
+        public string code { get; set; }
+        public int expiresInSeconds { get; set; }
+    }
+
     internal static class Runtime
     {
         public static readonly string Root = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
@@ -66,7 +129,7 @@ namespace RERCieDesktop
         public static readonly string LlamaDir = Path.Combine(RuntimeDir, "llama");
         public static readonly string LlamaExe = Path.Combine(LlamaDir, "llama-server.exe");
         public static readonly string ServiceDir = Path.Combine(Root, "service");
-        public static readonly string ServiceExe = Path.Combine(ServiceDir, "RERCieService.exe");
+        public static readonly string ServiceExe = Path.Combine(ServiceDir, "RERC-eService.exe");
         public static readonly string PidDir = Path.Combine(RuntimeDir, "pids");
         public static readonly string HandoffDir = Path.Combine(RuntimeDir, "handoff");
         public static readonly string PendingHandoffPath = Path.Combine(HandoffDir, "pending.rercie");
@@ -106,9 +169,10 @@ namespace RERCieDesktop
             if (string.IsNullOrWhiteSpace(sourcePath)) throw new InvalidOperationException("Choose a Community Explorer plan first.");
             string fullPath = Path.GetFullPath(sourcePath);
             string extension = Path.GetExtension(fullPath);
-            if (!string.Equals(extension, ".rercie", StringComparison.OrdinalIgnoreCase)
+            if (!string.Equals(extension, ".rerc-e", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(extension, ".rercie", StringComparison.OrdinalIgnoreCase)
                 && !string.Equals(extension, ".json", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("RERC-e can open only .rercie or .json Community Explorer plans.");
+                throw new InvalidOperationException("Choose a RERC-e Community Explorer plan file.");
             FileInfo source = new FileInfo(fullPath);
             if (!source.Exists || source.Length <= 0 || source.Length > Config.MaxPlanBytes)
                 throw new InvalidOperationException("The Community Explorer plan must be a non-empty file no larger than 256 KB.");
@@ -133,7 +197,8 @@ namespace RERCieDesktop
             int parsedVersion;
             if (plan == null
                 || !plan.TryGetValue("schema", out schema)
-                || !string.Equals(Convert.ToString(schema), Config.PlanSchema, StringComparison.Ordinal)
+                || !(string.Equals(Convert.ToString(schema), Config.PlanSchema, StringComparison.Ordinal)
+                     || string.Equals(Convert.ToString(schema), Config.LegacyPlanSchema, StringComparison.Ordinal))
                 || !plan.TryGetValue("version", out version)
                 || !int.TryParse(Convert.ToString(version), out parsedVersion)
                 || parsedVersion != Config.PlanVersion)
@@ -222,13 +287,53 @@ namespace RERCieDesktop
                 && EndpointContains(Config.ModelListUrl, Config.ModelName, null);
         }
 
-        public static string AppBrowserUrl()
+        private static ProcessRecord GetAppProcessRecord()
         {
             ProcessRecord record;
             Process process;
             if (!TryGetOwnedProcess("app", ServiceExe, out record, out process) || string.IsNullOrWhiteSpace(record.session_token))
                 throw new InvalidOperationException("RERC-e's local session is not ready. Start RERC-e again.");
-            return Config.AppUrl + "/#token=" + Uri.EscapeDataString(record.session_token);
+            return record;
+        }
+
+        public static string CreateAppWindowUrl()
+        {
+            return CreateAppWindowUrl(GetAppProcessRecord().session_token);
+        }
+
+        internal static string CreateAppWindowUrl(string sessionToken)
+        {
+            return CreateAppWindowUrl(sessionToken, Config.AppUrl);
+        }
+
+        internal static string CreateAppWindowUrl(string sessionToken, string appUrl)
+        {
+            if (string.IsNullOrWhiteSpace(sessionToken)) throw new InvalidOperationException("RERC-e's local session is not ready. Start RERC-e again.");
+            Uri suppliedOrigin;
+            if (!Uri.TryCreate(appUrl, UriKind.Absolute, out suppliedOrigin)
+                || suppliedOrigin.Scheme != "http"
+                || !string.Equals(suppliedOrigin.Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase)
+                || !string.IsNullOrEmpty(suppliedOrigin.UserInfo))
+                throw new InvalidOperationException("RERC-e refused an invalid local app origin.");
+            string localOrigin = suppliedOrigin.GetLeftPart(UriPartial.Authority);
+            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(localOrigin + "/api/app-window-code");
+            request.Method = "POST";
+            request.ContentType = "application/json";
+            request.Timeout = 5000;
+            request.ReadWriteTimeout = 5000;
+            request.Proxy = null;
+            request.Headers["X-RERC-e-Token"] = sessionToken;
+            byte[] payload = Encoding.UTF8.GetBytes("{}");
+            request.ContentLength = payload.Length;
+            using (Stream output = request.GetRequestStream()) output.Write(payload, 0, payload.Length);
+            using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+            using (StreamReader reader = new StreamReader(response.GetResponseStream()))
+            {
+                AppWindowCodeResponse result = Json.Deserialize<AppWindowCodeResponse>(reader.ReadToEnd());
+                if (result == null || string.IsNullOrWhiteSpace(result.code) || result.expiresInSeconds <= 0)
+                    throw new InvalidOperationException("RERC-e could not create a secure app-window link.");
+                return localOrigin + "/app-window?code=" + Uri.EscapeDataString(result.code);
+            }
         }
 
         public static string CreateSessionToken()
@@ -248,7 +353,7 @@ namespace RERCieDesktop
                 request.Timeout = 1800;
                 request.ReadWriteTimeout = 1800;
                 request.Proxy = null;
-                if (!string.IsNullOrWhiteSpace(sessionToken)) request.Headers["X-RERCie-Token"] = sessionToken;
+                if (!string.IsNullOrWhiteSpace(sessionToken)) request.Headers["X-RERC-e-Token"] = sessionToken;
                 using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
                 using (StreamReader reader = new StreamReader(response.GetResponseStream()))
                     return reader.ReadToEnd().IndexOf(expected, StringComparison.OrdinalIgnoreCase) >= 0;
@@ -505,99 +610,187 @@ namespace RERCieDesktop
         private readonly ProgressBar progressBar = new ProgressBar();
 
         private readonly Button startButton = new Button();
-        private readonly Button openButton = new Button();
         private readonly Button stopButton = new Button();
+        private readonly Panel setupPanel = new Panel();
+        private readonly PictureBox mascotPicture = new PictureBox();
+        private readonly Panel browserPanel = new Panel();
+        private readonly ElementHost appHost = new ElementHost();
+        private readonly WebView2CompositionControl appView = new WebView2CompositionControl();
+        private readonly Button setupButton = new Button();
+        private CoreWebView2Environment appEnvironment;
+        private Uri embeddedOrigin;
+        private bool viewConfigured;
+        private bool webViewRuntimeInstallAttempted;
         private readonly bool startupPlanStaged;
         private bool busy;
         private CancellationTokenSource activeOperationCancellation;
+#if RERC_E_ACCEPTANCE_QA
+        private string acceptanceManualAddress;
+        private Func<string> acceptanceManualAddressFactory;
+        private string acceptanceManualProfile;
+#endif
+
+#if RERC_E_ACCEPTANCE_NO_ACTIVATION
+        protected override bool ShowWithoutActivation { get { return true; } }
+#endif
 
         public MainForm(bool hasStartupPlan)
         {
             startupPlanStaged = hasStartupPlan;
             Text = "RERC-e";
-            ClientSize = new Size(700, 520);
-            MinimumSize = new Size(716, 559);
-            StartPosition = FormStartPosition.CenterScreen;
+            AutoScaleDimensions = new SizeF(96f, 96f);
             AutoScaleMode = AutoScaleMode.Dpi;
-            AutoScroll = true;
-            BackColor = Color.White;
+            ClientSize = new Size(760, 540);
+            MinimumSize = new Size(776, 579);
+            StartPosition = FormStartPosition.CenterScreen;
+            AutoScroll = false;
+            BackColor = Color.FromArgb(248, 249, 245);
             Font = new Font("Segoe UI", 9.5f);
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+            setupPanel.Dock = DockStyle.Fill;
+            setupPanel.AutoScroll = true;
+            setupPanel.BackColor = BackColor;
+            Controls.Add(setupPanel);
 
-            PictureBox picture = new PictureBox();
-            picture.Location = new Point(20, 24);
-            picture.Size = new Size(220, 420);
-            picture.SizeMode = PictureBoxSizeMode.Zoom;
-            picture.AccessibleName = "RERC-e, a bald eagle field guide holding a notebook";
-            picture.AccessibleDescription = "RERC-e is the outdoor guide character for this local grant-writing app.";
+            Panel hero = new Panel();
+            hero.Location = new Point(0, 0);
+            hero.Size = new Size(760, 242);
+            hero.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            hero.BackColor = Color.FromArgb(17, 67, 53);
+            setupPanel.Controls.Add(hero);
+
+            mascotPicture.Location = new Point(570, 26);
+            mascotPicture.Size = new Size(160, 186);
+            mascotPicture.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            mascotPicture.SizeMode = PictureBoxSizeMode.Zoom;
+            mascotPicture.AccessibleName = "RERC-e, a bald eagle field guide holding a notebook";
+            mascotPicture.AccessibleDescription = "RERC-e is the outdoor guide character for this local grant-writing app.";
             string imagePath = Path.Combine(Runtime.Root, "assets", "rerc-e-eagle.jpg");
-            if (File.Exists(imagePath)) picture.Image = Image.FromFile(imagePath);
-            Controls.Add(picture);
+            if (File.Exists(imagePath)) mascotPicture.Image = LoadDisplayImage(imagePath);
+            hero.Controls.Add(mascotPicture);
 
-            RichTextBox brand = new RichTextBox();
-            brand.Location = new Point(260, 20);
-            brand.Size = new Size(410, 28);
-            brand.BorderStyle = BorderStyle.None;
-            brand.BackColor = Color.White;
-            brand.ReadOnly = true;
-            brand.TabStop = false;
-            brand.ScrollBars = RichTextBoxScrollBars.None;
-            brand.Rtf = @"{\rtf1\ansi\deff0{\fonttbl{\f0 Segoe UI;}}{\colortbl;\red0\green87\blue63;}\f0\fs20\cf1\b Recreation Economy \i for\i0  Rural Communities\b0}";
-            Label title = MakeLabel("Meet RERC-e", 260, 58, 410, 46, 24f, true, Color.FromArgb(23, 63, 53));
-            Label intro = MakeLabel("RERC-e helps you use a funding option and your project notes to make a first draft.", 260, 112, 410, 54, 11f, false, Color.FromArgb(27, 31, 35));
-            Label boundary = MakeLabel("RERC-e is a community-built tool. It is not an EPA grant program. It does not decide who can apply or submit an application for you.", 260, 174, 410, 64, 9.5f, false, Color.FromArgb(70, 80, 75));
-            Controls.Add(brand); Controls.Add(title); Controls.Add(intro); Controls.Add(boundary);
+            Label brand = MakeLabel("Recreation Economy for Rural Communities", 32, 28, 525, 30, 10.5f, true, Color.White);
+            Label title = MakeLabel("Meet RERC-e", 32, 75, 525, 50, 27f, true, Color.White);
+            Label intro = MakeLabel("Your local guide from project idea to a grant draft.", 32, 135, 525, 36, 13f, false, Color.FromArgb(242, 248, 243));
+            Label boundary = MakeLabel("Community-built by Timberwing Systems. RERC-e does not determine eligibility or submit an application.", 32, 183, 525, 48, 9.5f, false, Color.FromArgb(212, 228, 216));
+            hero.Controls.Add(brand); hero.Controls.Add(title); hero.Controls.Add(intro); hero.Controls.Add(boundary);
 
-            Label modelNote = MakeLabel("Google Gemma is about 0.81 GB. It stays on this computer.", 260, 244, 410, 32, 9.5f, true, Color.FromArgb(27, 31, 35));
-            Controls.Add(modelNote);
+            Panel accent = new Panel();
+            accent.Location = new Point(0, 242);
+            accent.Size = new Size(760, 4);
+            accent.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            accent.BackColor = Color.FromArgb(222, 181, 97);
+            setupPanel.Controls.Add(accent);
 
-            LinkLabel modelLink = MakeLink("View the model page", 260, 280, 150, Config.ModelPageUrl);
-            LinkLabel licenseLink = MakeLink("Read the Gemma Terms", 418, 280, 170, Config.ModelLicenseUrl);
-            Controls.Add(modelLink); Controls.Add(licenseLink);
+            Label modelNote = MakeLabel("First use: download Google Gemma (about 2.49 GB)", 32, 265, 696, 28, 11f, true, Color.FromArgb(23, 63, 53));
+            setupPanel.Controls.Add(modelNote);
 
-            Label licenseNote = MakeLabel("Use of the model is governed by the Gemma Terms.", 260, 310, 410, 36, 9.5f, false, Color.FromArgb(70, 80, 75));
-            Controls.Add(licenseNote);
+            LinkLabel modelLink = MakeLink("View the model page", 32, 324, 190, Config.ModelPageUrl);
+            LinkLabel licenseLink = MakeLink("Read the Gemma Terms", 234, 324, 220, Config.ModelLicenseUrl);
+            setupPanel.Controls.Add(modelLink); setupPanel.Controls.Add(licenseLink);
+
+            Label licenseNote = MakeLabel("The model stays on this computer. Review the Gemma Terms before downloading.", 32, 296, 696, 28, 9.5f, false, Color.FromArgb(70, 80, 75));
+            setupPanel.Controls.Add(licenseNote);
+
+            Label setupHeading = MakeLabel("Setup and status", 32, 348, 696, 24, 11f, true, Color.FromArgb(23, 63, 53));
+            setupPanel.Controls.Add(setupHeading);
 
 
 
 
-            statusLabel.Location = new Point(260, 360);
-            statusLabel.Size = new Size(410, 44);
+            statusLabel.Location = new Point(32, 372);
+            statusLabel.Size = new Size(696, 34);
             statusLabel.Text = startupPlanStaged ? "Community Explorer plan ready. Checking RERC-e..." : "Checking RERC-e...";
             statusLabel.ForeColor = Color.FromArgb(70, 80, 75);
             statusLabel.AccessibleName = "RERC-e status";
             statusLabel.AccessibleDescription = statusLabel.Text;
-            Controls.Add(statusLabel);
+            setupPanel.Controls.Add(statusLabel);
 
-            progressBar.Location = new Point(260, 408);
-            progressBar.Size = new Size(410, 18);
+            progressBar.Location = new Point(32, 414);
+            progressBar.Size = new Size(696, 12);
             progressBar.Style = ProgressBarStyle.Continuous;
             progressBar.AccessibleName = "RERC-e setup progress";
             progressBar.AccessibleDescription = "Shows download and startup progress.";
-            Controls.Add(progressBar);
+            setupPanel.Controls.Add(progressBar);
 
             startButton.Text = "&Start RERC-e";
-            startButton.Location = new Point(260, 448);
-            startButton.Size = new Size(130, 38);
+            startButton.Location = new Point(32, 451);
+            startButton.Size = new Size(190, 46);
             StylePrimary(startButton);
             startButton.Click += StartClicked;
-            Controls.Add(startButton);
-
-            openButton.Text = "&Open RERC-e";
-            openButton.Location = new Point(398, 448);
-            openButton.Size = new Size(130, 38);
-            openButton.Click += delegate { Runtime.OpenBrowser(Runtime.AppBrowserUrl()); };
-            Controls.Add(openButton);
+            setupPanel.Controls.Add(startButton);
 
             stopButton.Text = "&Stop";
-            stopButton.Location = new Point(536, 448);
-            stopButton.Size = new Size(90, 38);
+            stopButton.Location = new Point(234, 451);
+            stopButton.Size = new Size(100, 46);
+            StyleSecondary(stopButton);
             stopButton.Click += StopClicked;
-            Controls.Add(stopButton);
+            setupPanel.Controls.Add(stopButton);
             AcceptButton = startButton;
             CancelButton = stopButton;
 
+            browserPanel.Dock = DockStyle.Fill;
+            browserPanel.BackColor = Color.White;
+            browserPanel.Visible = false;
+            appHost.Dock = DockStyle.Fill;
+            appHost.BackColor = Color.White;
+            appHost.AccessibleName = "RERC-e app content";
+            appHost.Child = appView;
+            appView.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
+            appView.VerticalAlignment = System.Windows.VerticalAlignment.Stretch;
+            appView.UseLayoutRounding = true;
+            appView.SnapsToDevicePixels = true;
+            browserPanel.Controls.Add(appHost);
+            setupButton.Text = "Setup and status";
+            setupButton.Dock = DockStyle.Top;
+            setupButton.Height = 42;
+            setupButton.FlatStyle = FlatStyle.Flat;
+            setupButton.FlatAppearance.BorderSize = 0;
+            setupButton.BackColor = Color.FromArgb(243, 247, 244);
+            setupButton.ForeColor = Color.FromArgb(23, 63, 53);
+            setupButton.AccessibleName = "Return to RERC-e setup and status";
+            setupButton.Click += delegate { ShowSetup(); };
+            browserPanel.Controls.Add(setupButton);
+            Controls.Add(browserPanel);
+            browserPanel.BringToFront();
+
+#if RERC_E_ACCEPTANCE_QA
+            Shown += delegate
+            {
+                statusLabel.Text = "Native acceptance preview. No model download will run.";
+                RefreshButtons();
+            };
+#else
             Shown += async delegate { await RefreshStateAsync(); };
+#endif
+            FormClosed += delegate
+            {
+                if (mascotPicture.Image != null) mascotPicture.Image.Dispose();
+                try { appView.Dispose(); } catch { }
+                int failures;
+                Runtime.StopOwnedProcesses(out failures);
+            };
+            // Programmatic WinForms controls do not receive the designer-generated
+            // initial scale pass. Scale the complete 96-DPI layout once after it
+            // exists, then retain that baseline for future per-monitor DPI changes.
+            ApplyInitialDpiScale();
+        }
+
+        private void ApplyInitialDpiScale()
+        {
+            int dpi = Math.Max(96, DeviceDpi);
+            if (dpi != 96)
+            {
+                SuspendLayout();
+                Scale(new SizeF(dpi / 96f, dpi / 96f));
+                ResumeLayout(true);
+            }
+            AutoScaleDimensions = new SizeF(dpi, dpi);
+        }
+
+        private int ScaleLogical(int value)
+        {
+            return (int)Math.Round(value * DpiAwareness.WindowDpi(this) / 96d);
         }
 
         private Label MakeLabel(string text, int x, int y, int width, int height, float size, bool bold, Color color)
@@ -609,6 +802,16 @@ namespace RERCieDesktop
             label.Font = new Font("Segoe UI", size, bold ? FontStyle.Bold : FontStyle.Regular);
             label.ForeColor = color;
             return label;
+        }
+
+        private static Image LoadDisplayImage(string path)
+        {
+            using (Image source = Image.FromFile(path))
+            {
+                const int targetWidth = 640;
+                int targetHeight = Math.Max(1, (int)Math.Round(source.Height * targetWidth / (double)source.Width));
+                return new Bitmap(source, new Size(targetWidth, targetHeight));
+            }
         }
 
         private LinkLabel MakeLink(string text, int x, int y, int width, string url)
@@ -630,6 +833,14 @@ namespace RERCieDesktop
             button.FlatAppearance.BorderColor = Color.FromArgb(0, 87, 63);
         }
 
+        private void StyleSecondary(Button button)
+        {
+            button.BackColor = Color.White;
+            button.ForeColor = Color.FromArgb(23, 63, 53);
+            button.FlatStyle = FlatStyle.Flat;
+            button.FlatAppearance.BorderColor = Color.FromArgb(178, 197, 184);
+        }
+
         private async Task RefreshStateAsync()
         {
             busy = true;
@@ -641,7 +852,7 @@ namespace RERCieDesktop
                 bool modelReady = await Task.Run((Func<bool>)Runtime.ModelReady);
                 bool appReady = Runtime.AppReady();
 
-                statusLabel.Text = appReady ? "RERC-e is ready. Open it in your browser." : modelReady ? "The local model is ready. Start RERC-e when you are ready." : "Select Download and start. RERC-e will check the model before it runs.";
+                statusLabel.Text = appReady ? "RERC-e is ready. Open it when you are ready." : modelReady ? "The local model is ready. Start RERC-e when you are ready." : "Select Download and start. RERC-e will check the model before it runs.";
                 if (startupPlanStaged) statusLabel.Text += " Your Community Explorer plan will open with it.";
             }
             catch (Exception error)
@@ -659,23 +870,72 @@ namespace RERCieDesktop
 
         private void RefreshButtons()
         {
+#if RERC_E_ACCEPTANCE_QA
+            if (!string.IsNullOrWhiteSpace(acceptanceManualAddress) || acceptanceManualAddressFactory != null)
+            {
+                startButton.Text = "&Start RERC-e";
+                startButton.Width = Math.Max(ScaleLogical(190), TextRenderer.MeasureText(startButton.Text.Replace("&", ""), startButton.Font).Width + ScaleLogical(28));
+                stopButton.Left = startButton.Right + ScaleLogical(8);
+                startButton.Enabled = !busy;
+                stopButton.Text = busy ? "&Cancel" : "&Stop";
+                stopButton.Enabled = busy;
+                return;
+            }
+#endif
             bool appReady = Runtime.AppReady();
             bool modelExists = File.Exists(Runtime.ModelPath) && new FileInfo(Runtime.ModelPath).Length == Config.ModelBytes;
-            startButton.Text = modelExists ? "&Start RERC-e" : "&Download and start";
-            startButton.Enabled = !busy && !appReady;
-            openButton.Enabled = !busy && appReady;
+            startButton.Text = appReady ? "&Open RERC-e" : modelExists ? "&Start RERC-e" : "&Download and start";
+            // WinForms does not enlarge a fixed button when the first-run label changes.
+            startButton.Width = Math.Max(ScaleLogical(190), TextRenderer.MeasureText(startButton.Text.Replace("&", ""), startButton.Font).Width + ScaleLogical(28));
+            stopButton.Left = startButton.Right + ScaleLogical(8);
+            startButton.Enabled = !busy;
             stopButton.Text = busy ? "&Cancel" : "&Stop";
             stopButton.Enabled = busy || appReady;
         }
 
         private async void StartClicked(object sender, EventArgs args)
         {
+#if RERC_E_ACCEPTANCE_QA
+            if (!string.IsNullOrWhiteSpace(acceptanceManualAddress) || acceptanceManualAddressFactory != null)
+            {
+                busy = true;
+                statusLabel.ForeColor = Color.FromArgb(70, 80, 75);
+                statusLabel.Text = "Opening RERC-e in this window...";
+                RefreshButtons();
+                try
+                {
+                    if (acceptanceManualAddressFactory != null)
+                        await OpenAcceptanceAppAsync(acceptanceManualAddressFactory, acceptanceManualProfile);
+                    else
+                        await OpenAcceptanceAppAsync(acceptanceManualAddress, acceptanceManualProfile);
+                }
+                catch (Exception error)
+                {
+                    ShowSetup();
+                    statusLabel.Text = "RERC-e could not open: " + error.Message;
+                    statusLabel.ForeColor = Color.FromArgb(139, 30, 30);
+                    MessageBox.Show(this, statusLabel.Text, "RERC-e could not start", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                finally
+                {
+                    busy = false;
+                    RefreshButtons();
+                }
+                return;
+            }
+#endif
             busy = true;
             activeOperationCancellation = new CancellationTokenSource();
             statusLabel.ForeColor = Color.FromArgb(70, 80, 75);
             RefreshButtons();
             try
             {
+                if (Runtime.AppReady())
+                {
+                    statusLabel.Text = "Opening RERC-e in this window...";
+                    await OpenAppAsync();
+                    return;
+                }
                 statusLabel.Text = "Checking the installed files...";
                 await Task.Run((Action)Runtime.VerifyPackage);
                 if (!Runtime.VcRuntimeReady()) await InstallWindowsRuntimeAsync(activeOperationCancellation.Token);
@@ -696,8 +956,8 @@ namespace RERCieDesktop
                 }
                 await StartServicesAsync();
                 progressBar.Value = 100;
-                statusLabel.Text = startupPlanStaged ? "RERC-e is ready. Your Community Explorer plan is opening." : "RERC-e is ready. Your browser is opening.";
-                Runtime.OpenBrowser(Runtime.AppBrowserUrl());
+                statusLabel.Text = startupPlanStaged ? "RERC-e is ready. Your Community Explorer plan is opening." : "RERC-e is ready. Opening the app.";
+                await OpenAppAsync();
             }
             catch (Exception error)
             {
@@ -711,6 +971,340 @@ namespace RERCieDesktop
                 if (activeOperationCancellation != null) { activeOperationCancellation.Dispose(); activeOperationCancellation = null; }
                 RefreshButtons();
             }
+        }
+
+        private async Task OpenAppAsync()
+        {
+            bool runtimeMissing = false;
+            try
+            {
+                if (!Runtime.AppReady()) throw new InvalidOperationException("RERC-e's local service is not ready yet.");
+                string profile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RERC-e", "WebView2");
+                ShowAppView();
+                await EnsureEmbeddedViewAsync(Config.AppUrl + "/native", profile);
+                // Mint the 60-second link only after WebView2 is ready. First-use
+                // environment creation can otherwise consume most or all of its life.
+                string address = await Task.Run((Func<string>)Runtime.CreateAppWindowUrl);
+                await NavigateEmbeddedViewAsync(address);
+                appView.Focus();
+            }
+            catch (WebView2RuntimeNotFoundException)
+            {
+                ShowSetup();
+                runtimeMissing = true;
+            }
+            catch (Exception error)
+            {
+                ShowSetup();
+                statusLabel.Text = "The app window could not open: " + error.Message;
+                MessageBox.Show(this, statusLabel.Text, "RERC-e app window", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            if (runtimeMissing)
+            {
+                if (webViewRuntimeInstallAttempted)
+                {
+                    statusLabel.Text = "Microsoft WebView2 is still unavailable after installation. Restart RERC-e or repair the WebView2 Runtime.";
+                    MessageBox.Show(this, statusLabel.Text, "RERC-e app window", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                try
+                {
+                    await InstallWebView2RuntimeAsync();
+                    webViewRuntimeInstallAttempted = true;
+                    await OpenAppAsync();
+                }
+                catch (Exception error)
+                {
+                    statusLabel.Text = "The app display component could not be installed: " + error.Message;
+                    MessageBox.Show(this, statusLabel.Text, "RERC-e app window", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            }
+        }
+
+        private void ShowAppView()
+        {
+            setupPanel.Visible = false;
+            browserPanel.Visible = true;
+            browserPanel.BringToFront();
+            AcceptButton = null;
+            CancelButton = null;
+            Rectangle work = Screen.FromControl(this).WorkingArea;
+            int clientWidth = Math.Min(ScaleLogical(1180), Math.Max(ScaleLogical(700), work.Width - ScaleLogical(48)));
+            int clientHeight = Math.Min(ScaleLogical(780), Math.Max(ScaleLogical(540), work.Height - ScaleLogical(48)));
+            int frameWidth = Math.Max(0, Width - ClientSize.Width);
+            int frameHeight = Math.Max(0, Height - ClientSize.Height);
+            int windowWidth = Math.Min(work.Width, clientWidth + frameWidth);
+            int windowHeight = Math.Min(work.Height, clientHeight + frameHeight);
+            Bounds = new Rectangle(
+                work.Left + Math.Max(0, (work.Width - windowWidth) / 2),
+                work.Top + Math.Max(0, (work.Height - windowHeight) / 2),
+                windowWidth,
+                windowHeight);
+            MinimumSize = new Size(ScaleLogical(700), ScaleLogical(540));
+        }
+
+        private async Task EnsureEmbeddedViewAsync(string address, string profile)
+        {
+            Uri allowed;
+            if (!Uri.TryCreate(address, UriKind.Absolute, out allowed)
+                || allowed.Scheme != "http"
+                || !string.Equals(allowed.Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("RERC-e refused an invalid local app address.");
+            embeddedOrigin = allowed;
+            Directory.CreateDirectory(profile);
+            ReportAcceptance("webview-environment");
+            if (appEnvironment == null) appEnvironment = await CoreWebView2Environment.CreateAsync(null, profile);
+            ReportAcceptance("webview-controller");
+            if (appView.CoreWebView2 == null) await appView.EnsureCoreWebView2Async(appEnvironment);
+            if (appView.CoreWebView2 == null) throw new InvalidOperationException("The embedded RERC-e display did not initialize.");
+            if (!viewConfigured)
+            {
+                ReportAcceptance("webview-configure");
+                appView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+                appView.CoreWebView2.Settings.IsStatusBarEnabled = false;
+                appView.CoreWebView2.NewWindowRequested += delegate(object sender, CoreWebView2NewWindowRequestedEventArgs args)
+                {
+                    args.Handled = true;
+                    OpenExternalPage(args.Uri);
+                };
+                appView.NavigationStarting += delegate(object sender, CoreWebView2NavigationStartingEventArgs args)
+                {
+                    Uri target;
+                    bool targetValid = Uri.TryCreate(args.Uri, UriKind.Absolute, out target);
+                    ReportAcceptance("navigation-starting " + (targetValid ? target.GetLeftPart(UriPartial.Path) : "invalid"));
+                    if (!targetValid || embeddedOrigin == null
+                        || target.Scheme != embeddedOrigin.Scheme
+                        || !string.Equals(target.Host, embeddedOrigin.Host, StringComparison.OrdinalIgnoreCase)
+                        || target.Port != embeddedOrigin.Port)
+                    {
+                        args.Cancel = true;
+                        OpenExternalPage(args.Uri);
+                    }
+                };
+                viewConfigured = true;
+            }
+        }
+
+        private async Task NavigateEmbeddedViewAsync(string address)
+        {
+            CoreWebView2 core = appView.CoreWebView2;
+            if (core == null) throw new InvalidOperationException("The embedded RERC-e display is unavailable.");
+            TaskCompletionSource<bool> navigation = new TaskCompletionSource<bool>();
+            HashSet<ulong> expectedNavigations = new HashSet<ulong>();
+            string lastNavigationFailure = null;
+            EventHandler<CoreWebView2NavigationStartingEventArgs> starting = null;
+            EventHandler<CoreWebView2NavigationCompletedEventArgs> completed = null;
+            EventHandler<CoreWebView2DOMContentLoadedEventArgs> domContentLoaded = null;
+            EventHandler<CoreWebView2ProcessFailedEventArgs> processFailed = null;
+            Action detachNavigationHandlers = delegate
+            {
+                core.NavigationStarting -= starting;
+                core.NavigationCompleted -= completed;
+                core.DOMContentLoaded -= domContentLoaded;
+                core.ProcessFailed -= processFailed;
+            };
+            starting = delegate(object sender, CoreWebView2NavigationStartingEventArgs args)
+            {
+                Uri target;
+                if (!Uri.TryCreate(args.Uri, UriKind.Absolute, out target)
+                    || embeddedOrigin == null
+                    || target.Scheme != embeddedOrigin.Scheme
+                    || !string.Equals(target.Host, embeddedOrigin.Host, StringComparison.OrdinalIgnoreCase)
+                    || target.Port != embeddedOrigin.Port
+                    || (target.AbsolutePath != "/app-window" && target.AbsolutePath != "/native"))
+                    return;
+                expectedNavigations.Add(args.NavigationId);
+                ReportAcceptance("target-navigation-starting " + target.AbsolutePath + " " + args.NavigationId);
+            };
+            completed = delegate(object sender, CoreWebView2NavigationCompletedEventArgs args)
+            {
+                if (!expectedNavigations.Contains(args.NavigationId))
+                {
+                    ReportAcceptance("navigation-completed ignored " + args.NavigationId);
+                    return;
+                }
+                ReportAcceptance("navigation-completed " + (args.IsSuccess ? "success" : "failed") + " " + args.NavigationId);
+                if (!args.IsSuccess)
+                {
+                    lastNavigationFailure = args.WebErrorStatus + " (HTTP " + args.HttpStatusCode + ")";
+                    ReportAcceptance("navigation-failure " + lastNavigationFailure);
+                }
+            };
+            domContentLoaded = delegate(object sender, CoreWebView2DOMContentLoadedEventArgs args)
+            {
+                if (!expectedNavigations.Contains(args.NavigationId)) return;
+                Uri completedUri;
+                if (!Uri.TryCreate(appView.CoreWebView2.Source, UriKind.Absolute, out completedUri)
+                    || embeddedOrigin == null
+                    || completedUri.Scheme != embeddedOrigin.Scheme
+                    || !string.Equals(completedUri.Host, embeddedOrigin.Host, StringComparison.OrdinalIgnoreCase)
+                    || completedUri.Port != embeddedOrigin.Port
+                    || completedUri.AbsolutePath != "/native")
+                    return;
+                ReportAcceptance("dom-content-loaded " + completedUri.GetLeftPart(UriPartial.Path));
+                detachNavigationHandlers();
+                navigation.TrySetResult(true);
+            };
+            processFailed = delegate(object sender, CoreWebView2ProcessFailedEventArgs args)
+            {
+                string failure = args.ProcessFailedKind + "; " + args.Reason + "; exit " + args.ExitCode;
+                ReportAcceptance("webview-process-failed " + failure);
+                detachNavigationHandlers();
+                navigation.TrySetException(new InvalidOperationException("The embedded RERC-e display process stopped unexpectedly (" + failure + ")."));
+            };
+            core.NavigationStarting += starting;
+            core.NavigationCompleted += completed;
+            core.DOMContentLoaded += domContentLoaded;
+            core.ProcessFailed += processFailed;
+            ReportAcceptance("webview-navigate " + new Uri(address).GetLeftPart(UriPartial.Path));
+            core.Navigate(address);
+            Task finished = await Task.WhenAny(navigation.Task, Task.Delay(15000));
+            if (finished != navigation.Task)
+            {
+                detachNavigationHandlers();
+                string current = "no page";
+                try { if (!string.IsNullOrWhiteSpace(core.Source)) current = core.Source; } catch { }
+                string detail = string.IsNullOrWhiteSpace(lastNavigationFailure) ? "" : " WebView2 reported " + lastNavigationFailure + ".";
+                throw new TimeoutException("The embedded RERC-e page did not reach its local app screen within 15 seconds (current page: " + current + ")." + detail);
+            }
+            await navigation.Task;
+        }
+
+        private void ReportAcceptance(string stage)
+        {
+#if RERC_E_ACCEPTANCE_QA
+            if (AcceptanceProgress != null) AcceptanceProgress(stage);
+#endif
+        }
+
+        private static void OpenExternalPage(string address)
+        {
+            Uri target;
+            if (Uri.TryCreate(address, UriKind.Absolute, out target) && (target.Scheme == "https" || target.Scheme == "http"))
+                Runtime.OpenBrowser(target.AbsoluteUri);
+        }
+
+#if RERC_E_ACCEPTANCE_QA
+        internal WebView2CompositionControl AcceptanceWebView { get { return appView; } }
+        internal ElementHost AcceptanceWebViewHost { get { return appHost; } }
+        internal bool UsesCompositionWebView { get { return appView.GetType().Name == "WebView2CompositionControl"; } }
+        internal Action<string> AcceptanceProgress { get; set; }
+
+        internal void PrepareAcceptanceSetup()
+        {
+            acceptanceManualAddress = null;
+            acceptanceManualProfile = null;
+            ShowSetup();
+            statusLabel.Text = "Native acceptance preview. No model download will run.";
+            RefreshButtons();
+            PerformLayout();
+        }
+
+        internal void PrepareAcceptanceManualFlow(string address, string profile)
+        {
+            acceptanceManualAddress = address;
+            acceptanceManualAddressFactory = null;
+            acceptanceManualProfile = profile;
+            ShowSetup();
+            statusLabel.ForeColor = Color.FromArgb(70, 80, 75);
+            statusLabel.Text = "RERC-e is ready. Select Start RERC-e to open the guide in this window.";
+            progressBar.Value = 0;
+            RefreshButtons();
+            PerformLayout();
+        }
+
+        internal void PrepareAcceptanceManualFlow(Func<string> addressFactory, string profile)
+        {
+            if (addressFactory == null) throw new ArgumentNullException("addressFactory");
+            acceptanceManualAddress = null;
+            acceptanceManualAddressFactory = addressFactory;
+            acceptanceManualProfile = profile;
+            ShowSetup();
+            statusLabel.ForeColor = Color.FromArgb(70, 80, 75);
+            statusLabel.Text = "RERC-e is ready. Select Start RERC-e to open the guide in this window.";
+            progressBar.Value = 0;
+            RefreshButtons();
+            PerformLayout();
+        }
+
+        internal async Task<string> OpenAcceptanceAppAsync(Func<string> addressFactory, string profile)
+        {
+            return await OpenAcceptanceAppAsync(addressFactory, Config.AppUrl + "/native", profile);
+        }
+
+        internal async Task<string> OpenAcceptanceAppAsync(Func<string> addressFactory, string allowedAddress, string profile)
+        {
+            if (addressFactory == null) throw new ArgumentNullException("addressFactory");
+            ShowAppView();
+            await EnsureEmbeddedViewAsync(allowedAddress, profile);
+            string address = await Task.Run(addressFactory);
+            return await CompleteAcceptanceNavigationAsync(address);
+        }
+
+        internal async Task<string> OpenAcceptanceAppAsync(string address, string profile)
+        {
+            ShowAppView();
+            await EnsureEmbeddedViewAsync(address, profile);
+            return await CompleteAcceptanceNavigationAsync(address);
+        }
+
+        private async Task<string> CompleteAcceptanceNavigationAsync(string address)
+        {
+            await NavigateEmbeddedViewAsync(address);
+            ReportAcceptance("webview-dom");
+            appView.Focus();
+            return await appView.CoreWebView2.ExecuteScriptAsync("JSON.stringify({title:document.title,projectVisible:!document.getElementById('projectStep').hidden,stepCount:document.querySelectorAll('.journey button').length,tokenStored:!!sessionStorage.getItem('rercie.tabSessionToken.v1'),cookieAuth:location.pathname==='/native',localSession:typeof hasLocalSession==='function'&&hasLocalSession(),pageOverflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+1,nativeHost:document.documentElement.classList.contains('native-host'),mascotAnimation:getComputedStyle(document.querySelector('.mascot-stage')).animationName})");
+        }
+#endif
+
+        private async Task InstallWebView2RuntimeAsync()
+        {
+            DialogResult choice = MessageBox.Show(this,
+                "RERC-e needs Microsoft's WebView2 Runtime to display the app in this window. Download and install the official Microsoft component now?",
+                "Install app display component", MessageBoxButtons.OKCancel, MessageBoxIcon.Information);
+            if (choice != DialogResult.OK) throw new InvalidOperationException("The app display component was not installed.");
+            string installer = Path.Combine(Path.GetTempPath(), "RERC-e-WebView2Setup.exe");
+            statusLabel.Text = "Downloading the Microsoft app display component...";
+            await Runtime.DownloadAsync("https://go.microsoft.com/fwlink/p/?LinkId=2124703", installer, null, CancellationToken.None);
+            if (!AuthenticodeVerifier.IsTrustedMicrosoftFile(installer))
+            {
+                try { File.Delete(installer); } catch { }
+                throw new InvalidOperationException("The Microsoft component did not pass its publisher signature check.");
+            }
+            statusLabel.Text = "Installing the Microsoft app display component...";
+            ProcessStartInfo info = new ProcessStartInfo(installer, "/silent /install");
+            info.UseShellExecute = true;
+            Process process = Process.Start(info);
+            if (process == null) throw new InvalidOperationException("The Microsoft component could not start.");
+            await Task.Run((Action)(() => process.WaitForExit()));
+            try { File.Delete(installer); } catch { }
+            if (process.ExitCode != 0) throw new InvalidOperationException("The Microsoft component returned error " + process.ExitCode + ".");
+            CoreWebView2Environment.GetAvailableBrowserVersionString();
+        }
+
+        private void ShowSetup()
+        {
+            browserPanel.Visible = false;
+            if (!Visible) Show();
+            if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+            Activate();
+            setupPanel.Visible = true;
+            setupPanel.BringToFront();
+            AcceptButton = startButton;
+            CancelButton = stopButton;
+            ClientSize = new Size(ScaleLogical(760), ScaleLogical(540));
+            MinimumSize = new Size(ScaleLogical(776), ScaleLogical(579));
+            RefreshButtons();
+        }
+
+        protected override void WndProc(ref Message message)
+        {
+            if (message.Msg == Program.OpenAppMessage)
+            {
+                BeginInvoke(new Action(async delegate { await OpenAppAsync(); }));
+                return;
+            }
+            base.WndProc(ref message);
         }
 
         private void UpdateDownloadProgress(long done, long total)
@@ -749,7 +1343,7 @@ namespace RERCieDesktop
             if (!Runtime.ModelServerReady())
             {
                 if (Runtime.PortInUse(8788)) throw new InvalidOperationException("Another program is blocking RERC-e. Close it, then start RERC-e again.");
-                int threads = Math.Max(2, Environment.ProcessorCount - 1);
+                int threads = Math.Min(8, Math.Max(2, Environment.ProcessorCount / 2));
                 string llamaArgs = "-m \"" + Runtime.ModelPath + "\" --host 127.0.0.1 --port 8788 -c 8192 -t " + threads;
                 Runtime.StartHidden("llama", Runtime.LlamaExe, llamaArgs, Runtime.LlamaDir, null, null);
                 statusLabel.Text = "Starting the local writing model...";
@@ -874,9 +1468,22 @@ namespace RERCieDesktop
 
     internal static class Program
     {
+        internal const int OpenAppMessage = 0x8001;
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr FindWindow(string className, string windowName);
+        [DllImport("user32.dll")]
+        private static extern bool PostMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
+
+        private static bool ActivateExistingWindow()
+        {
+            IntPtr window = FindWindow(null, "RERC-e");
+            if (window == IntPtr.Zero) return false;
+            return PostMessage(window, OpenAppMessage, IntPtr.Zero, IntPtr.Zero);
+        }
         [STAThread]
         private static int Main(string[] args)
         {
+            DpiAwareness.Initialize();
             if (Array.IndexOf(args, "--stop") >= 0)
             {
                 int failures;
@@ -917,7 +1524,14 @@ namespace RERCieDesktop
                         plan_schema = Config.PlanSchema,
                         plan_version = Config.PlanVersion,
                         plan_max_bytes = Config.MaxPlanBytes,
-                        plan_extensions = new[] { ".rercie", ".json" },
+                        plan_extensions = new[] { ".rerc-e", ".rercie", ".json" },
+                        app_window_mode = "embedded WebView2 composition",
+                        webview2_sdk_version = typeof(WebView2CompositionControl).Assembly.GetName().Version.ToString(),
+                        composition_visual_host = true,
+                        same_window_transition = true,
+                        address_bar_visible = false,
+                        full_session_token_in_url = false,
+                        full_session_token_in_command_line = false,
                         launcher = Application.ExecutablePath
                     });
                     File.WriteAllText(args[smokeIndex + 1], json, new UTF8Encoding(false));
@@ -935,7 +1549,8 @@ namespace RERCieDesktop
             {
                 if (argument.StartsWith("--", StringComparison.Ordinal)) continue;
                 string extension = Path.GetExtension(argument);
-                if (string.Equals(extension, ".rercie", StringComparison.OrdinalIgnoreCase)
+                if (string.Equals(extension, ".rerc-e", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(extension, ".rercie", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(extension, ".json", StringComparison.OrdinalIgnoreCase))
                 {
                     planPath = argument;
@@ -958,7 +1573,7 @@ namespace RERCieDesktop
             }
 
             bool created;
-            using (Mutex mutex = new Mutex(true, "Local\\RERCie-Desktop", out created))
+            using (Mutex mutex = new Mutex(true, "Local\\RERC-e-Desktop", out created))
             {
                 if (!created)
                 {
@@ -971,12 +1586,13 @@ namespace RERCieDesktop
                         }
                         return 1;
                     }
-                    Runtime.OpenBrowser(Runtime.AppBrowserUrl());
-                    return 0;
+                    return ActivateExistingWindow() ? 0 : 1;
                 }
                 if (planStaged && Runtime.AppReady())
                 {
-                    Runtime.OpenBrowser(Runtime.AppBrowserUrl());
+                    Application.EnableVisualStyles();
+                    Application.SetCompatibleTextRenderingDefault(false);
+                    Application.Run(new MainForm(true));
                     return 0;
                 }
                 Application.EnableVisualStyles();

@@ -8,12 +8,12 @@
   "catalog_source_commit": "bc435b9c8db32573f852f8dfb3fba71a9fd5e234",
   "release_binding_note": "This is the source commit used to generate the files. The QA report records the generated file hashes.",
   "site_sha256": {
-    "index.html": "5c950ca84c0f08989759f6edefcc7beb9d1e84a8e8747aa37b8e1c6970b41c11",
-    "styles.css": "bebda779186e3608edbbca4009ebcce7d593b761f9b290089a8a13c7cbbab73e",
+    "index.html": "5e1e4a37e18e556a991bec97417333333a7b18f6cbe1763d78e56ebfa2acc37c",
+    "styles.css": "1a54fa382c8195ba1831d1746ee488a929dc048b612ff234783224fca99e423e",
     "rercie.css": "218bfb2993d46f1c396719bacbbb69cfcef47b6fccb7f76eb1f2c97a73ac475c",
-    "app.js": "ca3d667d66b2fcb0a95cb7827f40e67aab74c337e20f38e9c3cd084974f60664",
-    "planner.js": "1accc06403d57349ec07299f2a1dba27f07b46e46fa783b5b9f4a6b8d18718ab",
-    "ui-i18n.js": "78c7898a827e42f75bc4a60377cd96b5d2a5550176867162340aef5c70960bb8",
+    "app.js": "976c156f56a01e97e42211911b15278ab82c09cfd75b63a385bb888952cae8ce",
+    "planner.js": "16def58c0f0e39b26ab4005ad3ae03ff476a0dcc4a5ecc72c81dfaa36d10c23d",
+    "ui-i18n.js": "ebf8e00e4a2647e5feb60238244e494ae4269d6d38aa2db89663e87ad92d3671",
     "deadline-utils.js": "9630163876672f5d0dd801ba18ab96b1c91b076a657e6b42f0130f7db959d402",
     "site-config.js": "7802db1651f5ea8e7d3f6b7bf5b5f055c4ca509e0990cda47aba7226d17881c5",
     "data.js": "5a5bc827ca95418b76353bc2afffad695b2ca3ffeb3378a4695478f4855a6af9",
@@ -24,7 +24,7 @@
     "vendor/lucide.min.js": "3411692820cb8d47543f69496aa25fd603a358f4498046f41c508a5a3342210e",
     "assets/hero-outdoor.jpg": "c401e10950d2fbc0698ef754003010cc6045b5ecd2ed7ce230fce72715c3983c",
     "assets/rerc-e-eagle.jpg": "a549963e0172f9a8f27f9f78288cb974ef7a567ac0c9818fbb7f35b6d5a2e57a",
-    "README.md": "4df77ed73ed5ce78bc6f272936976e6001a2e09c4cceb63042b835855ec09f9c"
+    "README.md": "b29597af7319e7354e6ef10b5163b9941d10a534b9d827cc0f669c846552ff4a"
   },
   "source_sha256": {
     "data.js": "5a5bc827ca95418b76353bc2afffad695b2ca3ffeb3378a4695478f4855a6af9",
@@ -44,5 +44,12 @@
     "file": "RERC_Community_Explorer_Master_2026-08-24.csv",
     "bytes": 615446,
     "sha256": "561f6ade3006a70fdf85e664306de768f2f4fa28798114b6b55dc89203bb79c7"
+  },
+  "site_validation": {
+    "status": "PASS",
+    "checked_on": "2026-09-16",
+    "site_commit": "e88a5d8865bed26cd4940de971cc78763ea55436",
+    "browser_report_sha256": "8e8f920bc3c8240dd38b3d12ff2e60cfaa681df82eb43153f951b5dd98c0bc73",
+    "note": "Site interface source and browser QA refreshed; the linked static catalog files and their original package source remain unchanged."
   }
 }

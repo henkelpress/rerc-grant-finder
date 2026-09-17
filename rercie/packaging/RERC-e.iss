@@ -5,7 +5,7 @@
   #error OutputDir must be defined by the build script.
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.5.1"
+  #define AppVersion "0.5.2"
 #endif
 
 #define AppName "RERC-e"
@@ -48,7 +48,7 @@ VersionInfoVersion={#AppVersion}.0
 VersionInfoCompany=EPR, P.C. - Timberwing Systems
 VersionInfoDescription=RERC-e local grant-writing guide
 VersionInfoProductName=RERC-e
-AppMutex=Local\RERCie-Desktop
+AppMutex=Local\RERC-e-Desktop
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -66,6 +66,7 @@ Name: "{autoprograms}\RERC-e website"; Filename: "{#AppUrl}"
 
 [Registry]
 Root: HKA; Subkey: "Software\Classes\.rercie"; ValueType: string; ValueName: ""; ValueData: "RERC-e.Plan"; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.rerc-e"; ValueType: string; ValueName: ""; ValueData: "RERC-e.Plan"; Flags: uninsdeletevalue
 Root: HKA; Subkey: "Software\Classes\RERC-e.Plan"; ValueType: string; ValueName: ""; ValueData: "RERC-e Community Explorer Plan"; Flags: uninsdeletekey
 Root: HKA; Subkey: "Software\Classes\RERC-e.Plan\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExe},0"
 Root: HKA; Subkey: "Software\Classes\RERC-e.Plan\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExe}"" ""%1"""

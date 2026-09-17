@@ -135,6 +135,10 @@ function populateStateOptions(selectedState = "") {
 
 function setStateSelection(stateName) {
   populateStateOptions(stateName);
+  setCommunitySelectorStatus(elements.stateSelect.value
+    ? "State or territory selected."
+    : "Choose a state or territory first.");
+  render();
 }
 function summaryTopic(item) {
   const topics = cleanText(item.topic_tags)
@@ -490,7 +494,7 @@ function renderCard(item, headingLevel = 3) {
         </details>
         ${renderSourceLink(item, "Read the example")}
       </div>
-      <div class="score" aria-label="${escapeHtml(scoreLabel)}"><strong>${escapeHtml(scoreLabel)}</strong><span>${hasSubstantiveAnswers() ? "match level" : "add details to rank"}</span></div>
+      <div class="score"><strong>${escapeHtml(scoreLabel)}</strong><span>${hasSubstantiveAnswers() ? "match level" : "add details to rank"}</span></div>
     </article>`;
   }
 
@@ -518,7 +522,7 @@ function renderCard(item, headingLevel = 3) {
       </details>
       ${renderSourceLink(item, item.item_type === "Resource" ? "Open resource" : "Program Website")}
     </div>
-    <div class="score" aria-label="${escapeHtml(scoreLabel)}"><strong>${escapeHtml(scoreLabel)}</strong><span>${hasSubstantiveAnswers() ? "match level" : "add details to rank"}</span></div>
+    <div class="score"><strong>${escapeHtml(scoreLabel)}</strong><span>${hasSubstantiveAnswers() ? "match level" : "add details to rank"}</span></div>
   </article>`;
 }
 
@@ -636,10 +640,16 @@ function downloadBlob(contents, mimeType, filename) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function exportMatchView() {
+  const plannerView = window.RERCPlannerView && window.RERCPlannerView.getActiveMatches();
+  return Array.isArray(plannerView) ? plannerView : currentMatches;
+}
+
 function exportCsv() {
+  const matches = exportMatchView();
   const headers = ["Item Type","Title","Organization or Program","Status","Geography","Covered States","Coverage Note","Who Can Use It","Project Step","Topics","Type of Help","Timing or Year","Summary","Program Website"];
   const lines = [headers.map(csvCell).join(",")];
-  currentMatches.forEach((item) => lines.push([
+  matches.forEach((item) => lines.push([
     item.item_type, item.title, item.organization, item.status,
     item.item_type === "Case Study" ? `${item.case_place}, ${item.case_state}` : item.geography,
     item.item_type === "Case Study" ? "" : coveredStates(item).join("; "), item.coverage_note || "",
@@ -689,9 +699,10 @@ async function exportWord() {
     return;
   }
   const place = elements.stateSelect.value || "United States";
-  const funding = currentMatches.filter((item) => item.item_type === "Funding");
-  const resources = currentMatches.filter((item) => item.item_type === "Resource");
-  const cases = currentMatches.filter((item) => item.item_type === "Case Study");
+  const matches = exportMatchView();
+  const funding = matches.filter((item) => item.item_type === "Funding");
+  const resources = matches.filter((item) => item.item_type === "Resource");
+  const cases = matches.filter((item) => item.item_type === "Case Study");
   const profile = activeFilterSummary();
   const relationships = [];
   const body = [];

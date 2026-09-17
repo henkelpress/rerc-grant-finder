@@ -2,55 +2,55 @@
 
 RERC-e Local Grant-Writing Guide is an optional app for the Recreation Economy *for* Rural Communities funding and resource explorer.
 
-Current source version: `0.5.1`.
+Current source version: `0.5.2`.
 
 The Windows installer includes the RERC-e app and the pinned `llama.cpp` runtime. The local Gemma writer does not require a command line, an account, or an API key. The Gemma model is downloaded only when the person selects **Download and start**.
 
 ## Install RERC-e on Windows
 
-1. Check the latest GitHub release for a signed `RERC-e-Setup.exe`.
+1. Check the latest GitHub release and its publisher-signature status. The current public 0.4.0 installer is unsigned.
 2. Open the installer and follow the setup screens.
 3. Keep the Start Menu shortcut. You can also choose a desktop shortcut.
 4. Select **Meet RERC-e** on the last screen.
 5. Select **Download and start**. RERC-e downloads the local model and checks it before opening.
 
-The first model download is about 0.81 GB. RERC-e checks the model before using it. Later starts use the model already on the computer.
+The first model download is about 2.49 GB. RERC-e checks the model before using it. Later starts use the model already on the computer.
 
 Upgrades keep a verified local Gemma model, so people do not have to download it again.
 
-No command line is needed. Open RERC-e from the Start Menu. The launcher can open or stop the local tool.
+No command line is needed. Open RERC-e from the Start Menu. The native start screen handles the first-run download and startup. When you select **Start RERC-e**, the guide opens inside that same application window through Microsoft Edge WebView2, with no browser address bar or visible local link. The composition-hosted view keeps the site in the app's visual tree while Windows moves or resizes the window. Closing the window stops the local services RERC-e started. Official funding and publisher pages still expose their real web addresses for verification.
 
-RERC-e 0.5.1 can also open a Community Explorer plan. Use **Open Community Explorer plan** inside RERC-e, or open an installed `.rercie` file from Windows. RERC-e checks the file before filling any fields and shows what it imported.
+RERC-e source can also open a Community Explorer plan. Use **Open Community Explorer plan** inside RERC-e, or open an installed `.rerc-e` file from Windows. RERC-e checks the file before filling any fields and shows what it imported. Older plan files remain readable.
 
-RERC-e 0.5.1 passed source smoke, standalone source-bound local Gemma inference, browser, animation, reduced-motion, and native launcher compilation QA. Its unsigned package was blocked by Windows security before native package smoke, so installer distribution remains on hold until EPR, P.C. can apply an authorized Timberwing Systems publisher signature and the signed installer passes clean Windows security testing.
+RERC-e 0.5.2 source now includes a three-step interface, a complete first-run **Download and start** button, a same-window WebView2 composition host, Per-Monitor V2 scaling, and RERC-e-branded new plan files. Its local writer uses the tested Gemma 3 4B Q4_K_M model, edits narrative sections in one structured request, preserves protected facts verbatim, validates each section, and substitutes source-bound text whenever generated wording fails a check. The embedded handoff uses a one-time 60-second code, exchanges it for an HttpOnly same-site cookie, and never places the full local service token in a URL or process command line. The public 0.4.0 installer does not include these changes. A signed-package and clean-machine Windows 10/11 test is still required before release. No authorized RERC-e code-signing identity was available on this computer, so verified-publisher distribution remains on hold.
 
 ## What RERC-e Does
 
 - Loads the current public RERC funding list.
 - Accepts project notes and selected text files.
 - Opens a checked Community Explorer plan with its community, state or territory, project title, project notes, profile, roadmap, and selected public records.
-- Looks up community profiles from the public prebuilt `community_profiles.js` dataset for exact community + state/territory matches first. If no exact match is present, RERC-e can use a provided Census API key to query the Census API for fallback place/county matching (including territory-level context for American Samoa, Guam, Northern Mariana Islands, and U.S. Virgin Islands).
-- Creates a first-draft grant narrative with clear fact-check markers.
+- Looks up community profiles from the public prebuilt `community_profiles.js` dataset by exact community + state/territory match first, then by a unique town/city/village name in that state. If no unambiguous match is present, RERC-e can use a provided Census API key to query the Census API for fallback place/county matching (including territory-level context for American Samoa, Guam, Northern Mariana Islands, and U.S. Virgin Islands).
+- Creates a first-draft grant narrative with section-level evidence checks and clear fact-check markers.
 - Exports a real Word `.docx` file or Markdown.
 - Includes all 50 states, the District of Columbia, and five U.S. territories.
 
 ## Privacy
 
-Gemma writing and files in `local_knowledge` stay on this computer. RERC-e first uses the public prebuilt `community_profiles.js` dataset for exact community + state or territory matches. The HTTPS response is bounded to 8 MiB and 50,000 records; invalid, oversized, or malformed profile files are rejected without using their contents. If no exact profile match is available, RERC-e falls back to a direct Census API lookup only when a `CENSUS_API_KEY` is available (environment or session field). Without a key, it returns `key_required` and makes no direct Census call. The Census key is not sent to Gemma, saved by RERC-e, or included in generated output.
+Gemma writing and files in `local_knowledge` stay on this computer. RERC-e first uses the public prebuilt `community_profiles.js` dataset for exact community + state or territory matches, then a unique town/city/village name within that state. The HTTPS response is bounded to 16 MiB and 50,000 records so the shipped 14.4 MB profile bundle can load; invalid, oversized, or malformed profile files are rejected without using their contents. If no unambiguous profile match is available, RERC-e falls back to a direct Census API lookup only when a `CENSUS_API_KEY` is available (environment or session field). Without a key, it returns `key_required` and makes no direct Census call. The Census key is not sent to Gemma, saved by RERC-e, or included in generated output.
 
 Do not add private files to a public copy of this project. Local reference files belong in `local_knowledge`.
 
-Imported plans stay on this computer. The `.rercie` handoff is a local file export. RERC-e processes it through its authenticated loopback service only after you open or import it. RERC-e does not put plan notes in a web address or send them to the public explorer. A launcher-opened plan is copied into RERC-e's local runtime folder, checked once, and removed after the local service reads it.
+Imported plans stay on this computer. The `.rerc-e` handoff is a local file export. RERC-e processes it through its authenticated loopback service only after you open or import it. RERC-e does not put plan notes in a web address or send them to the public explorer. A launcher-opened plan is copied into RERC-e's local runtime folder, checked once, and removed after the local service reads it.
 
 ## Community Explorer Plan Format
 
-A plan is UTF-8 JSON saved with the `.rercie` extension. The in-app picker also accepts `.json`. The maximum file size is 256 KB.
+A plan is UTF-8 JSON saved with the `.rerc-e` extension. The in-app picker also accepts `.json` and older plan files. The maximum file size is 256 KB.
 
 The top-level object must contain exactly these fields:
 
 ```json
 {
-  "schema": "rercie-handoff",
+  "schema": "rerc-e-handoff",
   "version": 1,
   "community": "St. Paul",
   "state": "Virginia",
@@ -91,12 +91,14 @@ The build does not regenerate source QA evidence. It generates `file_integrity.j
 python -m pip install -r .\requirements-build.txt
 python ..\scripts\qa_local_gemma.py
 python ..\scripts\qa_release.py
-.\build_installer.ps1 -AcceptRuntimeDownload
+& ..\scripts\qa_native_windows.ps1
+$publisherThumbprint = "<authorized-publisher-certificate-thumbprint>"
+.\build_installer.ps1 -AcceptRuntimeDownload -CodeSigningThumbprint $publisherThumbprint -RequireCodeSignature
 ```
 
 The local Gemma service must be running for `qa_local_gemma.py`. A pending or failed QA result is a release hold, not a reason to edit the evidence to `PASS`.
 
-The public installer is not yet digitally signed. A production publisher should add a trusted Windows code-signing certificate before broad institutional deployment.
+The build requires a trusted, identity-matched publisher signature by default and signs the launcher, service, and installer with a SHA-256 timestamp. It supports either a local organization-validation certificate by thumbprint or Azure Artifact Signing with `-ArtifactSigningDlib`, `-ArtifactSigningMetadata`, and `-PublisherLegalName`. See [packaging/PUBLISHER_SIGNING.md](packaging/PUBLISHER_SIGNING.md) for the identity decision, enrollment steps, prerequisites, and verification commands. For isolated QA only, use `-AllowUnsignedQaBuild`; that path labels its result `QA_ONLY_UNSIGNED` and does not authorize a public release. A valid signature identifies the publisher but does not guarantee that a new download has enough Windows SmartScreen reputation to suppress its initial warning.
 
 ## Help
 
