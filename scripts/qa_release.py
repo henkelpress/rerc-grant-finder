@@ -275,10 +275,13 @@ def main() -> int:
     source_health = (ROOT / ".github" / "workflows" / "source-health.yml").read_text(encoding="utf-8")
     discovery = (ROOT / ".github" / "workflows" / "discover-federal-opportunities.yml").read_text(encoding="utf-8")
     assert all(value in source_health for value in (
-        "33 7 * * *", "33 8 * * *", "America/New_York", "RERC_NEW_ITEMS_SHEET_URL",
+        "cron: '33 3 * * *'", "timezone: America/New_York", "RERC_NEW_ITEMS_SHEET_URL",
         "RERC_ISSUES_SHEET_URL", "rerc_intake_watcher.py", "actions/cache/restore@v5",
         "Publish sanitized intake queue",
     ))
+    assert source_health.count("cron:") == 1
+    assert "steps.schedule.outputs.run" not in source_health
+    assert "datetime.now" not in source_health
     watcher = (ROOT / "scripts" / "rerc_intake_watcher.py").read_text(encoding="utf-8")
     assert all(value in watcher for value in ("redact_text", "ready_for_human_review", "No submission is published automatically"))
     assert (ROOT / "maintenance" / "INTAKE_WATCHER.md").is_file()
